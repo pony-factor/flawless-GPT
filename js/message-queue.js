@@ -1064,7 +1064,8 @@
         await persistQueue();
       }
       // Keep the draft until storage accepts it, and preserve edits made while saving.
-      if (queued && composer === findComposerInput() && textMatchesComposer(composer, text)) {
+      if (queued && composer === findComposerInput() && textMatchesComposer(composer, text)
+        && mentionsMatch(composer, snapshot.mentions)) {
         await replaceComposerText(composer, "");
         composer.focus({ preventScroll: true });
       }
@@ -1296,7 +1297,8 @@
           queuePaused = true;
           await persistQueue();
         }
-        if (queued && composer === findComposerInput() && textMatchesComposer(composer, text)) {
+        if (queued && composer === findComposerInput() && textMatchesComposer(composer, text)
+          && mentionsMatch(composer, snapshot.mentions)) {
           await replaceComposerText(composer, "");
           composer.focus({ preventScroll: true });
         }
