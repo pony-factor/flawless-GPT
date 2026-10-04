@@ -6,26 +6,36 @@
   let enabled = false;
   let scheduled = false;
   let frameTimer;
+  let automaticBusy = false;
+  const reportCandidates = new WeakMap();
 
-  function chooseCategory(doc, connection) {
-    return new Promise(resolve => {
-      const dialog = doc.createElement('dialog');
-      dialog.className = 'ghrc-report-import';
-      dialog.innerHTML = '<form method="dialog"><h2>Import Deep Research</h2><p class="destination"></p><label>Category <input name="category" list="ghrc-report-categories" placeholder="Choose or create a category" maxlength="240" autocomplete="off"></label><datalist id="ghrc-report-categories"></datalist><p>Leave empty to use the repository root. Use / for nested categories.</p><div><button value="cancel">Cancel</button><button value="import">Import report</button></div></form>';
-      dialog.querySelector('.destination').textContent = `${connection.repository} (${connection.branch})`;
-      for (const category of connection.categories || []) {
-        const option = doc.createElement('option');
-        option.value = category;
-        dialog.querySelector('datalist').append(option);
+  async function autoImport(doc) {
+    if (!enabled || automaticBusy) return;
+    const download = doc.querySelector('button[aria-label="Export"], button[aria-label="Download"]');
+    const scope = download && reportScope(download);
+    if (!scope || scope.querySelector('[aria-busy="true"], [role="progressbar"]') || download.disabled) return;
+    automaticBusy = true;
+    try {
+      const { job } = await chrome.runtime.sendMessage({ type: 'research-launch-job' }) || {};
+      if (job?.state !== 'submitted') return;
+      const report = reportPayload(scope);
+      const previous = reportCandidates.get(scope);
+      if (!previous || previous.markdown !== report.markdown) {
+        reportCandidates.set(scope, { markdown: report.markdown, since: Date.now() });
+        return;
       }
-      dialog.addEventListener('close', () => {
-        const category = dialog.querySelector('input').value.trim();
-        resolve(dialog.returnValue === 'import' ? category : null);
-        dialog.remove();
-      }, { once: true });
-      doc.body.append(dialog);
-      dialog.showModal();
-    });
+      if (Date.now() - previous.since < 5000) return;
+      const result = await chrome.runtime.sendMessage({ type: 'publish-research-report', ...report, automationJobId: job.id });
+      if (!result?.ok) {
+        const status = scope.querySelector('.ghrc-report-status');
+        if (status) status.textContent = result?.error || 'Automatic import could not finish. Use Add to repo to retry.';
+      } else {
+        const status = scope.querySelector('.ghrc-report-status');
+        if (status) status.textContent = `Imported: ${result.repository} / ${result.path} (${result.branch}).`;
+      }
+    } catch {
+      // Partial reports and replaced sandbox documents are revisited by the next scan.
+    } finally { automaticBusy = false; }
   }
 
   function publisherAvailable() {
@@ -129,7 +139,7 @@
             const connection = await chrome.runtime.sendMessage({ type: 'research-publisher-status' });
             if (!connection?.ok) throw new Error(connection?.error || 'Use Link repository in extension settings to connect a repository.');
             status.textContent = '';
-            const category = await chooseCategory(doc, connection);
+            const category = await globalThis.__ghrcChooseResearchCategory(doc, connection);
             if (category === null) return;
             const report = reportPayload(scope);
             status.textContent = 'Adding report to repository…';
@@ -149,6 +159,7 @@
     for (const frame of doc.querySelectorAll('iframe')) {
       try { if (frame.contentDocument?.documentElement) mount(frame.contentDocument); } catch { /* Cross-origin frames have their own content script. */ }
     }
+    void autoImport(doc);
   }
 
   function schedule() {

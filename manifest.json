@@ -86,6 +86,8 @@
         "js/hide-background-completion-notifications.js",
         "js/external-links.js",
         "js/research-report-host.js",
+        "js/research-import-dialog.js",
+        "js/research-launcher.js",
         "js/hide-cookie-preferences.js",
         "js/chatgpt-disclaimer.js",
         "js/block-voice-prompts.js",
@@ -131,6 +133,7 @@
       "js": [
         "vendor/turndown.js",
         "vendor/turndown-plugin-gfm.js",
+        "js/research-import-dialog.js",
         "js/research-publisher.js"
       ],
       "all_frames": true,
