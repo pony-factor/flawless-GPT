@@ -27,7 +27,11 @@
   const context = globalThis.__ghrcExtensionContext;
   if (!context?.active()) return;
   const ID = 'ghrc-deep-research-tracker';
+  const DASHBOARD_ID = 'ghrc-deep-research-dashboard';
+  const COMPOSER_ID = `${ID}-composer`;
+  const SETTING_KEY = 'showDeepResearchTracker';
   const USAGE_ATTRIBUTE = 'data-ghrc-deep-research-usage';
+  let enabled = !globalThis.chrome?.storage?.local;
   let allowance = { remaining: null, full: false, reset: '' };
   let observedAt = 0;
   let pending = false;
@@ -72,7 +76,7 @@
     // Read only native controls, never messages or report contents.
     const controls = document.querySelectorAll('[role="menuitem"], [role="option"], button');
     for (const control of controls) {
-      if (control.closest(`#${ID}`) || !visible(control)) continue;
+      if (control.closest('.ghrc-deep-research-tracker') || !visible(control)) continue;
       const label = `${control.innerText || ''} ${control.getAttribute('aria-label') || ''}`;
       if (!/\bdeep research\b/i.test(label)) continue;
       const texts = [label];
@@ -112,18 +116,12 @@
     // No task is selected or submitted. The user can hover the native research entry.
   }
 
-  function update() {
-    pending = false;
-    if (!context.active()) return;
-    readServerQuota();
-    readAllowance();
-    const prompt = [...document.querySelectorAll('#prompt-textarea, [data-composer-markdown][contenteditable="true"]')].find(visible);
-    const composer = prompt?.closest('form, [data-type="unified-composer"]');
-    if (!composer?.parentElement) return;
-    let widget = document.getElementById(ID);
+  function renderWidget(id) {
+    let widget = document.getElementById(id);
     if (!widget) {
       widget = document.createElement('button');
-      widget.id = ID;
+      widget.id = id;
+      widget.className = 'ghrc-deep-research-tracker';
       widget.type = 'button';
       const icon = document.createElement('img');
       icon.className = 'ghrc-research-telescope';
@@ -135,7 +133,6 @@
       widget.append(icon, label);
       widget.addEventListener('click', checkAllowance);
     }
-    if (widget.nextElementSibling !== composer) composer.before(widget);
     // An old observation is not a live balance; require another native check.
     const fresh = Date.now() - observedAt < 5 * 60_000;
     const count = fresh && allowance.remaining !== null
@@ -150,6 +147,42 @@
     widget.title = serverQuota
       ? 'ChatGPT’s Deep Research report allowance. Click to refresh. Lightweight allowances are excluded. Reset countdown uses days above 36 hours, hours down to one hour, then minutes.'
       : 'Waiting for ChatGPT’s research allowance. Click to check again or open the native tools menu.';
+    return widget;
+  }
+
+  function update() {
+    pending = false;
+    if (!context.active()) return;
+    readServerQuota();
+    readAllowance();
+    const repositories = document.getElementById('github-repositories-for-chatgpt');
+    if (enabled && repositories && visible(repositories)) {
+      let row = document.getElementById(DASHBOARD_ID);
+      if (!row) {
+        row = document.createElement('div');
+        row.id = DASHBOARD_ID;
+        row.append(renderWidget(ID));
+      } else renderWidget(ID);
+      for (const property of ['--ghrc-available-width', '--ghrc-center-offset']) {
+        const value = repositories.style.getPropertyValue(property);
+        if (row.style.getPropertyValue(property) === value) continue;
+        if (value) row.style.setProperty(property, value);
+        else row.style.removeProperty(property);
+      }
+      if (repositories.nextElementSibling !== row) repositories.after(row);
+    } else document.getElementById(DASHBOARD_ID)?.remove();
+
+    const prompts = [...document.querySelectorAll('#prompt-textarea, [data-composer-markdown][contenteditable="true"]')].filter(visible);
+    const researchPrompt = prompts.find(prompt => prompt.querySelector([
+      '[data-prompt-link-href="app://connector_openai_deep_research"]',
+      '[data-prompt-link-href="app://connector_openai_deep_research_work"]',
+      '[data-prompt-link-label="$deep-research"]',
+    ].join(',')));
+    const composer = researchPrompt?.closest('form, [data-type="unified-composer"]');
+    if (enabled && composer?.parentElement) {
+      const widget = renderWidget(COMPOSER_ID);
+      if (widget.nextElementSibling !== composer) composer.before(widget);
+    } else document.getElementById(COMPOSER_ID)?.remove();
   }
 
   function schedule() {
@@ -158,11 +191,24 @@
     requestAnimationFrame(update);
   }
   const observer = new MutationObserver(schedule);
-  observer.observe(document.documentElement, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['aria-describedby', 'aria-label', 'data-state', USAGE_ATTRIBUTE] });
+  observer.observe(document.documentElement, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['aria-describedby', 'aria-label', 'data-state', 'data-prompt-link-href', 'data-prompt-link-label', 'style', USAGE_ATTRIBUTE] });
   document.addEventListener('pointerover', schedule);
   document.addEventListener('focusin', schedule);
+  window.addEventListener('resize', schedule);
+  function settingsChanged(changes, area) {
+    if (area !== 'local' || !changes[SETTING_KEY]) return;
+    enabled = changes[SETTING_KEY].newValue !== false;
+    schedule();
+  }
+  globalThis.chrome?.storage?.onChanged?.addListener(settingsChanged);
+  if (globalThis.chrome?.storage?.local) {
+    void chrome.storage.local.get({ [SETTING_KEY]: true }).then(settings => {
+      enabled = settings[SETTING_KEY] !== false;
+      schedule();
+    }).catch(error => context.handleError?.(error));
+  }
   const timer = setInterval(() => {
-    if (document.visibilityState === 'visible' && serverQuota && Date.now() - serverQuota.observedAt > 5 * 60_000) {
+    if (enabled && document.visibilityState === 'visible' && serverQuota && Date.now() - serverQuota.observedAt > 5 * 60_000) {
       window.dispatchEvent(new Event('ghrc-refresh-deep-research-usage'));
     }
     schedule();
@@ -172,7 +218,10 @@
     clearInterval(timer);
     document.removeEventListener('pointerover', schedule);
     document.removeEventListener('focusin', schedule);
-    document.getElementById(ID)?.remove();
+    window.removeEventListener('resize', schedule);
+    globalThis.chrome?.storage?.onChanged?.removeListener(settingsChanged);
+    document.getElementById(DASHBOARD_ID)?.remove();
+    document.getElementById(COMPOSER_ID)?.remove();
   });
   schedule();
 })();

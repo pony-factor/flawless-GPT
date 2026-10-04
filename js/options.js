@@ -23,6 +23,7 @@ const compactNewChatHeaderInput = document.getElementById("compact-new-chat-head
 const disableWorkModeInput = document.getElementById("disable-work-mode");
 const showSpellcheckGptLauncherInput = document.getElementById("show-spellcheck-gpt-launcher");
 const show2048LauncherInput = document.getElementById("show-2048-launcher");
+const showDeepResearchTrackerInput = document.getElementById("show-deep-research-tracker");
 const stripUtmTrackingInput = document.getElementById("strip-utm-tracking");
 const skipExternalSiteWarningInput = document.getElementById("skip-external-site-warning");
 const dismissHistoryRateLimitModalInput = document.getElementById("dismiss-history-rate-limit-modal");
@@ -314,6 +315,7 @@ async function loadSettings() {
     disableWorkMode: false,
     showSpellcheckGptLauncher: false,
     show2048Launcher: false,
+    showDeepResearchTracker: true,
     stripUtmTracking: true,
     skipExternalSiteWarning: true,
     dismissHistoryRateLimitModal: true,
@@ -351,6 +353,7 @@ async function loadSettings() {
   disableWorkModeInput.checked = Boolean(settings.disableWorkMode);
   showSpellcheckGptLauncherInput.checked = Boolean(settings.showSpellcheckGptLauncher);
   show2048LauncherInput.checked = Boolean(settings.show2048Launcher);
+  showDeepResearchTrackerInput.checked = settings.showDeepResearchTracker !== false;
   stripUtmTrackingInput.checked = Boolean(settings.stripUtmTracking);
   skipExternalSiteWarningInput.checked = Boolean(settings.skipExternalSiteWarning);
   dismissHistoryRateLimitModalInput.checked = Boolean(settings.dismissHistoryRateLimitModal);
@@ -435,6 +438,7 @@ async function saveSettings() {
       disableWorkMode: disableWorkModeInput.checked,
       showSpellcheckGptLauncher: showSpellcheckGptLauncherInput.checked,
       show2048Launcher: show2048LauncherInput.checked,
+      showDeepResearchTracker: showDeepResearchTrackerInput.checked,
       stripUtmTracking: stripUtmTrackingInput.checked,
       skipExternalSiteWarning: skipExternalSiteWarningInput.checked,
       dismissHistoryRateLimitModal: dismissHistoryRateLimitModalInput.checked,

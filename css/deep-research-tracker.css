@@ -1,4 +1,4 @@
-#ghrc-deep-research-tracker {
+.ghrc-deep-research-tracker {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -17,14 +17,30 @@
   text-align: center;
 }
 
-#ghrc-deep-research-tracker .ghrc-research-telescope {
+.ghrc-deep-research-tracker .ghrc-research-telescope {
   width: 36px;
   height: 24px;
   object-fit: contain;
   flex-shrink: 0;
 }
 
-#ghrc-deep-research-tracker:hover,
-#ghrc-deep-research-tracker:focus-visible {
+.ghrc-deep-research-tracker:hover,
+.ghrc-deep-research-tracker:focus-visible {
   background: var(--main-surface-secondary, color-mix(in srgb, currentColor 8%, transparent));
+}
+
+#ghrc-deep-research-dashboard {
+  box-sizing: border-box;
+  display: flex;
+  justify-content: flex-end;
+  position: relative;
+  left: calc(50% + var(--ghrc-center-offset, 0px));
+  transform: translateX(-50%);
+  width: 1120px;
+  max-width: var(--ghrc-available-width, calc(100vw - 40px));
+  margin: -24px 0 24px;
+}
+
+#ghrc-deep-research-dashboard .ghrc-deep-research-tracker {
+  margin: 0;
 }
