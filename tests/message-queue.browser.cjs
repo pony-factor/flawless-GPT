@@ -913,6 +913,66 @@ test('Ask ChatGPT selected text belongs to its queued prompt', async () => {
   await p.close();
 });
 
+async function selectedTextFixture(page, passages) {
+  await page.evaluate(passages => {
+    const surface = document.createElement('div');
+    surface.dataset.composerAttachments = '';
+    for (const [index, text] of passages.entries()) {
+      const card = document.createElement('span');
+      card.className = 'group/composer-attachment';
+      const preview = document.createElement('span');
+      preview.className = 'line-clamp-4 whitespace-pre-wrap';
+      preview.textContent = text;
+      const title = document.createElement('span');
+      title.textContent = 'Selection';
+      const remove = document.createElement('button');
+      remove.type = 'button';
+      remove.setAttribute('aria-label', `Remove selected text ${index + 1}`);
+      remove.addEventListener('click', () => {
+        card.remove();
+        if (!surface.childElementCount) surface.remove();
+      });
+      card.append(preview, title, remove);
+      surface.append(card);
+    }
+    document.querySelector('form').prepend(surface);
+    // Native Enter interrupts if the extension lets the event reach the host.
+    document.addEventListener('keydown', event => {
+      if (event.key === 'Enter' && !event.defaultPrevented) button.click();
+    }, true);
+  }, passages);
+}
+
+for (const prompt of ['Explain these passages', '']) test(`Selection attachments queue without interrupting (${prompt ? 'with prompt' : 'selection only'})`, async () => {
+  const p = await fixture({ active: true });
+  const passages = ['First selected passage. '.repeat(30).trim(), 'Second passage\nwith another line'];
+  await selectedTextFixture(p, passages);
+  await enqueue(p, prompt, true);
+  assert.equal(await p.evaluate(() => stops), 0);
+  assert.deepEqual(await p.evaluate(() => sent), []);
+  assert.equal(await p.locator('[data-composer-attachments]').count(), 0);
+  const expected = `> ${passages[0]}\n>\n> Second passage\n> with another line${prompt ? '\n\n' + prompt : ''}`;
+  assert.equal(await p.locator('.ghrc-message-queue-editor').inputValue(), expected);
+  await p.evaluate(() => finish());
+  await sentCount(p, 1);
+  assert.deepEqual(await p.evaluate(() => sent), [expected]);
+  assert.deepEqual(p.errors, []);
+  await p.close();
+});
+
+test('a newer Selection attachment prevents an older queued message from sending', async () => {
+  const p = await fixture({ active: true });
+  await enqueue(p, 'Older prompt', true);
+  await selectedTextFixture(p, ['New selected passage']);
+  await p.evaluate(() => finish());
+  await p.waitForTimeout(1900);
+  assert.deepEqual(await p.evaluate(() => sent), []);
+  await p.getByRole('button', { name: 'Remove selected text 1', exact: true }).click();
+  await sentCount(p, 1);
+  assert.deepEqual(await p.evaluate(() => sent), ['Older prompt']);
+  await p.close();
+});
+
 test('a new attachment draft cannot be consumed by an older queued prompt', async () => {
   const p = await fixture({ active: true });
   await attachmentFixture(p);
