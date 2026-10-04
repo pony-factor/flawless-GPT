@@ -1357,6 +1357,72 @@ test('streaming response scrolls both ways over a horizontal source carousel', a
   await p.close();
 });
 
+for (const reverse of [false, true]) for (const singleParagraph of [false, true]) {
+  test(`very large text-only streaming reply scrolls midway (${reverse ? 'reverse' : 'normal'}, ${singleParagraph ? 'one clipped paragraph' : 'many paragraphs'})`, async () => {
+    const p = await fixture({ preserveScroll: true, liveMarkup: true });
+    await scrollFixture(p, { modern: true });
+    await p.locator('[data-composer-markdown]').fill('Large text-only scroll test');
+    await p.locator('[data-composer-markdown]').press('Enter');
+    await sentCount(p, 1);
+    await p.evaluate(({ reverse, singleParagraph }) => {
+      scroller.style.width = '360px';
+      if (reverse) {
+        scroller.style.display = 'flex';
+        scroller.style.flexDirection = 'column-reverse';
+        document.getElementById('turns').style.flexShrink = '0';
+      }
+      window.reply = document.querySelector('[data-content-search-unit-key$=":assistant"]:last-child');
+      const sentence = 'A long text-only response keeps growing while the reader moves through its middle. ';
+      if (singleParagraph) {
+        reply.innerHTML = '<p></p>';
+        reply.firstChild.textContent = sentence.repeat(2000);
+      } else {
+        reply.replaceChildren(...Array.from({ length: 500 }, () => {
+          const paragraph = document.createElement('p');
+          paragraph.textContent = sentence.repeat(4);
+          return paragraph;
+        }));
+      }
+      window.streamTicks = 0;
+      window.streamTimer = setInterval(() => {
+        if (singleParagraph) reply.firstChild.firstChild.appendData(sentence.repeat(4));
+        else {
+          const paragraph = document.createElement('p');
+          paragraph.textContent = sentence.repeat(4);
+          reply.append(paragraph);
+        }
+        streamTicks++;
+        scroller.scrollTop = reverse ? 0 : scroller.scrollHeight;
+      }, 30);
+    }, { reverse, singleParagraph });
+    await p.waitForTimeout(100);
+    const bounds = await p.locator('#conversation-scroller').boundingBox();
+    await p.mouse.move(bounds.x + 100, bounds.y + 160);
+    const toMiddle = await p.evaluate(({ reverse }) => {
+      const range = scroller.scrollHeight - scroller.clientHeight;
+      return (reverse ? -range / 2 : range / 2) - scroller.scrollTop;
+    }, { reverse });
+    await p.mouse.wheel(0, toMiddle);
+    await p.waitForTimeout(100);
+    assert.ok(await p.evaluate(() => reply.textContent.length > 150000 && active));
+    assert.equal(await p.evaluate(() => scroller.querySelectorAll('img,pre').length), 0);
+    for (const delta of [240, -480, 360, -180]) {
+      const before = await p.evaluate(() => ({ top: reply.getBoundingClientRect().top, ticks: streamTicks }));
+      await p.mouse.wheel(0, delta);
+      await p.waitForTimeout(150);
+      const after = await p.evaluate(() => ({ top: reply.getBoundingClientRect().top, ticks: streamTicks }));
+      assert.ok(after.ticks > before.ticks, 'text continues generating during scrolling');
+      assert.ok(Math.abs(after.top - (before.top - delta)) <= 1, `wheel ${delta} moves visible text while streaming: ${JSON.stringify({ before, after })}`);
+    }
+    const held = await p.evaluate(() => reply.getBoundingClientRect().top);
+    await p.waitForTimeout(200);
+    assert.ok(Math.abs(await p.evaluate(() => reply.getBoundingClientRect().top) - held) <= 1);
+    await p.evaluate(() => clearInterval(streamTimer));
+    assert.deepEqual(p.errors, []);
+    await p.close();
+  });
+}
+
 test('nested code panes scroll themselves and hand off at their vertical edges', async () => {
   const p = await fixture({ preserveScroll: true });
   await scrollFixture(p);
