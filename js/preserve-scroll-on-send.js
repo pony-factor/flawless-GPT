@@ -325,8 +325,22 @@
     if (!enabled || event.ctrlKey || event.defaultPrevented) return;
     const container = findConversationScrollContainer();
     if (!container.contains(event.target)) return;
-    // Let nested code panes and menus handle their own scrolling.
-    if (scrollableAncestor(event.target) !== container && container !== document.scrollingElement) return;
+    // Horizontal source cards compute overflow-y:auto too, even when they
+    // cannot scroll vertically. Only hand off to a pane with a vertical range.
+    let nested = event.target instanceof Element ? event.target : event.target?.parentElement;
+    while (nested && nested !== container) {
+      if (isScrollableElement(nested) && nested.scrollHeight > nested.clientHeight + 1) {
+        const style = getComputedStyle(nested);
+        const range = nested.scrollHeight - nested.clientHeight;
+        const reverse = style.flexDirection === "column-reverse";
+        const top = nested.scrollTop;
+        const canScroll = event.deltaY < 0
+          ? top > (reverse ? -range : 0) + 1
+          : event.deltaY > 0 && top < (reverse ? 0 : range) - 1;
+        if (canScroll || style.overscrollBehaviorY === "contain" || style.overscrollBehaviorY === "none") return;
+      }
+      nested = nested.parentElement;
+    }
     if (!event.cancelable) { allowUserScroll(); return; }
     beginGuard();
     guard.acceptingInput = false;

@@ -1324,6 +1324,71 @@ test('first response remains freely scrollable after receiving its conversation 
   await p.close();
 });
 
+test('streaming response scrolls both ways over a horizontal source carousel', async () => {
+  const p = await fixture({ preserveScroll: true });
+  await scrollFixture(p);
+  await p.locator('[data-composer-markdown]').fill('Scroll over sources');
+  await p.locator('[data-composer-markdown]').press('Enter');
+  await sentCount(p, 1);
+  await p.evaluate(() => {
+    const carousel = document.createElement('div');
+    carousel.id = 'sources';
+    carousel.style.cssText = 'height:120px;overflow-x:auto;width:280px';
+    carousel.innerHTML = '<div style="width:900px;height:100px">Sources</div>';
+    scroller.append(carousel);
+    carousel.style.position = 'sticky';
+    carousel.style.bottom = '0';
+  });
+  const bounds = await p.locator('#sources').boundingBox();
+  await p.mouse.move(bounds.x + 40, bounds.y + 40);
+  await p.mouse.wheel(0, 120);
+  await p.waitForTimeout(100);
+  assert.equal(await p.evaluate(() => scroller.scrollTop), 720);
+  await p.mouse.wheel(0, -180);
+  await p.waitForTimeout(100);
+  assert.equal(await p.evaluate(() => scroller.scrollTop), 540);
+  await p.evaluate(() => {
+    document.getElementById('turns').lastElementChild.style.height = '3200px';
+    scroller.scrollTop = scroller.scrollHeight;
+  });
+  await p.waitForTimeout(100);
+  assert.equal(await p.evaluate(() => scroller.scrollTop), 540);
+  assert.deepEqual(p.errors, []);
+  await p.close();
+});
+
+test('nested code panes scroll themselves and hand off at their vertical edges', async () => {
+  const p = await fixture({ preserveScroll: true });
+  await scrollFixture(p);
+  await p.evaluate(() => {
+    const pane = document.createElement('pre');
+    pane.id = 'code-pane';
+    pane.style.cssText = 'height:100px;overflow:auto;position:sticky;bottom:0;margin:0';
+    pane.innerHTML = '<code style="display:block;height:600px">Long code</code>';
+    scroller.append(pane);
+    document.dispatchEvent(new Event('ghrc:before-composer-send'));
+  });
+  const bounds = await p.locator('#code-pane').boundingBox();
+  await p.mouse.move(bounds.x + 40, bounds.y + 40);
+  await p.mouse.wheel(0, 120);
+  await p.waitForTimeout(250);
+  assert.ok(await p.evaluate(() => document.getElementById('code-pane').scrollTop > 0));
+  assert.equal(await p.evaluate(() => scroller.scrollTop), 600);
+  await p.evaluate(() => {
+    const pane = document.getElementById('code-pane');
+    pane.scrollTop = pane.scrollHeight;
+  });
+  await p.mouse.wheel(0, 120);
+  await p.waitForTimeout(100);
+  assert.equal(await p.evaluate(() => scroller.scrollTop), 720);
+  await p.evaluate(() => { document.getElementById('code-pane').scrollTop = 0; });
+  await p.mouse.wheel(0, -180);
+  await p.waitForTimeout(100);
+  assert.equal(await p.evaluate(() => scroller.scrollTop), 540);
+  assert.deepEqual(p.errors, []);
+  await p.close();
+});
+
 test('keyboard scrolling updates the reading position without releasing streaming protection', async () => {
   const p = await fixture({ preserveScroll: true });
   await scrollFixture(p);
