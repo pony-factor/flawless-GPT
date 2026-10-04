@@ -1,17 +1,35 @@
 (() => {
   const BUTTON = 'ghrc-add-research-report';
   const PAGE = '[class*="_reportPage_"]';
-  const CONNECTION_KEY = 'researchPublisherConnection';
   const MAX_BYTES = 4 * 1024 * 1024;
   const documents = new WeakSet();
   let enabled = false;
-  let connected = false;
   let scheduled = false;
   let frameTimer;
-  let connectionGeneration = 0;
+
+  function chooseCategory(doc, connection) {
+    return new Promise(resolve => {
+      const dialog = doc.createElement('dialog');
+      dialog.className = 'ghrc-report-import';
+      dialog.innerHTML = '<form method="dialog"><h2>Import Deep Research</h2><p class="destination"></p><label>Category <input name="category" list="ghrc-report-categories" placeholder="Choose or create a category" maxlength="240" autocomplete="off"></label><datalist id="ghrc-report-categories"></datalist><p>Leave empty to use the repository root. Use / for nested categories.</p><div><button value="cancel">Cancel</button><button value="import">Import report</button></div></form>';
+      dialog.querySelector('.destination').textContent = `${connection.repository} (${connection.branch})`;
+      for (const category of connection.categories || []) {
+        const option = doc.createElement('option');
+        option.value = category;
+        dialog.querySelector('datalist').append(option);
+      }
+      dialog.addEventListener('close', () => {
+        const category = dialog.querySelector('input').value.trim();
+        resolve(dialog.returnValue === 'import' ? category : null);
+        dialog.remove();
+      }, { once: true });
+      doc.body.append(dialog);
+      dialog.showModal();
+    });
+  }
 
   function publisherAvailable() {
-    return enabled && connected;
+    return enabled;
   }
 
   function reportScope(download) {
@@ -52,14 +70,33 @@
   }
 
   function mount(doc) {
-    if (!documents.has(doc)) {
-      documents.add(doc);
+    if (!doc.documentElement) return;
+    if (!documents.has(doc.documentElement)) {
+      documents.add(doc.documentElement);
       const style = doc.createElement('style');
       style.textContent = `.${BUTTON}{display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;width:32px;height:32px;padding:6px;border:0;border-radius:6px;background:transparent;color:inherit;cursor:pointer}.${BUTTON}:hover{background:color-mix(in srgb,currentColor 10%,transparent)}.${BUTTON}:focus-visible{outline:2px solid currentColor;outline-offset:2px}.${BUTTON}:disabled{opacity:.55;cursor:default}.ghrc-report-status{font-size:12px;line-height:1.4;padding:6px 12px;overflow-wrap:anywhere}.ghrc-report-status:empty{display:none}`;
+      style.textContent += '.ghrc-report-import{color:inherit;background:light-dark(#fff,#202123);border:1px solid #888;border-radius:12px;padding:24px;max-width:420px;width:calc(100% - 64px);color-scheme:light dark}.ghrc-report-import::backdrop{background:#0008}.ghrc-report-import h2{margin-top:0;font-size:20px}.ghrc-report-import p{font-size:13px}.ghrc-report-import input{display:block;box-sizing:border-box;width:100%;padding:10px;margin-top:8px}.ghrc-report-import form>div{display:flex;justify-content:flex-end;gap:12px;margin-top:20px}.ghrc-report-import button{padding:8px 12px;cursor:pointer}';
       (doc.head || doc.documentElement).append(style);
       new MutationObserver(schedule).observe(doc, { childList: true, subtree: true });
       doc.addEventListener('load', schedule, true);
+      doc.addEventListener('click', async event => {
+        const link = event.target.closest?.('a[href]');
+        if (!event.isTrusted || !link?.closest(PAGE) || event.button !== 0 || event.altKey) return;
+        let url;
+        try { url = new URL(link.getAttribute('href'), doc.URL); } catch { return; }
+        if (!['https:', 'http:'].includes(url.protocol) || url.origin === new URL(doc.URL).origin) return;
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        try {
+          const result = await chrome.runtime.sendMessage({ type: 'open-research-link', url: url.href });
+          if (!result?.ok) throw new Error(result?.error || 'Could not open report link.');
+        } catch (error) {
+          const status = link.closest(PAGE).parentElement.querySelector('.ghrc-report-status');
+          if (status) status.textContent = error.message;
+        }
+      }, true);
     }
+    window.top.postMessage({ type: 'ghrc-research-report-state', report: Boolean(doc.querySelector(PAGE)) }, 'https://chatgpt.com');
     if (!publisherAvailable()) {
       doc.querySelectorAll(`.${BUTTON}, .ghrc-report-status`).forEach((node) => node.remove());
     } else {
@@ -73,7 +110,7 @@
         const button = doc.createElement('button');
         button.type = 'button';
         button.className = BUTTON;
-        button.title = 'Add report to linked repository';
+        button.title = 'Import report into a repository category';
         button.setAttribute('aria-label', 'Add to repo');
         button.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h9M7 3v18M10 7h3M18 9v10M13 14h10"/></svg>';
         const status = doc.createElement('div');
@@ -84,13 +121,19 @@
         button.addEventListener('click', async (event) => {
           event.preventDefault();
           event.stopPropagation();
-          if (!event.isTrusted || !publisherAvailable() || button.disabled) return;
+          if (!event.isTrusted || !enabled || button.disabled) return;
           button.disabled = true;
           button.setAttribute('aria-busy', 'true');
-          status.textContent = 'Adding report to repository…';
+          status.textContent = 'Checking repository connection…';
           try {
+            const connection = await chrome.runtime.sendMessage({ type: 'research-publisher-status' });
+            if (!connection?.ok) throw new Error(connection?.error || 'Use Link repository in extension settings to connect a repository.');
+            status.textContent = '';
+            const category = await chooseCategory(doc, connection);
+            if (category === null) return;
             const report = reportPayload(scope);
-            const result = await chrome.runtime.sendMessage({ type: 'publish-research-report', ...report });
+            status.textContent = 'Adding report to repository…';
+            const result = await chrome.runtime.sendMessage({ type: 'publish-research-report', ...report, category });
             if (!result?.ok) throw new Error(result?.error || 'Publishing failed. Try again.');
             button.title = `${result.unchanged ? 'Already in' : 'Added to'} ${result.repository} (${result.branch})`;
             button.setAttribute('aria-label', 'Report added to repo');
@@ -98,7 +141,7 @@
           } catch (error) {
             status.textContent = error.message || 'Connection unavailable. Reload this page and try again.';
             button.disabled = false;
-          } finally { button.removeAttribute('aria-busy'); }
+          } finally { button.disabled = false; button.removeAttribute('aria-busy'); }
         });
         row.insertBefore(button, anchor);
       }
@@ -111,35 +154,15 @@
   function schedule() {
     if (scheduled) return;
     scheduled = true;
-    requestAnimationFrame(() => { scheduled = false; mount(document); });
-  }
-
-  async function checkConnection() {
-    const generation = ++connectionGeneration;
-    connected = false;
-    schedule();
-    try {
-      const result = await chrome.runtime.sendMessage({ type: 'research-publisher-status' });
-      if (generation !== connectionGeneration || !enabled) return;
-      connected = Boolean(result?.ok);
-    } catch {
-      if (generation !== connectionGeneration || !enabled) return;
-      connected = false;
-    }
-    schedule();
+    setTimeout(() => { scheduled = false; mount(document); }, 0);
   }
 
   function updateEnabled(value) {
     enabled = Boolean(value);
-    connectionGeneration += 1;
-    connected = false;
     clearInterval(frameTimer);
     // The sandbox can document.open() an existing inner frame, replacing its observers.
-    // Revisit it while enabled so document replacement and delayed report loads recover.
-    if (enabled) {
-      frameTimer = setInterval(schedule, 1000);
-      void checkConnection();
-    }
+    // Revisit it so document replacement and delayed report loads recover.
+    frameTimer = setInterval(schedule, 1000);
     schedule();
   }
 
@@ -152,9 +175,9 @@
       updateEnabled(changes.researchPublisherEnabled.newValue);
       return;
     }
-    if (changes[CONNECTION_KEY] && enabled) {
-      connected = Boolean(changes[CONNECTION_KEY].newValue?.ok);
-      schedule();
-    }
+
   });
+  // Report links and fullscreen state work independently of the publishing preference.
+  if (!frameTimer) frameTimer = setInterval(schedule, 1000);
+  schedule();
 })();

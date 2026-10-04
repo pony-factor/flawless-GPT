@@ -173,8 +173,18 @@ def validate(message):
     return title.strip(), markdown.rstrip() + "\n", source
 
 
+def validate_category(category):
+    if (not isinstance(category, str) or len(category) > 240
+            or (category and any(not part or part.startswith(".")
+                                or not re.fullmatch(r"[\w -]+", part, re.UNICODE)
+                                for part in category.split("/")))):
+        raise PublishError("Choose a valid repository category.")
+    return category
+
+
 def publish(message, config):
     title, markdown, source = validate(message)
+    category = validate_category(message.get("category", ""))
     repo = Path(config["repo"])
     branch = config["branch"]
     try:
@@ -188,6 +198,8 @@ def publish(message, config):
     stem = "-".join(words) or "research-report"
     suffix = hashlib.sha256((source + "\n" + title).encode()).hexdigest()[:10]
     filename = f"{stem}-{suffix}.md"
+    if category:
+        filename = f"{category}/{filename}"
     # The temporary bare clone has its own index; it never stages or edits the linked checkout.
     with tempfile.TemporaryDirectory(prefix="research-publish-") as temp:
         clone = Path(temp) / "repository.git"
@@ -196,6 +208,13 @@ def publish(message, config):
         except (OSError, subprocess.SubprocessError):
             raise PublishError("Could not fetch the linked branch. Check Git access and the connection, then retry.") from None
         parent = git(clone, "rev-parse", "HEAD")
+        # A category must never traverse a tracked file, symlink, or submodule.
+        parts = category.split("/") if category else []
+        for index in range(len(parts)):
+            path = "/".join(parts[:index + 1])
+            entry = git(clone, "ls-tree", parent, "--", path)
+            if entry and not entry.startswith("040000 tree "):
+                raise PublishError("This category conflicts with a repository file. Choose another category.")
         git(clone, "read-tree", parent)
         blob = git(clone, "hash-object", "-w", "--stdin", input=markdown)
         git(clone, "update-index", "--add", "--cacheinfo", "100644", blob, filename)
@@ -224,8 +243,17 @@ def handle(message, config, origin):
         raise PublishError("Use Link repository to update the local bridge for direct publishing.")
     if message == {"action": "status"}:
         git(Path(config["repo"]), "rev-parse", "--git-dir")
-        return {"ok": True, "repository": Path(config["repo"]).name, "branch": config["branch"]}
-    if set(message) != {"action", "title", "markdown", "source"} or message["action"] != "publish":
+        directories = git(Path(config["repo"]), "ls-tree", "-r", "-d", "--name-only", "HEAD").splitlines()
+        categories = []
+        for directory in directories:
+            try:
+                categories.append(validate_category(directory))
+            except PublishError:
+                continue
+        return {"ok": True, "repository": Path(config["repo"]).name, "branch": config["branch"], "categories": categories}
+    if (set(message) not in ({"action", "title", "markdown", "source"},
+                            {"action", "title", "markdown", "source", "category"})
+            or message["action"] != "publish"):
         raise PublishError("Unsupported action.")
     return publish(message, config)
 

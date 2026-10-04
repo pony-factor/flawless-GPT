@@ -79,6 +79,26 @@ class PublisherTests(unittest.TestCase):
             with self.assertRaises(host.PublishError):
                 host.validate({**self.message, **values})
 
+    def test_category_publish_and_invalid_paths(self):
+        result = host.handle({**self.message, "category": "Markets/Ownership"}, self.config, self.origin)
+        self.assertTrue(result["path"].startswith("Markets/Ownership/"))
+        self.assertEqual(git(self.remote, "show", "main:" + result["path"]), self.message["markdown"].strip())
+        self.assertTrue(host.handle({**self.message, "category": "Markets/Ownership"}, self.config, self.origin)["unchanged"])
+        for category in ["../outside", "/absolute", "a//b", "a/./b", ".git", "a\\b", "a\nother"]:
+            with self.assertRaises(host.PublishError):
+                host.validate_category(category)
+        with self.assertRaises(host.PublishError):
+            host.handle({**self.message, "category": "existing.md"}, self.config, self.origin)
+
+    def test_status_lists_tracked_categories(self):
+        folder = self.repo / "Markets" / "Ownership"
+        folder.mkdir(parents=True)
+        (folder / "report.md").write_text("Fixture")
+        git(self.repo, "add", "Markets")
+        git(self.repo, "-c", "commit.gpgsign=false", "commit", "-m", "Category fixture")
+        result = host.handle({"action": "status"}, self.config, self.origin)
+        self.assertEqual(result["categories"], ["Markets", "Markets/Ownership"])
+
     def test_install_links_branch_and_self_tests_bridge(self):
         manifest = installer.install("a" * 32, "brave", self.repo, self.base / "Application Support")
         data = json.loads(manifest.read_text())

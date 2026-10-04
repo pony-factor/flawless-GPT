@@ -6,8 +6,10 @@ const vm = require('node:vm');
 function background(enabled, nativeResult = { ok: true, repository: 'research', branch: 'main' }) {
   let listener;
   const calls = [];
+  const opened = [];
   const saved = {};
   const chrome = {
+    tabs: { create: async value => opened.push(value) },
     storage: {
       local: {
         get: async (defaults) => ({ ...defaults, ...(enabled === undefined ? {} : { researchPublisherEnabled: enabled }) }),
@@ -28,6 +30,7 @@ function background(enabled, nativeResult = { ok: true, repository: 'research', 
   const sender = { id: 'test-extension', url: 'https://connector-openai-deep-research.web-sandbox.oaiusercontent.com/', tab: { id: 1, url: 'https://chatgpt.com/c/example' } };
   return {
     calls,
+    opened,
     saved,
     listener,
     send: (message = { type: 'publish-research-report', title: 'Report', markdown: '# Report\nFull text', app: '/ignored.app' }, from = sender) => new Promise((resolve) => {
@@ -86,6 +89,24 @@ test('unrelated messages are left for existing handlers', () => {
   assert.equal(background(false).listener({ type: 'load-repositories' }, {}, () => assert.fail()), false);
 });
 
+test('current MCP report origin forwards the selected category', async () => {
+  const app = background(true);
+  const sender = { id: 'test-extension', origin: 'https://mcp-app-abc123.web-sandbox.oaiusercontent.com', url: 'about:blank', tab: { id: 1, url: 'https://chatgpt.com/c/report' } };
+  assert.equal((await app.send({ type: 'publish-research-report', title: 'Report', markdown: '# Report', category: 'Markets/Ownership' }, sender)).ok, true);
+  assert.equal(app.calls[0][1].category, 'Markets/Ownership');
+  assert.equal((await app.send({ type: 'publish-research-report', title: 'Report', markdown: '# Report', category: '../outside' }, sender)).ok, false);
+  assert.equal(app.calls.length, 1);
+});
+
+test('report links open without a publishing connection and reject unsafe destinations', async () => {
+  const app = background(false);
+  assert.equal((await app.send({ type: 'open-research-link', url: 'https://example.org/source' })).ok, true);
+  assert.deepEqual(app.opened.map(x => x.url), ['https://example.org/source']);
+  assert.equal((await app.send({ type: 'open-research-link', url: 'javascript:alert(1)' })).ok, false);
+  assert.equal((await app.send({ type: 'open-research-link', url: 'https://example.org/' }, { id: 'test-extension', url: 'https://other.example', tab: { url: 'https://chatgpt.com/' } })).ok, false);
+  assert.equal(app.calls.length, 0);
+});
+
 test('settings default off, confirm on enable, and recheck on click', async () => {
   const elements = new Map();
   for (const id of ['research-publisher-enabled', 'research-publisher-controls', 'check-research-publisher', 'research-publisher-status']) {
@@ -127,7 +148,7 @@ test('settings default off, confirm on enable, and recheck on click', async () =
   assert.equal(launch.disabled, true);
 });
 
-test('report actions require both the setting and a confirmed connection', () => {
+test('import launcher stays available while the enabled publisher is disconnected', () => {
   const source = fs.readFileSync('js/research-publisher.js', 'utf8');
   const boundary = source.indexOf('  chrome.storage.local.get');
   const context = { WeakSet, TextEncoder, URL };
@@ -135,12 +156,11 @@ test('report actions require both the setting and a confirmed connection', () =>
   vm.runInContext(source.slice(0, boundary) + `
     globalThis.available = (setting, connection) => {
       enabled = setting;
-      connected = connection;
       return publisherAvailable();
     };
   })();`, context);
   assert.equal(context.available(false, false), false);
-  assert.equal(context.available(true, false), false);
+  assert.equal(context.available(true, false), true);
   assert.equal(context.available(false, true), false);
   assert.equal(context.available(true, true), true);
 });

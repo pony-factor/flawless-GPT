@@ -141,8 +141,12 @@ Automatic sending deliberately does **not** rely on a quiet DOM or the end of Ch
 **Deep research publisher** is off by default in both settings views. Enabling it
 adds an **Add to repo** icon immediately left of the download/export control on
 completed deep research reports, including the embedded report card. Clicking it
-captures the full rendered report as Markdown and commits and pushes it directly
-to the linked repository. There is no per-report download or file picker.
+opens an import launcher where you can choose an existing category, enter a new
+category (including nested folders), or leave it empty for the repository root.
+Only **Import report** captures the full report as Markdown and commits and
+pushes it to the chosen category in the linked repository. Cancel leaves the
+repository unchanged. Report links open in a new browser tab, and expanding a
+report hides the chat composer until the report is collapsed.
 
 Use **Link repository** in settings for the one-time macOS setup. The page supplies
 an installer command for your extension ID and browser (Chrome or Brave). Run it
