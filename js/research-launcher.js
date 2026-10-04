@@ -47,7 +47,8 @@
       banner.setAttribute('role', 'status');
       document.body.append(banner);
     }
-    setStatus(banner, statusFor(job));
+    if (job?.state === 'complete') globalThis.__ghrcResearchImportStatus(banner, job.result);
+    else setStatus(banner, statusFor(job));
   }
   function mount() {
     if (!context.active() || !document.body) return;
@@ -158,7 +159,8 @@
     try {
       for (const [id, run] of runs) {
         const { job } = await request({ type: 'research-launch-status', id, tabId: run.job.tabId });
-        setStatus(run.status, statusFor(job));
+        if (job?.state === 'complete') globalThis.__ghrcResearchImportStatus(run.status, job.result);
+        else setStatus(run.status, statusFor(job));
         if (!job || ['complete', 'error', 'import-error'].includes(job.state)) {
           run.button.disabled = false;
           runs.delete(id);
