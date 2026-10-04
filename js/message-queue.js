@@ -744,7 +744,7 @@
     if (!panel) panel = createPanel();
     const title = panel.querySelector(".ghrc-message-queue-title");
     const list = panel.querySelector(".ghrc-message-queue-list");
-    title.textContent = `Queued · ${queue.length}`;
+    title.textContent = `Queue · ${queue.length}`;
     const status = panel.querySelector(".ghrc-message-queue-status");
     status.hidden = !queuePaused;
     status.textContent = queuePaused ? "Queue stopped; messages are saved" : "";
