@@ -163,40 +163,26 @@
         </section>
 
         <section id="settings-panel-personalization" class="standalone-settings-panel" role="tabpanel" aria-labelledby="settings-tab-personalization" hidden>
-        <fieldset class="standalone-first-fieldset" aria-label="ChatGPT and Codex personalization settings">
-          <p class="help">Keep your ChatGPT custom instructions here and mirror the same managed personalization block into the Codex VS Code extension.</p>
-          <label for="codex-custom-instructions">Custom instructions</label>
+        <fieldset class="standalone-first-fieldset" aria-label="ChatGPT personalization settings">
+          <p class="help">Keep a browser-local copy of the Custom Instructions text you use on ChatGPT web. These preferences stay in Flawless and do not configure a local Codex installation.</p>
+          <label for="chatgpt-custom-instructions">Custom instructions</label>
           <textarea
-            id="codex-custom-instructions"
+            id="chatgpt-custom-instructions"
             rows="8"
             spellcheck="true"
             placeholder="Paste the Custom Instructions text you use on ChatGPT web."
           ></textarea>
           <div class="token-actions">
-            <button id="sync-chatgpt-personalization" class="secondary" type="button">Sync from ChatGPT web</button>
-            <button id="sync-codex-personalization" class="secondary" type="button">Sync to Codex</button>
+            <button id="import-chatgpt-personalization" class="secondary" type="button">Import from clipboard</button>
           </div>
           <label class="preference">
-            <input id="codex-web-coauthor" type="checkbox" checked />
+            <input id="chatgpt-web-coauthor" type="checkbox" checked />
             <span>
               <strong>Codex Web co-author</strong>
-              <small>Require the Codex Web co-author trailer on Git commits made through web or GitHub tools.</small>
+              <small>Remember that commits made through ChatGPT or GitHub tools should include the Codex Web co-author trailer.</small>
             </span>
           </label>
-          <label for="codex-pgp-secret-key">PGP secret key</label>
-          <p class="help">Optional. The key is sent only to the local native bridge, imported into GnuPG through stdin, and never stored in browser settings or Git config.</p>
-          <textarea
-            id="codex-pgp-secret-key"
-            rows="6"
-            spellcheck="false"
-            autocomplete="off"
-            placeholder="-----BEGIN PGP PRIVATE KEY BLOCK-----"
-          ></textarea>
-          <div class="token-actions">
-            <button id="import-codex-pgp-key" class="secondary" type="button">Import PGP key</button>
-            <a href="codex-setup.html">Set up local bridge</a>
-          </div>
-          <p id="codex-personalization-status" class="help" role="status" aria-live="polite"></p>
+          <p id="chatgpt-personalization-status" class="help" role="status" aria-live="polite"></p>
         </fieldset>
         </section>
 
@@ -441,7 +427,7 @@
     <script src="js/options.js"></script>
     <script src="js/highlighted-pages-options.js"></script>
     <script src="js/research-publisher-options.js"></script>
-    <script src="js/codex-personalization.js"></script>
+    <script src="js/chatgpt-personalization.js"></script>
     <script src="js/owner-grid-options.js"></script>
     <script src="js/options-page.js"></script>
     <script src="js/autofocus-options.js"></script>

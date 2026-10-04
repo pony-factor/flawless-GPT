@@ -70,13 +70,11 @@ The login service automatically derives this checkout's extension ID using Chrom
 
 To stop and remove the local service, run `launchctl bootout gui/$(id -u)/com.flawless-chatgpt.auth` and delete `~/Library/LaunchAgents/com.flawless-chatgpt.auth.plist`. This retains the Keychain credential and browser session.
 
-### ChatGPT / Codex personalization
+### ChatGPT personalization
 
-Flawless ChatGPT can keep a browser-local copy of the Custom Instructions text you use on ChatGPT web and mirror the same managed block into `~/.codex/AGENTS.md` for the Codex VS Code extension. The "Sync from ChatGPT web" button reads only the clipboard after you click it.
+Flawless ChatGPT can keep a browser-local copy of the Custom Instructions text you use on ChatGPT web. "Import from clipboard" reads the clipboard only after you click it, and existing values from the older Codex-named storage keys are migrated automatically.
 
-The Codex Web co-author toggle adds the managed instruction requiring `Co-authored-by: Codex Web <noreply@openai.com>` for commits created through web or GitHub tools. The optional PGP field sends the secret only to the local native bridge; the bridge imports it into GnuPG through stdin, stores only the public fingerprint in Git configuration, and clears the browser field after import.
-
-Use "Set up local bridge" in extension settings to install the native bridge without linking a research repository. The settings-only installer preserves an existing research-publisher repository configuration.
+The Codex Web co-author toggle stores the browser-local preference that commits made through ChatGPT or GitHub tools should include `Co-authored-by: Codex Web <noreply@openai.com>`. Personalization does not write `~/.codex/AGENTS.md`, inspect `CODEX_HOME`, import PGP keys, or change global Git configuration. Commit signing is intentionally kept separate from personalization.
 
 ### Token storage
 
