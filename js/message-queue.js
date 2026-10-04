@@ -838,7 +838,9 @@
       interruptButton?.remove();
       interruptButton = null;
     }
-    const nextButton = interruptButton || actionButton;
+    const clipboardButton = document.getElementById("ghrc-clipboard-send-button");
+    const nextButton = clipboardButton?.parentElement === actionButton.parentElement
+      ? clipboardButton : (interruptButton || actionButton);
     if (button && (button.parentElement !== actionButton.parentElement || button.nextElementSibling !== nextButton)) {
       nextButton.before(button);
     }
