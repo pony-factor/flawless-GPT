@@ -1,0 +1,52 @@
+html[data-ghrc-link-preview] {
+  --ghrc-preview-width: min(45vw, 720px);
+  width: calc(100% - var(--ghrc-preview-width));
+}
+
+#ghrc-link-preview {
+  position: fixed;
+  inset: 0 0 0 auto;
+  z-index: 10000;
+  width: var(--ghrc-preview-width);
+  display: flex;
+  flex-direction: column;
+  background: Canvas;
+  color: CanvasText;
+  border-left: 1px solid color-mix(in srgb, CanvasText 20%, transparent);
+  font: 14px/1.5 system-ui, sans-serif;
+  color-scheme: light dark;
+}
+
+#ghrc-link-preview header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
+}
+
+#ghrc-link-preview a {
+  color: LinkText;
+  text-decoration: underline;
+  overflow-wrap: anywhere;
+}
+
+#ghrc-link-preview button {
+  padding: 6px 12px;
+  border: 1px solid;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+#ghrc-link-preview p {
+  padding: 0 12px 12px;
+  margin: 0;
+}
+
+#ghrc-link-preview iframe {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  border: 0;
+  background: white;
+}

@@ -25,6 +25,8 @@ const showSpellcheckGptLauncherInput = document.getElementById("show-spellcheck-
 const show2048LauncherInput = document.getElementById("show-2048-launcher");
 const showDeepResearchTrackerInput = document.getElementById("show-deep-research-tracker");
 const stripUtmTrackingInput = document.getElementById("strip-utm-tracking");
+const openExternalLinksInNewTabsInput = document.getElementById("open-external-links-in-new-tabs");
+const openExternalLinksInSplitViewInput = document.getElementById("open-external-links-in-split-view");
 const skipExternalSiteWarningInput = document.getElementById("skip-external-site-warning");
 const dismissHistoryRateLimitModalInput = document.getElementById("dismiss-history-rate-limit-modal");
 const hideHomeSuggestionsInput = document.getElementById("hide-home-suggestions");
@@ -318,6 +320,8 @@ async function loadSettings() {
     showDeepResearchTracker: true,
     stripUtmTracking: true,
     skipExternalSiteWarning: true,
+    openExternalLinksInNewTabs: true,
+    openExternalLinksInSplitView: false,
     dismissHistoryRateLimitModal: true,
     hideCookiePreferences: false,
     showChatgptDisclaimer: false,
@@ -355,6 +359,8 @@ async function loadSettings() {
   show2048LauncherInput.checked = Boolean(settings.show2048Launcher);
   showDeepResearchTrackerInput.checked = settings.showDeepResearchTracker !== false;
   stripUtmTrackingInput.checked = Boolean(settings.stripUtmTracking);
+  openExternalLinksInNewTabsInput.checked = settings.openExternalLinksInNewTabs !== false;
+  openExternalLinksInSplitViewInput.checked = Boolean(settings.openExternalLinksInSplitView);
   skipExternalSiteWarningInput.checked = Boolean(settings.skipExternalSiteWarning);
   dismissHistoryRateLimitModalInput.checked = Boolean(settings.dismissHistoryRateLimitModal);
   hideHomeSuggestionsInput.checked = settings.hideHomeSuggestions !== false;
@@ -441,6 +447,8 @@ async function saveSettings() {
       showDeepResearchTracker: showDeepResearchTrackerInput.checked,
       stripUtmTracking: stripUtmTrackingInput.checked,
       skipExternalSiteWarning: skipExternalSiteWarningInput.checked,
+      openExternalLinksInNewTabs: openExternalLinksInNewTabsInput.checked,
+      openExternalLinksInSplitView: openExternalLinksInSplitViewInput.checked,
       dismissHistoryRateLimitModal: dismissHistoryRateLimitModalInput.checked,
       hideCookiePreferences: hideCookiePreferencesInput.checked,
       showChatgptDisclaimer: !hideChatgptDisclaimerInput.checked,

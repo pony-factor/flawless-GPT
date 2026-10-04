@@ -59,6 +59,7 @@
       ],
       "css": [
         "css/work-mode.css",
+        "css/external-links.css",
         "css/compact-header.css",
         "css/chat-display.css",
         "css/styles.css",
