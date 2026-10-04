@@ -734,6 +734,54 @@ for (const active of [false, true]) {
   });
 }
 
+test('clipboard stays immediately left of the hat without repeated button moves', async () => {
+  const p = await fixture({ active: true, clipboard: true });
+  await p.locator('[data-composer-markdown]').fill('Keep draft');
+  await p.waitForFunction(() => document.getElementById('ghrc-clipboard-send-button')?.nextElementSibling?.id === 'ghrc-message-interrupt-button');
+  assert.equal(await p.locator('#ghrc-message-queue-button').evaluate(e => e.nextElementSibling.id), 'ghrc-clipboard-send-button');
+  await p.evaluate(() => {
+    window.buttonMoves = 0;
+    new MutationObserver(rs => { window.buttonMoves += rs.length; }).observe(document.querySelector('form'), { childList: true, subtree: true });
+  });
+  await p.waitForTimeout(400);
+  assert.equal(await p.evaluate(() => buttonMoves), 0);
+  await p.evaluate(() => { window.active = false; update(); });
+  await p.waitForFunction(() => document.getElementById('ghrc-clipboard-send-button')?.nextElementSibling?.id === 'composer-submit-button');
+  await p.close();
+});
+
+test('clipboard permission failure falls back to native paste while preserving the draft', async () => {
+  const p = await fixture({ active: true, clipboard: true });
+  await p.locator('[data-composer-markdown]').fill('Keep draft');
+  await p.evaluate(() => {
+    Object.defineProperty(navigator, 'clipboard', { value: { readText: async () => { throw new DOMException('Blocked', 'NotAllowedError'); } } });
+    const original = document.execCommand.bind(document);
+    document.execCommand = (command, ...args) => {
+      if (command !== 'paste') return original(command, ...args);
+      document.activeElement.value = 'Fallback clipboard prompt';
+      return true;
+    };
+  });
+  await p.locator('#ghrc-clipboard-send-button').click();
+  await p.locator('.ghrc-message-queue-editor').waitFor();
+  assert.equal(await p.evaluate(() => read()), 'Keep draft');
+  assert.equal(await p.locator('.ghrc-message-queue-editor').inputValue(), 'Fallback clipboard prompt');
+  assert.equal(await p.evaluate(() => stops), 0);
+  assert.equal(await p.locator('textarea[aria-hidden="true"]').count(), 0);
+  await p.close();
+});
+
+test('clipboard without text reports the reason and leaves the queue empty', async () => {
+  const p = await fixture({ active: true, clipboard: true });
+  await p.evaluate(() => {
+    Object.defineProperty(navigator, 'clipboard', { value: { readText: async () => '' } });
+  });
+  await p.locator('#ghrc-clipboard-send-button').click();
+  await p.getByRole('button', { name: 'Clipboard has no text to queue', exact: true }).waitFor();
+  assert.equal(await p.locator('.ghrc-message-queue-editor').count(), 0);
+  await p.close();
+});
+
 test('disclaimer is hidden by default, toggles live, and leaves message content visible', async () => {
   const p = await fixture();
   await p.evaluate(() => {

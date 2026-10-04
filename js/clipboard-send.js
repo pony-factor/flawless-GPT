@@ -17,22 +17,59 @@
     button.toggleAttribute("aria-busy", busy);
   }
 
+  async function readClipboardText() {
+    try {
+      return await navigator.clipboard.readText();
+    } catch (error) {
+      // Extension clipboardRead also permits native paste when the page's
+      // async Clipboard API is blocked. Keep the user's draft and selection.
+      const focused = document.activeElement;
+      const selection = window.getSelection();
+      const ranges = selection ? Array.from({ length: selection.rangeCount }, (_, i) => selection.getRangeAt(i).cloneRange()) : [];
+      const input = document.createElement("textarea");
+      input.setAttribute("aria-hidden", "true");
+      input.style.cssText = "position:fixed;left:-10000px;top:0;opacity:0";
+      document.body.append(input);
+      try {
+        input.focus({ preventScroll: true });
+        if (!document.execCommand("paste")) throw error;
+        return input.value;
+      } finally {
+        input.remove();
+        if (focused?.isConnected) focused.focus({ preventScroll: true });
+        if (selection && ranges.length) {
+          selection.removeAllRanges();
+          for (const range of ranges) selection.addRange(range);
+        }
+      }
+    }
+  }
+
+  function setButtonMessage(button, message) {
+    button.title = message;
+    button.setAttribute("aria-label", message);
+  }
+
   async function sendClipboardPrompt(button) {
     if (actionRunning) return;
     actionRunning = true;
     setButtonBusy(button, true);
 
     try {
-      const text = await navigator.clipboard.readText();
+      const text = await readClipboardText();
       if (!context.active()) return;
+      if (!text.trim()) {
+        setButtonMessage(button, "Clipboard has no text to queue");
+        return;
+      }
       const queued = await globalThis.__ghrcMessageQueue?.enqueueText(text);
-      button.title = queued ? "Queue clipboard as prompt" : "Clipboard message could not be queued; try again";
+      setButtonMessage(button, queued ? "Queue clipboard as prompt" : "Clipboard message could not be queued; try again");
     } catch (error) {
       if (["NotAllowedError", "SecurityError", "NotFoundError"].includes(error?.name)) {
-        button.title = "Clipboard access unavailable; paste into the composer to queue your message";
+        setButtonMessage(button, "Clipboard access unavailable; paste into the composer to queue your message");
       } else {
         context.handleError(error);
-        button.title = "Clipboard message could not be queued; try again";
+        setButtonMessage(button, "Clipboard message could not be queued; try again");
       }
     } finally {
       actionRunning = false;
@@ -53,6 +90,7 @@
       </svg>
     `;
     button.addEventListener("click", () => void sendClipboardPrompt(button));
+    button.addEventListener("mousedown", event => event.preventDefault());
     return button;
   }
 
@@ -79,8 +117,8 @@
     if (!button) button = createButton();
     // Keep a stable order with the queue controls; competing "before Send"
     // observers otherwise move these buttons back and forth indefinitely.
-    const queueButton = document.getElementById("ghrc-message-queue-button");
-    const anchor = queueButton?.parentElement === sendButton.parentElement ? queueButton : sendButton;
+    const hat = document.getElementById("ghrc-message-interrupt-button");
+    const anchor = hat?.parentElement === sendButton.parentElement ? hat : sendButton;
     if (button.parentElement !== anchor.parentElement || button.nextElementSibling !== anchor) {
       anchor.before(button);
     }
