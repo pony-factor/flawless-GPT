@@ -122,11 +122,17 @@ by default. UTM removal strips `utm_*` query parameters while preserving other
 query parameters and URL fragments. When Work mode is disabled, the extension
 switches an available Work selector back to Chat, hides Work controls, and blocks
 their selection. The external-site setting clicks ChatGPT's own **Open link**
-confirmation when the exact external-site dialog appears. The history setting
-hides the known conversation-history rate-limit modal, clears the page locks it
+confirmation when the exact external-site dialog appears. **Open links in new
+tabs** is enabled by default and keeps external links, including search
+references, from replacing the chat. Disable it to reuse the current tab when
+warning bypass is enabled. **Open links beside the response** takes precedence
+and shows a website preview in a right-hand pane. Close it with **Close** or
+**Escape**. Websites or ChatGPT security policies may block embedded previews;
+the pane always provides **Open in new tab**. This extension preview is separate
+from the browser’s native split-tab view. Modifier clicks keep browser behavior.
+The history setting hides the known conversation-history rate-limit modal, clears the page locks it
 leaves behind, and preserves native wheel and touch scrolling if stale modal
-listeners remain. The extension does not perform a cross-origin request to the
-destination itself.
+listeners remain. Link previews load the destination in a sandboxed iframe.
 
 ## Queued messages
 

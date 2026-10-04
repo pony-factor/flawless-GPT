@@ -13,6 +13,10 @@
   let historyModalEnabled = false;
   let stripUtmTrackingEnabled = false;
   let modalWasSuppressed = false;
+  let newTabsEnabled = true;
+  let splitViewEnabled = false;
+  let previewPanel = null;
+  let previewLink = null;
 
   function normalizedText(element) {
     return (element.textContent || "").replace(/\s+/g, " ").trim();
@@ -109,12 +113,13 @@
       && !event.altKey;
   }
 
-  function openExternalLinkInCurrentTab(event, link) {
+  function openExternalLink(event, link) {
     if (
-      !externalWarningEnabled
+      (!externalWarningEnabled && !newTabsEnabled && !splitViewEnabled)
       || !isPlainPrimaryActivation(event)
       || !(link instanceof HTMLAnchorElement)
-      || link.closest("#github-repositories-for-chatgpt")
+      || link.hasAttribute("download")
+      || link.closest("#github-repositories-for-chatgpt, #ghrc-link-preview")
     ) return false;
 
     let url;
@@ -130,8 +135,54 @@
 
     event.preventDefault();
     event.stopImmediatePropagation();
-    window.location.assign(url.href);
+    if (splitViewEnabled) showLinkPreview(url.href, link);
+    else if (newTabsEnabled) window.open(url.href, "_blank", "noopener,noreferrer");
+    else window.location.assign(url.href);
     return true;
+  }
+
+  function closeLinkPreview() {
+    previewPanel?.remove();
+    previewPanel = null;
+    document.documentElement.removeAttribute("data-ghrc-link-preview");
+    previewLink?.focus();
+    previewLink = null;
+  }
+
+  function showLinkPreview(href, link) {
+    closeLinkPreview();
+    previewLink = link;
+    const panel = document.createElement("aside");
+    panel.id = "ghrc-link-preview";
+    panel.setAttribute("aria-label", "Linked website preview");
+    const header = document.createElement("header");
+    const destination = document.createElement("a");
+    destination.href = href;
+    destination.target = "_blank";
+    destination.rel = "noopener noreferrer";
+    destination.textContent = new URL(href).hostname;
+    destination.title = href;
+    const close = document.createElement("button");
+    close.type = "button";
+    close.textContent = "Close";
+    close.setAttribute("aria-label", "Close website preview");
+    close.addEventListener("click", closeLinkPreview);
+    header.append(destination, close);
+    const help = document.createElement("p");
+    help.append("Preview unavailable? ");
+    const open = destination.cloneNode(false);
+    open.textContent = "Open in new tab";
+    help.append(open);
+    const frame = document.createElement("iframe");
+    frame.title = "Website preview: " + new URL(href).hostname;
+    frame.setAttribute("sandbox", "allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox");
+    frame.referrerPolicy = "no-referrer";
+    frame.src = href;
+    panel.append(header, help, frame);
+    previewPanel = panel;
+    document.body.append(panel);
+    document.documentElement.setAttribute("data-ghrc-link-preview", "");
+    close.focus();
   }
 
   function preserveNativeScroll(event) {
@@ -175,9 +226,13 @@
   async function loadSettings() {
     const settings = await chrome.storage.local.get({
       [EXTERNAL_WARNING_SETTING_KEY]: true,
+      openExternalLinksInNewTabs: true,
+      openExternalLinksInSplitView: false,
       [HISTORY_MODAL_SETTING_KEY]: true,
       [STRIP_UTM_TRACKING_SETTING_KEY]: true,
     });
+    newTabsEnabled = settings.openExternalLinksInNewTabs !== false;
+    splitViewEnabled = Boolean(settings.openExternalLinksInSplitView);
     externalWarningEnabled = Boolean(settings[EXTERNAL_WARNING_SETTING_KEY]);
     historyModalEnabled = Boolean(settings[HISTORY_MODAL_SETTING_KEY]);
     stripUtmTrackingEnabled = Boolean(settings[STRIP_UTM_TRACKING_SETTING_KEY]);
@@ -190,6 +245,13 @@
 
   chrome.storage.onChanged.addListener((changes, areaName) => {
     if (areaName !== "local") return;
+    if (changes.openExternalLinksInNewTabs) {
+      newTabsEnabled = changes.openExternalLinksInNewTabs.newValue !== false;
+    }
+    if (changes.openExternalLinksInSplitView) {
+      splitViewEnabled = Boolean(changes.openExternalLinksInSplitView.newValue);
+      if (!splitViewEnabled) closeLinkPreview();
+    }
     if (changes[EXTERNAL_WARNING_SETTING_KEY]) {
       externalWarningEnabled = Boolean(changes[EXTERNAL_WARNING_SETTING_KEY].newValue);
       if (externalWarningEnabled && document.documentElement) inspectDialogs(document.documentElement);
@@ -209,7 +271,15 @@
   document.addEventListener("click", (event) => {
     const link = event.target.closest?.("a[href]");
     stripTrackingFromLink(link);
-    openExternalLinkInCurrentTab(event, link);
+    openExternalLink(event, link);
+  }, true);
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && previewPanel) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      closeLinkPreview();
+    }
   }, true);
 
   watchChatGPTInterruptions();
