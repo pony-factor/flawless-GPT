@@ -674,6 +674,10 @@
     down.disabled = index === queue.length - 1 || item.id === sendingItemId;
     down.addEventListener("click", () => moveItem(item.id, 1));
 
+    const moveControls = document.createElement("span");
+    moveControls.className = "ghrc-message-queue-move-controls";
+    moveControls.append(up, down);
+
     const remove = document.createElement("button");
     remove.type = "button";
     remove.textContent = "×";
@@ -691,7 +695,7 @@
     steer.disabled = Boolean(sendingItemId) || interruptRunning || enqueueRunning || routeSyncRunning;
     steer.addEventListener("click", () => void context.run(() => sendQueueHead(item.id, true)));
 
-    controls.append(steer, up, down, remove);
+    controls.append(steer, moveControls, remove);
     if (item.attachments?.length) {
       const names = item.attachments.map(file => file.name).join(", ");
       textarea.setAttribute("aria-description", `Attachments: ${names}`);
