@@ -70,8 +70,10 @@
     const attachments = [];
     for (const button of state.files) {
       const label = button.getAttribute("aria-label") || "";
+      const card = button.closest('.group\\/composer-attachment') || button.parentElement;
+      const imageNames = [...card.querySelectorAll("img")].flatMap(image => [image.alt, image.title]);
       const file = [...capturedFiles.values()].find(file => label.includes(file.name)
-        || button.parentElement?.textContent.includes(file.name));
+        || card.textContent.includes(file.name) || imageNames.includes(file.name));
       if (!file) return null;
       const dataUrl = await new Promise((resolve, reject) => {
         const reader = new FileReader();
@@ -157,13 +159,14 @@
     return items.flatMap((item) => {
       if (!item || typeof item !== "object") return [];
       const text = normalizedText(item.text);
-      if (!text.trim()) return [];
+      const attachments = Array.isArray(item.attachments) ? item.attachments : [];
+      if (!text.trim() && !attachments.length) return [];
       return [{
         id: typeof item.id === "string" && item.id
           ? item.id
           : `queued-${Date.now()}-${Math.random().toString(36).slice(2)}`,
         text,
-        attachments: Array.isArray(item.attachments) ? item.attachments : [],
+        attachments,
         createdAt: Number.isFinite(item.createdAt) ? item.createdAt : Date.now(),
       }];
     });
@@ -913,7 +916,7 @@
     if (!context.active()) return false;
     if (!stateLoaded || routeSyncRunning || conversationKey() !== activeKey) return false;
     text = normalizedText(text);
-    if (!text.trim()) return false;
+    if (!text.trim() && !attachments.length) return false;
     const item = { id: itemId(), text, attachments, createdAt: Date.now() };
     queue.push(item);
     completionCandidateSince = null;
@@ -986,7 +989,7 @@
     const key = activeKey;
     const item = queue.find(candidate => candidate.id === id);
     if (!item) return;
-    if (!item.text.trim()) {
+    if (!item.text.trim() && !item.attachments?.length) {
       queue = queue.filter(candidate => candidate.id !== item.id);
       await persistQueue();
       renderQueue();
@@ -1239,7 +1242,7 @@
     const snapshot = lifecycleSnapshot();
     const overviewReady = location.pathname === "/" && !stateLoaded;
     const composerState = composerContext(composer);
-    const hasMessage = Boolean(text.trim() || composerState.quote || composerState.selections.length);
+    const hasMessage = Boolean(text.trim() || composerState.files.length || composerState.quote || composerState.selections.length);
     if (hasMessage && !nativeSubmissionPending(composer) && (stateLoaded || overviewReady)
       && activeKey === conversationKey() && !queue.length && !enterPending && !routeSyncRunning
       && queueCanAdvance(snapshot, COMPLETE_SETTLE_MS)) {
