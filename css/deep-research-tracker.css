@@ -1,5 +1,8 @@
 #ghrc-deep-research-tracker {
-  display: block;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   width: fit-content;
   max-width: 100%;
   margin: 4px auto;
@@ -12,6 +15,13 @@
   font-size: 11px;
   cursor: pointer;
   text-align: center;
+}
+
+#ghrc-deep-research-tracker .ghrc-research-telescope {
+  width: 36px;
+  height: 24px;
+  object-fit: contain;
+  flex-shrink: 0;
 }
 
 #ghrc-deep-research-tracker:hover,

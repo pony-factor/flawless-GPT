@@ -125,6 +125,14 @@
       widget = document.createElement('button');
       widget.id = ID;
       widget.type = 'button';
+      const icon = document.createElement('img');
+      icon.className = 'ghrc-research-telescope';
+      icon.src = globalThis.chrome?.runtime?.getURL?.('artwork/research-telescope.png') || 'artwork/research-telescope.png';
+      icon.alt = '';
+      icon.setAttribute('aria-hidden', 'true');
+      const label = document.createElement('span');
+      label.className = 'ghrc-research-allowance';
+      widget.append(icon, label);
       widget.addEventListener('click', checkAllowance);
     }
     if (widget.nextElementSibling !== composer) composer.before(widget);
@@ -135,7 +143,10 @@
       : 'Check allowance';
     const reset = fresh && allowance.reset ? allowance.reset : 'Reset unknown';
     const text = serverText() || `Deep Research · ${count} · ${reset}`;
-    if (widget.textContent !== text) widget.textContent = text;
+    const label = widget.querySelector('.ghrc-research-allowance');
+    const visibleText = text.replace(/^Deep Research · /, '');
+    if (label.textContent !== visibleText) label.textContent = visibleText;
+    if (widget.getAttribute('aria-label') !== text) widget.setAttribute('aria-label', text);
     widget.title = serverQuota
       ? 'ChatGPT’s Deep Research report allowance. Click to refresh. Lightweight allowances are excluded. Reset countdown uses days above 36 hours, hours down to one hour, then minutes.'
       : 'Waiting for ChatGPT’s research allowance. Click to check again or open the native tools menu.';
