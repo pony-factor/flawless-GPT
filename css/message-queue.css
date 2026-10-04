@@ -10,7 +10,7 @@
   margin: 0 auto 8px;
   max-width: calc(100vw - 28px);
   overflow: hidden;
-  width: min(48rem, 100%);
+  width: min(38.4rem, 100%);
 }
 
 html.dark #ghrc-message-queue,
