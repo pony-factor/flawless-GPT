@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Flawless ChatGPT",
-  "version": "1.7.1",
+  "version": "1.7.2",
   "description": "Adds a personalized GitHub repository dashboard and optional ChatGPT interface tweaks.",
   "icons": {
     "16": "icons/icon-16.png",

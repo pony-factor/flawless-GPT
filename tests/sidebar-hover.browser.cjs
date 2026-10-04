@@ -68,3 +68,69 @@ test('disabled hover setting leaves the collapsed sidebar alone',async()=>{
   assert.equal(await page.evaluate(()=>clicks),0);
   await page.close();
 });
+test('synthetic research-menu pointer events cannot reveal the sidebar',async()=>{
+  const page=await fixture();
+  await page.mouse.move(500,250);
+  await page.evaluate(()=>{
+    const research=document.createElement('button');
+    research.textContent='Deep research';
+    document.body.append(research);
+    research.dispatchEvent(new PointerEvent('pointermove',{bubbles:true,pointerType:'mouse'}));
+  });
+  await page.waitForTimeout(500);
+  assert.equal(await page.locator('aside').getAttribute('data-expanded'),'false');
+  assert.equal(await page.evaluate(()=>clicks),0);
+  await page.mouse.move(12,250);
+  await page.waitForFunction(()=>document.querySelector('aside').dataset.expanded==='true');
+  await page.evaluate(()=>document.dispatchEvent(new PointerEvent('pointerout',{bubbles:true,relatedTarget:null})));
+  await page.waitForTimeout(150);
+  assert.equal(await page.locator('aside').getAttribute('data-expanded'),'true');
+  await page.mouse.move(500,250);
+  await page.waitForFunction(()=>document.querySelector('aside').dataset.expanded==='false');
+  await page.close();
+});
+test('sidebar portal menus, the gap, and nested GPT menus remain selectable',async()=>{
+  const page=await fixture();
+  await page.mouse.move(12,250);
+  await page.waitForFunction(()=>document.querySelector('aside').dataset.expanded==='true');
+  await page.evaluate(()=>{
+    document.querySelector('aside').insertAdjacentHTML('beforeend','<button id="explore" aria-haspopup="menu" aria-expanded="true" aria-controls="explore-menu">Explore</button>');
+    document.body.insertAdjacentHTML('beforeend',`<div id="explore-menu" role="menu" style="position:fixed;left:268px;top:100px;width:180px;height:200px"><button id="gpts" aria-expanded="true">GPTs</button></div><div role="menu" aria-labelledby="gpts" style="position:fixed;left:456px;top:100px;width:180px;height:200px"><button id="gpt-item">My GPT</button></div>`);
+    document.getElementById('gpt-item').onclick=()=>window.selectedGPT=true;
+  });
+  for(const x of [264,300,452,480]) {
+    await page.mouse.move(x,120);
+    await page.waitForTimeout(150);
+    assert.equal(await page.locator('aside').getAttribute('data-expanded'),'true');
+  }
+  await page.click('#gpt-item');
+  assert.equal(await page.evaluate(()=>window.selectedGPT),true);
+  await page.mouse.move(700,400);
+  await page.waitForFunction(()=>document.querySelector('aside').dataset.expanded==='false');
+  assert.deepEqual(page.errors,[]);
+  await page.close();
+});
+test('unrelated and hidden portal menus do not keep the sidebar expanded',async()=>{
+  const page=await fixture();
+  await page.mouse.move(12,250);
+  await page.waitForFunction(()=>document.querySelector('aside').dataset.expanded==='true');
+  await page.evaluate(()=>{
+    document.querySelector('aside').insertAdjacentHTML('beforeend','<button id="explore" aria-expanded="true">Explore</button>');
+    document.body.insertAdjacentHTML('beforeend','<div role="menu" aria-labelledby="explore" style="visibility:hidden;position:fixed;left:268px;top:100px;width:180px;height:200px"></div><div role="menu" style="position:fixed;left:268px;top:100px;width:180px;height:200px">Composer menu</div>');
+  });
+  await page.mouse.move(300,120);
+  await page.waitForFunction(()=>document.querySelector('aside').dataset.expanded==='false');
+  await page.close();
+});
+test('overflowing sidebar children stay interactive past the sidebar bounds',async()=>{
+  const page=await fixture();
+  await page.mouse.move(12,250);
+  await page.waitForFunction(()=>document.querySelector('aside').dataset.expanded==='true');
+  await page.evaluate(()=>document.querySelector('aside').insertAdjacentHTML('beforeend','<button style="position:absolute;left:250px;top:100px;width:120px">GPTs</button>'));
+  await page.mouse.move(300,120);
+  await page.waitForTimeout(150);
+  assert.equal(await page.locator('aside').getAttribute('data-expanded'),'true');
+  await page.mouse.move(500,120);
+  await page.waitForFunction(()=>document.querySelector('aside').dataset.expanded==='false');
+  await page.close();
+});
