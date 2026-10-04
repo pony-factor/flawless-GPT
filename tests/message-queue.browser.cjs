@@ -1357,6 +1357,26 @@ test('streaming response scrolls both ways over a horizontal source carousel', a
   await p.close();
 });
 
+test('wheel scrolling restores a pending streaming jump before applying the user delta', async () => {
+  const p = await fixture({ preserveScroll: true });
+  await scrollFixture(p);
+  await p.locator('[data-composer-markdown]').fill('Streaming wheel race');
+  await p.locator('[data-composer-markdown]').press('Enter');
+  await sentCount(p, 1);
+  await p.waitForTimeout(100);
+  const position = await p.evaluate(() => {
+    document.getElementById('turns').lastElementChild.style.height = '3200px';
+    scroller.scrollTop = scroller.scrollHeight;
+    scroller.dispatchEvent(new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaY: 250 }));
+    return scroller.scrollTop;
+  });
+  assert.equal(position, 850);
+  await p.waitForTimeout(100);
+  assert.equal(await p.evaluate(() => scroller.scrollTop), 850);
+  assert.deepEqual(p.errors, []);
+  await p.close();
+});
+
 for (const reverse of [false, true]) for (const singleParagraph of [false, true]) {
   test(`very large text-only streaming reply scrolls midway (${reverse ? 'reverse' : 'normal'}, ${singleParagraph ? 'one clipped paragraph' : 'many paragraphs'})`, async () => {
     const p = await fixture({ preserveScroll: true, liveMarkup: true });
