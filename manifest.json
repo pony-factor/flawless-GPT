@@ -105,7 +105,8 @@
         "css/clipboard-send.css",
         "css/top-hat-send-button.css",
         "css/message-queue.css",
-        "css/highlighted-pages.css"
+        "css/highlighted-pages.css",
+        "css/deep-research-tracker.css"
       ],
       "js": [
         "js/youtube-search.js",
@@ -114,7 +115,8 @@
         "js/2048.js",
         "js/clipboard-send.js",
         "js/message-queue.js",
-        "js/highlighted-pages.js"
+        "js/highlighted-pages.js",
+        "js/deep-research-tracker.js"
       ],
       "run_at": "document_start"
     },

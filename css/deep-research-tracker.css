@@ -1,0 +1,20 @@
+#ghrc-deep-research-tracker {
+  display: block;
+  width: fit-content;
+  max-width: 100%;
+  margin: 4px auto;
+  padding: 3px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary, inherit);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  text-align: center;
+}
+
+#ghrc-deep-research-tracker:hover,
+#ghrc-deep-research-tracker:focus-visible {
+  background: var(--main-surface-secondary, color-mix(in srgb, currentColor 8%, transparent));
+}
