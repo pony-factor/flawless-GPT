@@ -979,14 +979,94 @@ for (const modern of [false, true]) test(`keep scroll on long native Enter with 
   await p.evaluate(() => { scroller.scrollTop = 1800; });
   await p.waitForTimeout(100);
   assert.equal(await p.evaluate(() => scroller.scrollTop), 600);
-  // Deliberate wheel input releases it and restores the original smooth style.
+  // Deliberate wheel input moves the reading position; streaming cannot undo it.
   await p.evaluate(() => {
-    scroller.dispatchEvent(new WheelEvent('wheel', { bubbles: true, deltaY: 100 }));
-    scroller.scrollTo({ top: 850, behavior: 'instant' });
+    scroller.dispatchEvent(new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaY: 250 }));
   });
   await p.waitForTimeout(100);
   assert.equal(await p.evaluate(() => scroller.scrollTop), 850);
-  assert.equal(await p.evaluate(() => scroller.style.scrollBehavior), 'smooth');
+  await p.evaluate(() => { scroller.scrollTop = scroller.scrollHeight; });
+  await p.waitForTimeout(100);
+  assert.equal(await p.evaluate(() => scroller.scrollTop), 850);
+  assert.deepEqual(p.errors, []);
+  await p.close();
+});
+
+test('sidebar toggles preserve visible text through width reflow and native scrolling', async () => {
+  const p = await fixture({ preserveScroll: true });
+  await scrollFixture(p);
+  await p.evaluate(() => {
+    scroller.style.width = '600px';
+    for (const message of document.querySelectorAll('[data-message-author-role]')) {
+      message.textContent = 'Reading text with wrapping. '.repeat(20);
+    }
+    const button = document.createElement('button');
+    button.setAttribute('aria-label', 'Show sidebar');
+    document.body.prepend(button);
+    button.onclick = () => {
+      scroller.style.width = button.getAttribute('aria-label') === 'Show sidebar' ? '300px' : '600px';
+      button.setAttribute('aria-label', button.getAttribute('aria-label') === 'Show sidebar' ? 'Hide sidebar' : 'Show sidebar');
+      scroller.scrollTop = scroller.scrollHeight;
+    };
+    window.anchor = [...document.querySelectorAll('[data-message-author-role]')]
+      .find(e => e.getBoundingClientRect().bottom > scroller.getBoundingClientRect().top);
+    window.anchorTop = anchor.getBoundingClientRect().top;
+  });
+  for (const label of ['Show sidebar', 'Hide sidebar']) {
+    // Hover reveal uses a synthetic click, without pointerdown.
+    await p.evaluate(label => document.querySelector(`button[aria-label="${label}"]`).click(), label);
+    await p.waitForTimeout(100);
+    assert.equal(await p.evaluate(() => anchor.getBoundingClientRect().top), await p.evaluate(() => anchorTop));
+  }
+  assert.deepEqual(p.errors, []);
+  await p.close();
+});
+
+test('first response remains freely scrollable after receiving its conversation URL', async () => {
+  const p = await fixture({ preserveScroll: true, route: '/' });
+  await scrollFixture(p, { short: true });
+  await p.locator('[data-composer-markdown]').fill('First prompt');
+  await p.locator('[data-composer-markdown]').press('Enter');
+  await sentCount(p, 1);
+  await p.evaluate(() => {
+    history.replaceState({}, '', '/c/first-response');
+    document.getElementById('turns').lastElementChild.style.height = '2400px';
+    scroller.scrollTop = scroller.scrollHeight;
+  });
+  await p.waitForTimeout(100);
+  assert.equal(await p.evaluate(() => scroller.scrollTop), 0);
+  const bounds = await p.locator('#conversation-scroller').boundingBox();
+  await p.mouse.move(bounds.x + 50, bounds.y + 100);
+  await p.mouse.wheel(0, 300);
+  await p.waitForTimeout(100);
+  assert.equal(await p.evaluate(() => scroller.scrollTop), 300);
+  await p.evaluate(() => {
+    document.getElementById('turns').lastElementChild.style.height = '3200px';
+    scroller.scrollTop = scroller.scrollHeight;
+  });
+  await p.waitForTimeout(100);
+  assert.equal(await p.evaluate(() => scroller.scrollTop), 300);
+  assert.deepEqual(p.errors, []);
+  await p.close();
+});
+
+test('keyboard scrolling updates the reading position without releasing streaming protection', async () => {
+  const p = await fixture({ preserveScroll: true });
+  await scrollFixture(p);
+  await p.locator('[data-composer-markdown]').fill('Keyboard scrolling');
+  await p.locator('[data-composer-markdown]').press('Enter');
+  await sentCount(p, 1);
+  await p.evaluate(() => { scroller.tabIndex = 0; scroller.focus({ preventScroll: true }); });
+  await p.keyboard.press('PageDown');
+  await p.waitForTimeout(400);
+  const position = await p.evaluate(() => scroller.scrollTop);
+  assert.ok(position > 600);
+  await p.evaluate(() => {
+    document.getElementById('turns').lastElementChild.style.height = '3200px';
+    scroller.scrollTop = scroller.scrollHeight;
+  });
+  await p.waitForTimeout(100);
+  assert.equal(await p.evaluate(() => scroller.scrollTop), position);
   assert.deepEqual(p.errors, []);
   await p.close();
 });
@@ -1073,6 +1153,19 @@ test('keep visible text steady in the live reverse-flex layout during long strea
     await p.waitForTimeout(100);
     assert.equal(await p.evaluate(() => anchor.getBoundingClientRect().top), await p.evaluate(() => anchorTop));
   }
+  const previous = await p.evaluate(() => scroller.scrollTop);
+  const bounds = await p.locator('#conversation-scroller').boundingBox();
+  await p.mouse.move(bounds.x + 50, bounds.y + 100);
+  await p.mouse.wheel(0, -250);
+  await p.waitForTimeout(100);
+  assert.equal(await p.evaluate(() => scroller.scrollTop), previous - 250);
+  const readingTop = await p.evaluate(() => anchor.getBoundingClientRect().top);
+  await p.evaluate(() => {
+    document.getElementById('turns').lastElementChild.style.height = '4800px';
+    scroller.scrollTop = 0;
+  });
+  await p.waitForTimeout(100);
+  assert.equal(await p.evaluate(() => anchor.getBoundingClientRect().top), readingTop);
   assert.deepEqual(p.errors, []);
   await p.close();
 });

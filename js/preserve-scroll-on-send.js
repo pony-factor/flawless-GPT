@@ -9,6 +9,7 @@
   ].join(",");
   const MESSAGE_SELECTOR = '[data-testid^="conversation-turn-"], [data-message-author-role], [data-content-search-unit-key]';
   const COMPOSER_SELECTOR = '#prompt-textarea, [contenteditable="true"]';
+  const SIDEBAR_LABELS = /^(?:open|close|expand|collapse|show|hide) sidebar$/i;
   const USER_SCROLL_KEYS = new Set([
     "ArrowUp",
     "ArrowDown",
@@ -23,6 +24,7 @@
   let guard = null;
   let restoreScheduled = false;
   let resizeObserver = null;
+  let inputTimer = null;
 
   function isScrollableElement(element) {
     if (!element) return false;
@@ -145,10 +147,17 @@
   function restorePosition() {
     restoreScheduled = false;
     if (!enabled || !guard) return;
-    if (guard.path !== location.pathname) { stopGuard(); return; }
+    if (guard.path !== location.pathname) {
+      // The first send assigns a conversation URL while its reply is streaming.
+      if (guard.firstSend && /\/c\/[^/]+$/.test(location.pathname)) {
+        guard.path = location.pathname;
+        guard.firstSend = false;
+      } else { stopGuard(); return; }
+    }
 
     const container = currentGuardContainer();
     if (!container) return;
+    if (guard.acceptingInput) { rememberPosition(container); return; }
 
     const anchor = guard.anchor;
     // Reverse-flex threads use negative offsets relative to the bottom. Keep
@@ -175,6 +184,7 @@
   }
 
   function stopGuard() {
+    clearTimeout(inputTimer);
     resizeObserver?.disconnect();
     resizeObserver = null;
     if (guard?.container) {
@@ -199,11 +209,39 @@
     for (const child of container.children) resizeObserver.observe(child);
   }
 
-  function beginGuard() {
+  function rememberPosition(container) {
+    guard.scrollTop = container.scrollTop;
+    guard.scrollLeft = container.scrollLeft;
+    guard.anchor = readingAnchor(container);
+  }
+
+  function allowUserScroll() {
+    if (!guard) return;
+    guard.acceptingInput = true;
+    clearTimeout(inputTimer);
+    inputTimer = window.setTimeout(() => {
+      if (!guard) return;
+      const container = currentGuardContainer();
+      if (container) rememberPosition(container);
+      guard.acceptingInput = false;
+    }, 180);
+  }
+
+  function isSidebarTarget(target) {
+    return SIDEBAR_LABELS.test(target?.closest?.('button[aria-label]')?.getAttribute('aria-label')?.trim() || '');
+  }
+
+  function beginGuard(firstSend = false) {
     if (!enabled) return;
     // Enter, native click, submit and FIFO sends belong to the same reading
     // position. Never replace it with an intermediate native scroll offset.
-    if (guard && guard.path === location.pathname) { scheduleRestore(); return; }
+    if (guard && guard.path === location.pathname) {
+      if (firstSend === true) {
+        guard.acceptingInput = false;
+        guard.firstSend ||= !/\/c\//.test(location.pathname);
+      }
+      scheduleRestore(); return;
+    }
     stopGuard();
 
     const container = findConversationScrollContainer();
@@ -215,6 +253,7 @@
       anchor: readingAnchor(container),
       scrollLeft: container.scrollLeft,
       path: location.pathname,
+      firstSend: firstSend === true && !/\/c\//.test(location.pathname),
       styles: [],
     };
     protectContainer(container);
@@ -239,37 +278,60 @@
   });
 
   document.addEventListener("click", (event) => {
-    if (enabled && isSendButtonTarget(event.target)) beginGuard();
+    if (enabled && isSidebarTarget(event.target)) beginGuard();
+    if (enabled && isSendButtonTarget(event.target)) beginGuard(true);
   }, true);
 
   document.addEventListener("submit", (event) => {
     if (!enabled) return;
-    if (event.target?.querySelector?.('#prompt-textarea, [data-composer-markdown][contenteditable="true"]')) beginGuard();
+    if (event.target?.querySelector?.('#prompt-textarea, [data-composer-markdown][contenteditable="true"]')) beginGuard(true);
   }, true);
 
   window.addEventListener("keydown", (event) => {
     if (guard && isUserScrollKey(event) && !event.target?.closest?.('input, textarea, [contenteditable="true"]')) {
-      stopGuard();
+      allowUserScroll();
       return;
     }
-    if (enabled && shouldBeginForKeydown(event)) beginGuard();
+    if (enabled && shouldBeginForKeydown(event)) beginGuard(true);
   }, true);
 
   document.addEventListener("scroll", (event) => {
     if (!guard) return;
     const target = event.target === document ? document.scrollingElement : event.target;
     const container = currentGuardContainer();
-    if (target === container) { restorePosition(); scheduleRestore(); }
+    if (target === container) {
+      if (guard.acceptingInput) allowUserScroll();
+      restorePosition(); scheduleRestore();
+    }
   }, true);
 
-  document.addEventListener("wheel", stopGuard, { capture: true, passive: true });
-  document.addEventListener("touchmove", stopGuard, { capture: true, passive: true });
+  document.addEventListener("wheel", (event) => {
+    if (!enabled || event.ctrlKey || event.defaultPrevented) return;
+    const container = findConversationScrollContainer();
+    if (!container.contains(event.target)) return;
+    // Let nested code panes and menus handle their own scrolling.
+    if (scrollableAncestor(event.target) !== container && container !== document.scrollingElement) return;
+    if (!event.cancelable) { allowUserScroll(); return; }
+    beginGuard();
+    guard.acceptingInput = false;
+    clearTimeout(inputTimer);
+    event.preventDefault();
+    const scale = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? container.clientHeight : 1;
+    container.scrollTop += event.deltaY * scale;
+    container.scrollLeft += event.deltaX * scale;
+    rememberPosition(container);
+  }, { capture: true, passive: false });
+  document.addEventListener("touchmove", allowUserScroll, { capture: true, passive: true });
   window.addEventListener("pointerdown", (event) => {
-    stopGuard();
+    if (isSidebarTarget(event.target)) { beginGuard(); return; }
+    allowUserScroll();
     // Capture before focus can scroll a tall composer into view.
-    if (isSendButtonTarget(event.target)) beginGuard();
+    if (isSendButtonTarget(event.target)) {
+      if (guard) guard.acceptingInput = false;
+      beginGuard(true);
+    }
   }, true);
-  window.addEventListener("ghrc:before-composer-send", beginGuard);
+  window.addEventListener("ghrc:before-composer-send", () => beginGuard(true));
   new MutationObserver(scheduleRestore).observe(document.documentElement, { childList: true, subtree: true });
 
   void loadPreference();
