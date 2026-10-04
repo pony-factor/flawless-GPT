@@ -225,12 +225,14 @@
   }
 
   document.addEventListener("pointermove", (event) => {
+    if (!event.isTrusted) return;
     if (event.pointerType && event.pointerType !== "mouse") return;
     pointer = { x: event.clientX, y: event.clientY, inside: true };
     reconcileHoverState();
   }, true);
 
   window.addEventListener("pointerout", (event) => {
+    if (!event.isTrusted) return;
     if (event.relatedTarget !== null) return;
     pointer.inside = false;
     reconcileHoverState();

@@ -68,6 +68,27 @@ test('disabled hover setting leaves the collapsed sidebar alone',async()=>{
   assert.equal(await page.evaluate(()=>clicks),0);
   await page.close();
 });
+test('synthetic research-menu pointer events cannot reveal the sidebar',async()=>{
+  const page=await fixture();
+  await page.mouse.move(500,250);
+  await page.evaluate(()=>{
+    const research=document.createElement('button');
+    research.textContent='Deep research';
+    document.body.append(research);
+    research.dispatchEvent(new PointerEvent('pointermove',{bubbles:true,pointerType:'mouse'}));
+  });
+  await page.waitForTimeout(500);
+  assert.equal(await page.locator('aside').getAttribute('data-expanded'),'false');
+  assert.equal(await page.evaluate(()=>clicks),0);
+  await page.mouse.move(12,250);
+  await page.waitForFunction(()=>document.querySelector('aside').dataset.expanded==='true');
+  await page.evaluate(()=>document.dispatchEvent(new PointerEvent('pointerout',{bubbles:true,relatedTarget:null})));
+  await page.waitForTimeout(150);
+  assert.equal(await page.locator('aside').getAttribute('data-expanded'),'true');
+  await page.mouse.move(500,250);
+  await page.waitForFunction(()=>document.querySelector('aside').dataset.expanded==='false');
+  await page.close();
+});
 test('sidebar portal menus, the gap, and nested GPT menus remain selectable',async()=>{
   const page=await fixture();
   await page.mouse.move(12,250);
