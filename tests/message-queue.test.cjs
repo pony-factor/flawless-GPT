@@ -43,6 +43,14 @@ test("normalizes persisted queue items and drops empty entries", () => {
   );
 });
 
+test("keeps image-only messages when loading a saved queue", () => {
+  const attachment = { name: 'picture.png', type: 'image/png', dataUrl: 'data:image/png;base64,aW1hZ2U=' };
+  const items = api().normalizeQueueItems([{ id: 'image', text: '', attachments: [attachment] }, { id: 'empty', text: '' }]);
+  assert.equal(items.length, 1);
+  assert.equal(items[0].text, '');
+  assert.equal(JSON.stringify(items[0].attachments), JSON.stringify([attachment]));
+});
+
 test("recognizes unmodified Enter as a send or queue gesture", () => {
   const helpers = api();
   const enter = {

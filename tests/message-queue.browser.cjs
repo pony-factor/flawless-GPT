@@ -385,16 +385,16 @@ test('empty disabled send button does not deadlock; FIFO waits for complete resp
 test('Stop queue preserves messages across reload; Resume sends them', async () => {
   const p = await fixture({ active: true });
   await enqueue(p, 'Saved');
-  await p.getByRole('button', { name: 'Stop', exact: true }).click();
+  await p.getByRole('button', { name: 'Wait', exact: true }).click();
   await p.evaluate(() => finish());
   await p.waitForTimeout(1800);
   assert.deepEqual(await p.evaluate(() => sent), []);
   const stored = await p.evaluate(() => window.storage);
   const restored = await fixture({ stored });
-  await restored.getByRole('button', { name: 'Resume queue', exact: true }).waitFor();
+  await restored.getByRole('button', { name: 'Resume', exact: true }).waitFor();
   await restored.waitForTimeout(1800);
   assert.deepEqual(await restored.evaluate(() => sent), []);
-  await restored.getByRole('button', { name: 'Resume queue', exact: true }).click();
+  await restored.getByRole('button', { name: 'Resume', exact: true }).click();
   await sentCount(restored, 1);
   assert.deepEqual(await restored.evaluate(() => sent), ['Saved']);
   await p.close(); await restored.close();
@@ -455,11 +455,11 @@ test('failed submission pauses and keeps the message for retry', async () => {
   const p = await fixture({ editable: false });
   await p.evaluate(() => { window.rejectSend = true; });
   await enqueue(p, 'Retry me');
-  await p.getByRole('button', { name: 'Resume queue', exact: true }).waitFor({ timeout: 10000 });
+  await p.getByRole('button', { name: 'Resume', exact: true }).waitFor({ timeout: 10000 });
   assert.equal(await p.locator('.ghrc-message-queue-editor').inputValue(), 'Retry me');
   assert.equal(await p.evaluate(() => read()), '');
   await p.evaluate(() => { window.rejectSend = false; });
-  await p.getByRole('button', { name: 'Resume queue', exact: true }).click();
+  await p.getByRole('button', { name: 'Resume', exact: true }).click();
   await sentCount(p, 1);
   assert.deepEqual(await p.evaluate(() => sent), ['Retry me']);
   await p.close();
@@ -468,14 +468,14 @@ test('failed submission pauses and keeps the message for retry', async () => {
 test('conversation navigation isolates queues and migrates a new-chat queue', async () => {
   const p = await fixture({ active: true, route: '/' });
   await enqueue(p, 'New chat queue');
-  await p.getByRole('button', { name: 'Stop', exact: true }).click();
+  await p.getByRole('button', { name: 'Wait', exact: true }).click();
   await p.evaluate(() => { history.pushState({}, '', '/g/g-example/c/created'); window.dispatchEvent(new PopStateEvent('popstate')); });
   await p.waitForFunction(() => storage.queuedChatMessages?.['conversation:created']?.length === 1);
   assert.equal(await p.evaluate(() => storage.queuedChatMessagesPaused['conversation:created']), true);
   await p.evaluate(() => { history.pushState({}, '', '/c/other'); window.dispatchEvent(new PopStateEvent('popstate')); });
   await p.waitForFunction(() => !document.getElementById('ghrc-message-queue'));
   await p.evaluate(() => { history.pushState({}, '', '/g/g-example/c/created'); window.dispatchEvent(new PopStateEvent('popstate')); });
-  await p.getByRole('button', { name: 'Resume queue', exact: true }).waitFor();
+  await p.getByRole('button', { name: 'Resume', exact: true }).waitFor();
   assert.equal(await p.locator('.ghrc-message-queue-editor').inputValue(), 'New chat queue');
   await p.close();
 });
@@ -521,7 +521,7 @@ test('stopping during the completion settle period prevents the next send on a n
   await enqueue(p, 'Stay queued');
   await p.evaluate(() => finish());
   await p.waitForTimeout(500);
-  const stop = p.getByRole('button', { name: 'Stop', exact: true });
+  const stop = p.getByRole('button', { name: 'Wait', exact: true });
   const box = await stop.boundingBox();
   assert.ok(box && box.x >= 0 && box.x + box.width <= 390);
   await stop.click();
@@ -803,11 +803,11 @@ test('failed queued send restores a partial draft and preserves the queue for re
   await enqueue(p, 'Queued prompt');
   await p.locator('#prompt-textarea').fill('Unfinished draft');
   await p.evaluate(() => { window.rejectSend = true; finish(); });
-  await p.getByRole('button', { name: 'Resume queue', exact: true }).waitFor({ timeout: 10000 });
+  await p.getByRole('button', { name: 'Resume', exact: true }).waitFor({ timeout: 10000 });
   assert.equal(await p.evaluate(() => read()), 'Unfinished draft');
   assert.equal(await p.locator('.ghrc-message-queue-editor').inputValue(), 'Queued prompt');
   await p.evaluate(() => { window.rejectSend = false; });
-  await p.getByRole('button', { name: 'Resume queue', exact: true }).click();
+  await p.getByRole('button', { name: 'Resume', exact: true }).click();
   await sentCount(p, 1);
   await p.waitForFunction(() => read() === 'Unfinished draft');
   assert.deepEqual(await p.evaluate(() => sent), ['Queued prompt']);
@@ -818,7 +818,7 @@ for (const paused of [false, true]) {
   test(`Steer sends a selected queued item and preserves the remaining FIFO and draft (paused=${paused})`, async () => {
     const p = await fixture({ active: true });
     await enqueue(p, 'First'); await enqueue(p, 'Selected'); await enqueue(p, 'Last');
-    if (paused) await p.getByRole('button', { name: 'Stop', exact: true }).click();
+    if (paused) await p.getByRole('button', { name: 'Wait', exact: true }).click();
     await p.locator('[data-composer-markdown]').fill('Partial draft');
     await p.getByRole('button', { name: 'Steer queued message', exact: true }).nth(1).click();
     await sentCount(p, 1);
@@ -830,7 +830,7 @@ for (const paused of [false, true]) {
       await p.evaluate(() => finish());
       await p.waitForTimeout(1800);
       assert.deepEqual(await p.evaluate(() => sent), ['Selected']);
-      await p.getByRole('button', { name: 'Resume queue', exact: true }).click();
+      await p.getByRole('button', { name: 'Resume', exact: true }).click();
     } else await p.evaluate(() => finish());
     await sentCount(p, 2);
     await p.waitForFunction(() => read() === 'Partial draft');
@@ -850,7 +850,7 @@ test('failed Steer retains every queued message in order and restores the draft'
   await p.locator('#prompt-textarea').fill('Keep draft');
   await p.evaluate(() => { window.rejectSend = true; });
   await p.getByRole('button', { name: 'Steer queued message', exact: true }).nth(1).click();
-  await p.getByRole('button', { name: 'Resume queue', exact: true }).waitFor({ timeout: 10000 });
+  await p.getByRole('button', { name: 'Resume', exact: true }).waitFor({ timeout: 10000 });
   assert.deepEqual(await p.evaluate(() => sent), []);
   assert.equal(await p.evaluate(() => read()), 'Keep draft');
   assert.deepEqual(await p.locator('.ghrc-message-queue-editor').evaluateAll(es => es.map(e => e.value)), ['First', 'Selected', 'Last']);
@@ -895,30 +895,104 @@ test('Steer preserves draft edits made while waiting for the response to stop', 
   await p.close();
 });
 
-async function attachmentFixture(page) {
-  await page.evaluate(() => {
+async function attachmentFixture(page, { images = false } = {}) {
+  await page.evaluate(({ images }) => {
     document.querySelector('form').insertAdjacentHTML('afterbegin', '<input type="file" aria-label="Attach files" multiple><div data-composer-attachments></div>');
     window.sentContexts = [];
     const input = document.querySelector('input[type=file]');
-    input.addEventListener('change', () => {
+    const renderFiles = files => {
       const surface = document.querySelector('[data-composer-attachments]');
-      for (const file of input.files) {
+      for (const file of files) {
         const chip = document.createElement('div');
-        chip.textContent = file.name;
+        chip.className = 'group/composer-attachment';
+        chip.dataset.filename = file.name;
+        if (images) {
+          const image = document.createElement('img');
+          image.alt = file.name;
+          chip.append(image);
+        } else chip.textContent = file.name;
         const remove = document.createElement('button');
-        remove.type = 'button'; remove.setAttribute('aria-label', `Remove file ${file.name}`);
+        remove.type = 'button'; remove.setAttribute('aria-label', images ? 'Remove image' : `Remove file ${file.name}`);
         remove.addEventListener('click', () => chip.remove());
         chip.append(remove); surface.append(chip);
       }
+    };
+    input.addEventListener('change', () => renderFiles(input.files));
+    editor.addEventListener('paste', event => {
+      if (!event.clipboardData?.files.length) return;
+      event.preventDefault();
+      renderFiles(event.clipboardData.files);
+      update();
     });
     button.addEventListener('click', () => {
       if (!window.active || window.rejectSend) return;
       const surface = document.querySelector('[data-composer-attachments]');
-      sentContexts.push([...surface.children].map(e => e.textContent));
+      sentContexts.push([...surface.children].map(e => e.dataset.filename));
       surface.replaceChildren();
     });
-  });
+    if (images) {
+      const nativeUpdate = window.update;
+      window.update = () => {
+        nativeUpdate();
+        if (document.querySelector('[data-composer-attachments]').childElementCount && !window.active) button.disabled = false;
+      };
+      input.addEventListener('change', () => update());
+      editor.addEventListener('input', () => update());
+      button.addEventListener('click', () => {
+        if (window.active || window.rejectSend || read().trim() || !document.querySelector('[data-composer-attachments]').childElementCount) return;
+        sent.push('');
+        addTurn('user'); addTurn('assistant');
+        sentContexts.push([...document.querySelector('[data-composer-attachments]').children].map(e => e.dataset.filename));
+        document.querySelector('[data-composer-attachments]').replaceChildren();
+        window.active = true;
+        update();
+      });
+    }
+  }, { images });
 }
+
+for (const gesture of ['Enter', 'button', 'paste']) for (const prompt of ['', 'Describe this image']) test(`queues an image ${prompt ? 'with text' : 'without text'} using ${gesture}`, async () => {
+  const p = await fixture({ active: true });
+  await attachmentFixture(p, { images: true });
+  const bytes = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j1ioAAAAASUVORK5CYII=', 'base64');
+  if (gesture === 'paste') {
+    await p.evaluate(data => {
+      const clipboardData = new DataTransfer();
+      clipboardData.items.add(new File([Uint8Array.from(atob(data), char => char.charCodeAt(0))], 'picture.png', { type: 'image/png' }));
+      editor.dispatchEvent(new ClipboardEvent('paste', { bubbles: true, clipboardData }));
+    }, bytes.toString('base64'));
+  } else await p.locator('input[type=file]').setInputFiles({ name: 'picture.png', mimeType: 'image/png', buffer: bytes });
+  await p.locator('[data-composer-markdown]').fill(prompt);
+  if (gesture !== 'button') await p.locator('[data-composer-markdown]').press('Enter');
+  else await p.locator('#ghrc-message-queue-button').click();
+  await p.waitForFunction(() => storage.queuedChatMessages?.['conversation:test']?.length === 1 && !document.querySelector('[data-composer-attachments]').childElementCount);
+  const item = await p.evaluate(() => storage.queuedChatMessages['conversation:test'][0]);
+  assert.equal(item.text, prompt);
+  assert.equal(item.attachments[0].type, 'image/png');
+  assert.deepEqual(Buffer.from(item.attachments[0].dataUrl.split(',')[1], 'base64'), bytes);
+  assert.equal(await p.evaluate(() => stops), 0);
+  await p.evaluate(() => finish());
+  await sentCount(p, 1);
+  assert.deepEqual(await p.evaluate(() => sent), [prompt]);
+  assert.deepEqual(await p.evaluate(() => sentContexts), [['picture.png']]);
+  assert.deepEqual(p.errors, []);
+  await p.close();
+});
+
+test('saved image-only messages reattach and send after reload', async () => {
+  const p = await fixture({ stored: {
+    queuedChatMessages: { 'conversation:test': [{ id: 'saved-image', text: '', attachments: [{ name: 'picture.png', type: 'image/png', dataUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j1ioAAAAASUVORK5CYII=' }] }] },
+    queuedChatMessagesPaused: { 'conversation:test': true },
+  } });
+  await attachmentFixture(p, { images: true });
+  await p.getByRole('button', { name: 'Resume', exact: true }).click();
+  await sentCount(p, 1);
+  assert.deepEqual(await p.evaluate(() => sent), ['']);
+  assert.deepEqual(await p.evaluate(() => sentContexts), [['picture.png']]);
+  await p.waitForFunction(() => !storage.queuedChatMessages['conversation:test']?.length);
+  assert.deepEqual(p.errors, []);
+  await p.close();
+});
 
 test('queued attachments stay with their message behind earlier text prompts', async () => {
   const p = await fixture({ active: true });
@@ -1040,7 +1114,7 @@ test('a new attachment draft cannot be consumed by an older queued prompt', asyn
 test('saved attachments survive reload and reattach when their prompt sends', async () => {
   const p = await fixture({ stored: { queuedChatMessages: { 'conversation:test': [{ id: 'saved-file', text: 'Saved prompt', attachments: [{ name: 'saved.txt', type: 'text/plain', dataUrl: 'data:text/plain;base64,U2F2ZWQgYnl0ZXM=' }] }] }, queuedChatMessagesPaused: { 'conversation:test': true } } });
   await attachmentFixture(p);
-  await p.getByRole('button', { name: 'Resume queue', exact: true }).click();
+  await p.getByRole('button', { name: 'Resume', exact: true }).click();
   await sentCount(p, 1);
   assert.deepEqual(await p.evaluate(() => sentContexts), [['saved.txt']]);
   assert.deepEqual(await p.evaluate(() => sent), ['Saved prompt']);
