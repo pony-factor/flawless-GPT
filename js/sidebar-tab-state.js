@@ -3,17 +3,19 @@
   if (window[INSTALL_MARKER]) return;
 
   const COOKIE_NAME = "codex_sidebar_state";
-  const SESSION_KEY = "ghrc:sidebar-state";
   const cookie = Object.getOwnPropertyDescriptor(Document.prototype, "cookie");
   if (!cookie?.get || !cookie?.set) return;
+
+  // The server reads the real cookie before our scripts run. Keep it collapsed
+  // so new documents arrive with a collapsed sidebar, rather than closing it
+  // after hydration. Expanded state stays in this document only.
+  Reflect.apply(cookie.set, document, [
+    `${COOKIE_NAME}=collapsed; Path=/; Max-Age=31536000; SameSite=Lax`,
+  ]);
 
   // ChatGPT reads this preference again on window focus. Keep its value local
   // to this tab so both hover reveals and manual toggles stay independent.
   let state = "collapsed";
-  try {
-    const saved = sessionStorage.getItem(SESSION_KEY);
-    if (saved === "expanded" || saved === "collapsed") state = saved;
-  } catch {}
 
   Object.defineProperty(document, "cookie", {
     configurable: true,
@@ -35,7 +37,6 @@
 
       const next = pair.slice(separator + 1).trim();
       state = next === "expanded" ? "expanded" : "collapsed";
-      try { sessionStorage.setItem(SESSION_KEY, state); } catch {}
     },
   });
 
