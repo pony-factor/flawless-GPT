@@ -48,8 +48,17 @@
       || (serverQuota.resetAt !== null && serverQuota.resetAt <= Date.now());
     const count = stale ? `${serverQuota.remaining} last checked · Refresh allowance`
       : `${serverQuota.remaining} reports remaining`;
-    const reset = serverQuota.resetAt === null ? 'Reset unknown'
-      : `Resets ${new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' }).format(serverQuota.resetAt)}`;
+    const remainingMs = serverQuota.resetAt === null ? null : serverQuota.resetAt - Date.now();
+    let reset = 'Reset unknown';
+    if (remainingMs !== null) {
+      if (remainingMs <= 0) reset = 'Reset due';
+      else {
+        const hours = remainingMs >= 60 * 60_000;
+        const value = Math.max(1, Math.round(remainingMs / (hours ? 60 * 60_000 : 60_000)));
+        const unit = hours ? 'hour' : 'minute';
+        reset = `Resets in ${value} ${unit}${value === 1 ? '' : 's'}`;
+      }
+    }
     return `Deep Research · ${count} · ${reset}`;
   }
 
@@ -126,7 +135,7 @@
     const text = serverText() || `Deep Research · ${count} · ${reset}`;
     if (widget.textContent !== text) widget.textContent = text;
     widget.title = serverQuota
-      ? 'ChatGPT’s Deep Research report allowance. Click to refresh. Lightweight allowances are excluded. Reset time is shown in your local time zone.'
+      ? 'ChatGPT’s Deep Research report allowance. Click to refresh. Lightweight allowances are excluded. Reset countdown uses hours, then minutes during the final hour.'
       : 'Waiting for ChatGPT’s research allowance. Click to check again or open the native tools menu.';
   }
 
