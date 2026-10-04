@@ -42,7 +42,7 @@
 
   function composerContext(composer = findComposerInput()) {
     const form = findComposerForm(composer);
-    if (!form) return { files: [], selections: [], quote: null };
+    if (!form) return { files: [], selections: [], quote: null, mentions: [] };
     const files = [...form.querySelectorAll('button[aria-label*="Remove" i]')]
       .filter(button => /file|attachment|image|upload/i.test(button.getAttribute("aria-label") || ""));
     const quoteRoot = form.querySelector('[data-composer-quote], [data-testid="composer-reply-preview"], [data-testid="composer-quote"], blockquote');
@@ -56,7 +56,7 @@
         root: button.parentElement,
         text: button.parentElement?.querySelector('.whitespace-pre-wrap')?.textContent || "",
       }));
-    return { files, selections, quote, quoteButton, unknown: Boolean(attachmentSurface?.childElementCount && !files.length && !quote && !selections.length) };
+    return { files, selections, quote, quoteButton, mentions: composerMentions(composer), unknown: Boolean(attachmentSurface?.childElementCount && !files.length && !quote && !selections.length) };
   }
 
   function hasComposerContext(composer) {
@@ -90,7 +90,7 @@
     if (state.quote && (!legacyQuote || !state.quoteButton)) return null;
     if (state.selections.some(selection => !selection.text.trim())) return null;
     const quote = [legacyQuote, ...state.selections.map(selection => selection.text.trim())].filter(Boolean).join("\n\n");
-    return { attachments, quote, state };
+    return { attachments, quote, mentions: state.mentions, state };
   }
 
   async function clearComposerContext(snapshot, composer) {
@@ -102,6 +102,7 @@
   function contextMatches(snapshot, composer) {
     const current = composerContext(composer);
     return current.quote === snapshot.quote && current.unknown === snapshot.unknown
+      && JSON.stringify(current.mentions) === JSON.stringify(snapshot.mentions)
       && current.selections.length === snapshot.selections.length
       && current.selections.every((selection, index) => selection.button === snapshot.selections[index].button
         && selection.root === snapshot.selections[index].root && selection.text === snapshot.selections[index].text)
@@ -134,6 +135,82 @@
     return false;
   }
 
+  const MENTION_ATTRIBUTES = [
+    "app-mention-name", "app-mention-display-name", "app-mention-path",
+    "app-mention-icon", "app-mention-brand-color",
+    "data-prompt-link-href", "data-prompt-link-label",
+  ];
+
+  function normalizeMentions(mentions, text) {
+    if (!Array.isArray(mentions)) return [];
+    let end = 0;
+    return mentions.filter(mention => {
+      if (!mention || !Number.isInteger(mention.start) || !Number.isInteger(mention.end)
+        || mention.start < end || mention.end <= mention.start || mention.end > text.length
+        || text.slice(mention.start, mention.end) !== mention.label
+        || !/^app:\/\//.test(mention.attributes?.["app-mention-path"] || "")) return false;
+      end = mention.end;
+      return true;
+    }).map(mention => ({
+      start: mention.start, end: mention.end, label: mention.label,
+      attributes: Object.fromEntries(MENTION_ATTRIBUTES
+        .filter(name => typeof mention.attributes[name] === "string")
+        .map(name => [name, mention.attributes[name]])),
+    }));
+  }
+
+  function composerMentions(composer) {
+    if (!composer?.querySelector("[app-mention-path]")) return [];
+    const clone = composer.cloneNode(true);
+    const mentions = [...clone.querySelectorAll("[app-mention-path]")].map((node, index) => {
+      const label = composerText(node);
+      const marker = `\u0000ghrc-mention-${index}\u0000`;
+      const attributes = Object.fromEntries(MENTION_ATTRIBUTES
+        .filter(name => node.hasAttribute(name)).map(name => [name, node.getAttribute(name)]));
+      node.replaceWith(document.createTextNode(marker));
+      return { marker, label, attributes };
+    });
+    let text = composerText(clone);
+    return mentions.map(mention => {
+      const start = text.indexOf(mention.marker);
+      text = text.replace(mention.marker, mention.label);
+      return { start, end: start + mention.label.length, label: mention.label, attributes: mention.attributes };
+    });
+  }
+
+  function mentionsMatch(composer, mentions) {
+    return JSON.stringify(composerMentions(composer)) === JSON.stringify(mentions);
+  }
+
+  function moveMentions(mentions, before, after) {
+    let start = 0;
+    while (start < before.length && start < after.length && before[start] === after[start]) start++;
+    let end = before.length;
+    let newEnd = after.length;
+    while (end > start && newEnd > start && before[end - 1] === after[newEnd - 1]) { end--; newEnd--; }
+    const delta = after.length - before.length;
+    return mentions.flatMap(mention => {
+      if (mention.end <= start) return [mention];
+      if (mention.start >= end) return [{ ...mention, start: mention.start + delta, end: mention.end + delta }];
+      return [];
+    });
+  }
+
+  function mentionClipboardHtml(text, mentions) {
+    const escape = value => value.replace(/[&<>"']/g, char =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]);
+    let cursor = 0;
+    let html = "";
+    for (const mention of mentions) {
+      html += escape(text.slice(cursor, mention.start)).replace(/\n/g, "<br>");
+      const attributes = MENTION_ATTRIBUTES.filter(name => name in mention.attributes)
+        .map(name => `${name}="${escape(mention.attributes[name])}"`).join(" ");
+      html += `<span ${attributes} contenteditable="false">${escape(mention.label)}</span>`;
+      cursor = mention.end;
+    }
+    return `<p>${html}${escape(text.slice(cursor)).replace(/\n/g, "<br>")}</p>`;
+  }
+
   function conversationIdFromPath(pathname = location.pathname) {
     return String(pathname || "").match(/\/c\/([^/?#]+)(?:[/?#]|$)/i)?.[1] || "";
   }
@@ -160,6 +237,7 @@
       if (!item || typeof item !== "object") return [];
       const text = normalizedText(item.text);
       const attachments = Array.isArray(item.attachments) ? item.attachments : [];
+      const mentions = normalizeMentions(item.mentions, text);
       if (!text.trim() && !attachments.length) return [];
       return [{
         id: typeof item.id === "string" && item.id
@@ -167,6 +245,7 @@
           : `queued-${Date.now()}-${Math.random().toString(36).slice(2)}`,
         text,
         attachments,
+        mentions,
         createdAt: Number.isFinite(item.createdAt) ? item.createdAt : Date.now(),
       }];
     });
@@ -350,9 +429,9 @@
     return control.value === text;
   }
 
-  async function replaceComposerText(composer, text) {
+  async function replaceComposerText(composer, text, mentions = []) {
     if (!composer) return false;
-    if (textMatchesComposer(composer, text)) return true;
+    if (textMatchesComposer(composer, text) && mentionsMatch(composer, mentions)) return true;
 
     composer.focus({ preventScroll: true });
 
@@ -379,6 +458,23 @@
       }));
       await new Promise((resolve) => window.setTimeout(resolve, 40));
       return !composerText(composer).trim();
+    }
+
+    if (mentions.length) {
+      // Let the host editor parse app nodes so React/ProseMirror retains their identity.
+      // Never fall back to plain text when that would silently lose the selected app.
+      try {
+        document.execCommand("delete");
+        await new Promise(resolve => window.setTimeout(resolve, 40));
+        const clipboardData = new DataTransfer();
+        clipboardData.setData("text/plain", text);
+        clipboardData.setData("text/html", mentionClipboardHtml(text, mentions));
+        composer.dispatchEvent(new ClipboardEvent("paste", { bubbles: true, cancelable: true, clipboardData }));
+        await new Promise(resolve => window.setTimeout(resolve, 60));
+        return textMatchesComposer(composer, text) && mentionsMatch(composer, mentions);
+      } catch {
+        return false;
+      }
     }
 
     // Native text insertion keeps large queued prompts as text. ChatGPT's
@@ -504,7 +600,7 @@
   }
 
   function storageCopy() {
-    return queue.map(({ id, text, createdAt, attachments }) => ({ id, text, createdAt, attachments }));
+    return queue.map(({ id, text, createdAt, attachments, mentions }) => ({ id, text, createdAt, attachments, mentions }));
   }
 
   function persistQueue() {
@@ -659,6 +755,7 @@
     textarea.addEventListener("input", () => {
       const target = queue.find((candidate) => candidate.id === item.id);
       if (!target) return;
+      target.mentions = moveMentions(target.mentions || [], target.text, textarea.value);
       target.text = textarea.value;
       autosizeTextarea(textarea);
       schedulePersist();
@@ -919,12 +1016,12 @@
     }
   }
 
-  async function enqueueText(text, attachments = []) {
+  async function enqueueText(text, attachments = [], mentions = []) {
     if (!context.active()) return false;
     if (!stateLoaded || routeSyncRunning || conversationKey() !== activeKey) return false;
     text = normalizedText(text);
     if (!text.trim() && !attachments.length) return false;
-    const item = { id: itemId(), text, attachments, createdAt: Date.now() };
+    const item = { id: itemId(), text, attachments, mentions, createdAt: Date.now() };
     queue.push(item);
     completionCandidateSince = null;
     renderQueue();
@@ -959,7 +1056,9 @@
       const snapshot = await captureComposerContext(composer);
       if (!snapshot || !contextMatches(snapshot.state, composer)) return false;
       const queuedText = textWithQuote(text, snapshot.quote);
-      const queued = await enqueueText(queuedText, snapshot.attachments);
+      const queued = await enqueueText(queuedText, snapshot.attachments, snapshot.mentions.map(mention => ({
+        ...mention, start: mention.start + queuedText.length - text.length, end: mention.end + queuedText.length - text.length,
+      })));
       if (queued && !await clearComposerContext(snapshot, composer)) {
         queuePaused = true;
         await persistQueue();
@@ -1007,6 +1106,7 @@
     const composer = findComposerInput();
     if (!composer || hasComposerContext(composer)) return;
     let draft = composerText(composer);
+    let draftMentions = composerMentions(composer);
     let composerReplaced = false;
     let restoredContext = null;
     const focused = document.activeElement;
@@ -1031,12 +1131,14 @@
         || composer !== findComposerInput() || !composer.isConnected
         || !queue.some(candidate => candidate.id === item.id)) return;
       draft = composerText(composer);
+      draftMentions = composerMentions(composer);
       const beforeUserTurns = roleTurns("user").length;
       if (hasComposerContext(composer)) return;
       composerReplaced = true;
       if (!await restoreAttachments(item, composer)) return;
       restoredContext = composerContext(composer);
-      if (!await replaceComposerText(composer, item.text)) return;
+      if (!await replaceComposerText(composer, item.text, item.mentions || [])) return;
+      restoredContext.mentions = item.mentions || [];
 
       const deadline = Date.now() + SUBMIT_TIMEOUT_MS;
       let sendButton = findSendButton(composer);
@@ -1063,6 +1165,7 @@
       if (!context.active() || (queuePaused && !steer) || key !== activeKey || conversationKey() !== key
         || routeSyncRunning || responseIsActive()
         || !textMatchesComposer(composer, item.text)
+        || !mentionsMatch(composer, item.mentions || [])
         || !contextMatches(restoredContext, composer)) return;
       sendButton.click();
 
@@ -1091,7 +1194,7 @@
         const current = composerText(composer);
         const restored = !current.trim() || textMatchesComposer(composer, item.text)
           ? draft : (draft ? `${draft}\n${current}` : current);
-        await replaceComposerText(composer, restored);
+        await replaceComposerText(composer, restored, moveMentions(draftMentions, draft, restored));
         if (focused?.isConnected) focused.focus({ preventScroll: true });
       }
       if (sameConversation && queue.some((candidate) => candidate.id === item.id)) {
@@ -1186,7 +1289,9 @@
         const snapshot = await contextRequest;
         if (!snapshot || !contextMatches(snapshot.state, composer)) return;
         const queuedText = textWithQuote(text, snapshot.quote);
-        const queued = await enqueueText(queuedText, snapshot.attachments);
+        const queued = await enqueueText(queuedText, snapshot.attachments, snapshot.mentions.map(mention => ({
+          ...mention, start: mention.start + queuedText.length - text.length, end: mention.end + queuedText.length - text.length,
+        })));
         if (queued && !await clearComposerContext(snapshot, composer)) {
           queuePaused = true;
           await persistQueue();
