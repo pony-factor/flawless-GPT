@@ -47,7 +47,8 @@
       ],
       "js": [
         "js/clipboard-utm-sanitizer.js",
-        "js/chatgpt-route-events.js"
+        "js/chatgpt-route-events.js",
+        "js/deep-research-usage.js"
       ],
       "run_at": "document_start",
       "world": "MAIN"

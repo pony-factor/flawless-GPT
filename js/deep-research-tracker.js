@@ -27,9 +27,31 @@
   const context = globalThis.__ghrcExtensionContext;
   if (!context?.active()) return;
   const ID = 'ghrc-deep-research-tracker';
+  const USAGE_ATTRIBUTE = 'data-ghrc-deep-research-usage';
   let allowance = { remaining: null, full: false, reset: '' };
   let observedAt = 0;
   let pending = false;
+  let serverQuota = null;
+
+  function readServerQuota() {
+    try {
+      const value = JSON.parse(document.documentElement.getAttribute(USAGE_ATTRIBUTE));
+      serverQuota = value && Number.isSafeInteger(value.remaining) && value.remaining >= 0
+        && Number.isFinite(value.observedAt) && value.observedAt <= Date.now()
+        && (value.resetAt === null || Number.isFinite(value.resetAt)) ? value : null;
+    } catch { serverQuota = null; }
+  }
+
+  function serverText() {
+    if (!serverQuota) return null;
+    const stale = Date.now() - serverQuota.observedAt > 10 * 60_000
+      || (serverQuota.resetAt !== null && serverQuota.resetAt <= Date.now());
+    const count = stale ? `${serverQuota.remaining} last checked · Refresh allowance`
+      : `${serverQuota.remaining} reports remaining`;
+    const reset = serverQuota.resetAt === null ? 'Reset unknown'
+      : `Resets ${new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' }).format(serverQuota.resetAt)}`;
+    return `Deep Research · ${count} · ${reset}`;
+  }
 
   function visible(element) {
     return element.getClientRects().length > 0 && getComputedStyle(element).visibility !== 'hidden';
@@ -63,7 +85,9 @@
   }
 
   function checkAllowance() {
-    const research = [...document.querySelectorAll('[role="menuitem"], [role="option"]')]
+    window.dispatchEvent(new Event('ghrc-refresh-deep-research-usage'));
+    if (serverQuota) return;
+    const research = [...document.querySelectorAll('[role="menuitem"], [role="option"], button[data-list-navigation-item]')]
       .find(element => visible(element) && /\bdeep research\b/i.test(element.innerText));
     if (research) {
       research.focus();
@@ -80,6 +104,7 @@
   function update() {
     pending = false;
     if (!context.active()) return;
+    readServerQuota();
     readAllowance();
     const prompt = [...document.querySelectorAll('#prompt-textarea, [data-composer-markdown][contenteditable="true"]')].find(visible);
     const composer = prompt?.closest('form, [data-type="unified-composer"]');
@@ -98,9 +123,11 @@
       ? `${allowance.full ? 'Full reports' : 'Reports (type unspecified)'}: ${allowance.remaining} remaining`
       : 'Check allowance';
     const reset = fresh && allowance.reset ? allowance.reset : 'Reset unknown';
-    const text = `Deep Research · ${count} · ${reset}`;
+    const text = serverText() || `Deep Research · ${count} · ${reset}`;
     if (widget.textContent !== text) widget.textContent = text;
-    widget.title = 'Open the tools menu and hover Deep Research to read ChatGPT’s allowance. Counts update when ChatGPT exposes them; report types are shown only when specified.';
+    widget.title = serverQuota
+      ? 'ChatGPT’s Deep Research report allowance. Click to refresh. Lightweight allowances are excluded. Reset time is shown in your local time zone.'
+      : 'Waiting for ChatGPT’s research allowance. Click to check again or open the native tools menu.';
   }
 
   function schedule() {
@@ -109,10 +136,15 @@
     requestAnimationFrame(update);
   }
   const observer = new MutationObserver(schedule);
-  observer.observe(document.documentElement, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['aria-describedby', 'aria-label', 'data-state'] });
+  observer.observe(document.documentElement, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['aria-describedby', 'aria-label', 'data-state', USAGE_ATTRIBUTE] });
   document.addEventListener('pointerover', schedule);
   document.addEventListener('focusin', schedule);
-  const timer = setInterval(schedule, 30_000);
+  const timer = setInterval(() => {
+    if (document.visibilityState === 'visible' && serverQuota && Date.now() - serverQuota.observedAt > 5 * 60_000) {
+      window.dispatchEvent(new Event('ghrc-refresh-deep-research-usage'));
+    }
+    schedule();
+  }, 30_000);
   context.onStop(() => {
     observer.disconnect();
     clearInterval(timer);
