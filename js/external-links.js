@@ -119,7 +119,7 @@
       || !isPlainPrimaryActivation(event)
       || !(link instanceof HTMLAnchorElement)
       || link.hasAttribute("download")
-      || link.closest("#github-repositories-for-chatgpt, #ghrc-link-preview")
+      || link.closest("#github-repositories-for-chatgpt, #ghrc-highlighted-pages, #ghrc-link-preview")
     ) return false;
 
     let url;
