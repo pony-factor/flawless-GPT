@@ -189,6 +189,28 @@ async function sentCount(page, count) {
   await page.waitForFunction(n => sent.length === n, count, { timeout: 10000 });
 }
 
+for (const liveMarkup of [false, true]) test(`queue follows the latest reply after unanswered earlier messages (${liveMarkup ? 'grouped' : 'article'} turns)`, async () => {
+  const p = await fixture({ liveMarkup });
+  await p.evaluate(() => {
+    addTurn('user');
+    addTurn('user');
+    addTurn('assistant', true);
+  });
+  await enqueue(p, 'Continue after the completed reply');
+  await sentCount(p, 1);
+  await p.waitForFunction(() => !document.querySelector('.ghrc-message-queue-editor') && !read().trim());
+  await p.evaluate(() => finish());
+  await p.evaluate(() => addTurn('user'));
+  await enqueue(p, 'Wait for the newest reply');
+  await p.waitForTimeout(2000);
+  assert.equal(await p.evaluate(() => sent.length), 1);
+  await p.evaluate(() => addTurn('assistant', true));
+  await sentCount(p, 2);
+  assert.deepEqual(await p.evaluate(() => sent), ['Continue after the completed reply', 'Wait for the newest reply']);
+  assert.deepEqual(p.errors, []);
+  await p.close();
+});
+
 test('standalone queue button is opt-in and follows setting changes', async () => {
   const p = await fixture({ queueButton: false });
   assert.equal(await p.locator('#ghrc-message-queue-button').count(), 0);

@@ -99,6 +99,7 @@ test("does not treat the thinking-to-answer gap as response completion", () => {
       composerReady: true,
       userTurns: 2,
       assistantTurns: 2,
+      latestUserAnswered: true,
       latestAssistantComplete: false,
       roleStateKnown: true,
     }, helpers.COMPLETE_SETTLE_MS * 2),
@@ -113,6 +114,7 @@ test("requires the response-complete state to remain settled", () => {
     composerReady: true,
     userTurns: 2,
     assistantTurns: 2,
+    latestUserAnswered: true,
     latestAssistantComplete: true,
     roleStateKnown: true,
   };
