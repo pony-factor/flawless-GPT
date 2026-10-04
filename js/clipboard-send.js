@@ -62,14 +62,14 @@
         setButtonMessage(button, "Clipboard has no text to queue");
         return;
       }
-      const queued = await globalThis.__ghrcMessageQueue?.enqueueText(text);
-      setButtonMessage(button, queued ? "Queue clipboard as prompt" : "Clipboard message could not be queued; try again");
+      const submitted = await globalThis.__ghrcMessageQueue?.sendClipboardText(text);
+      setButtonMessage(button, submitted ? "Send clipboard or queue as prompt" : "Clipboard message could not be sent or queued; try again");
     } catch (error) {
       if (["NotAllowedError", "SecurityError", "NotFoundError"].includes(error?.name)) {
         setButtonMessage(button, "Clipboard access unavailable; paste into the composer to queue your message");
       } else {
         context.handleError(error);
-        setButtonMessage(button, "Clipboard message could not be queued; try again");
+        setButtonMessage(button, "Clipboard message could not be sent or queued; try again");
       }
     } finally {
       actionRunning = false;
@@ -82,8 +82,8 @@
     const button = document.createElement("button");
     button.id = BUTTON_ID;
     button.type = "button";
-    button.title = "Queue clipboard as prompt";
-    button.setAttribute("aria-label", "Queue clipboard as prompt");
+    button.title = "Send clipboard or queue as prompt";
+    button.setAttribute("aria-label", "Send clipboard or queue as prompt");
     button.innerHTML = `
       <svg viewBox="0 0 24 24" aria-hidden="true">
         <path d="M9 5H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-3M9 3h6v4H9V3Zm1 10h7m0 0-3-3m3 3-3 3" />
