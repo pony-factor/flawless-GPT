@@ -18,7 +18,7 @@ before(async () => {
 });
 after(async () => { await browser?.close(); });
 
-async function fixture({ active = false, voice = false, editable = true, stored = {}, route = '/c/test', liveMarkup = false, clipboard = false, searches = false, delayQueueStorage = false, queueButton = true } = {}) {
+async function fixture({ active = false, voice = false, editable = true, stored = {}, route = '/c/test', liveMarkup = false, clipboard = false, searches = false, delayQueueStorage = false, queueButton = true, preserveScroll = false } = {}) {
   const page = await browser.newPage();
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
@@ -138,6 +138,10 @@ async function fixture({ active = false, voice = false, editable = true, stored 
   });
   await page.addScriptTag({ content: fs.readFileSync(path.join(__dirname, "../js/extension-context.js"), "utf8") });
   if (clipboard) await page.addScriptTag({ content: clipboardSource });
+  if (preserveScroll) {
+    await page.evaluate(() => { storage.preserveScrollPositionOnSend = true; });
+    await page.addScriptTag({ content: fs.readFileSync(path.join(__dirname, '../js/preserve-scroll-on-send.js'), 'utf8') });
+  }
   await page.addScriptTag({ content: source });
   if (!delayQueueStorage && queueButton) await page.locator('#ghrc-message-queue-button').waitFor();
   else if (!delayQueueStorage) await page.waitForFunction(() => window.storageListeners.length > 0);
@@ -918,5 +922,206 @@ test('a failed attachment queue save preserves the original native draft', async
   assert.equal(await p.evaluate(() => read()), 'Keep file draft');
   assert.equal(await p.getByRole('button', { name: 'Remove file keep.txt', exact: true }).count(), 1);
   assert.equal(await p.locator('.ghrc-message-queue-editor').count(), 0);
+  await p.close();
+});
+
+async function scrollFixture(page, { modern = false, short = false } = {}) {
+  await page.evaluate(({ modern, short }) => {
+    const scroller = document.createElement('section');
+    scroller.id = 'conversation-scroller';
+    scroller.style.cssText = 'height:320px;overflow-y:auto;scroll-behavior:smooth';
+    const turns = document.getElementById('turns');
+    turns.before(scroller);
+    scroller.append(turns);
+    if (!short) for (let i = 0; i < 12; i++) {
+      const turn = document.createElement('article');
+      if (!modern) turn.dataset.testid = `conversation-turn-history-${i}`;
+      turn.innerHTML = i % 2
+        ? '<div data-message-author-role="assistant">History</div><button data-testid="copy-turn-action-button">Copy</button>'
+        : '<div data-message-author-role="user">History</div>';
+      turn.style.height = '180px';
+      turns.append(turn);
+    }
+    // Model native auto-scroll, long streaming output and composer collapse.
+    window.nativeAddTurn = window.addTurn;
+    window.addTurn = (role, complete) => {
+      nativeAddTurn(role, complete);
+      turns.lastElementChild.style.minHeight = '900px';
+      scroller.scrollTo({ top: scroller.scrollHeight });
+    };
+    window.scroller = scroller;
+    scroller.scrollTo({ top: short ? 0 : 600, behavior: 'instant' });
+    window.expectedScroll = scroller.scrollTop;
+  }, { modern, short });
+}
+
+for (const modern of [false, true]) test(`keep scroll on long native Enter with an empty queue (${modern ? 'modern' : 'legacy'} markup)`, async () => {
+  const p = await fixture({ preserveScroll: true });
+  await scrollFixture(p, { modern });
+  const editor = p.locator('[data-composer-markdown]');
+  await editor.fill('A very long sentence with lots of detail. '.repeat(300));
+  await p.evaluate(() => document.addEventListener('keydown', event => {
+    if (event.key === 'Enter') scroller.scrollTo({ top: 1600, behavior: 'instant' });
+  }, true));
+  await editor.press('Enter');
+  await sentCount(p, 1);
+  await p.waitForTimeout(450);
+  assert.equal(await p.evaluate(() => scroller.scrollTop), 600);
+  // Delayed streaming growth and native smooth scroll still preserve the offset.
+  await p.evaluate(() => {
+    document.getElementById('turns').lastElementChild.style.height = '2200px';
+    scroller.scrollTo({ top: scroller.scrollHeight });
+  });
+  await p.waitForTimeout(450);
+  assert.equal(await p.evaluate(() => scroller.scrollTop), 600);
+  // Editing a draft with arrow keys must not release the reading position.
+  await editor.press('ArrowUp');
+  await p.evaluate(() => { scroller.scrollTop = 1800; });
+  await p.waitForTimeout(100);
+  assert.equal(await p.evaluate(() => scroller.scrollTop), 600);
+  // Deliberate wheel input releases it and restores the original smooth style.
+  await p.evaluate(() => {
+    scroller.dispatchEvent(new WheelEvent('wheel', { bubbles: true, deltaY: 100 }));
+    scroller.scrollTo({ top: 850, behavior: 'instant' });
+  });
+  await p.waitForTimeout(100);
+  assert.equal(await p.evaluate(() => scroller.scrollTop), 850);
+  assert.equal(await p.evaluate(() => scroller.style.scrollBehavior), 'smooth');
+  assert.deepEqual(p.errors, []);
+  await p.close();
+});
+
+test('keep scroll finds a conversation container before it overflows', async () => {
+  const p = await fixture({ active: true, preserveScroll: true });
+  await scrollFixture(p, { short: true });
+  await enqueue(p, 'Long queued message. '.repeat(400), true);
+  await p.evaluate(() => finish());
+  await sentCount(p, 1);
+  await p.waitForTimeout(450);
+  assert.equal(await p.evaluate(() => scroller.scrollTop), 0);
+  assert.deepEqual(p.errors, []);
+  await p.close();
+});
+
+test('keep scroll through three long queued prompts and composer replacement', async () => {
+  const p = await fixture({ active: true, preserveScroll: true });
+  await scrollFixture(p, { modern: true });
+  for (let i = 1; i <= 3; i++) await enqueue(p, `Queued message ${i}. ` + 'A long sentence. '.repeat(300), true);
+  for (let i = 1; i <= 3; i++) {
+    await p.evaluate(() => finish());
+    await sentCount(p, i);
+    await p.waitForTimeout(450);
+    assert.equal(await p.evaluate(() => scroller.scrollTop), 600);
+  }
+  await p.waitForFunction(() => !document.querySelector('.ghrc-message-queue-editor'));
+  assert.deepEqual(await p.evaluate(() => sent.map(text => text.slice(0, 17))), ['Queued message 1.', 'Queued message 2.', 'Queued message 3.']);
+  assert.deepEqual(p.errors, []);
+  await p.close();
+});
+
+test('keep scroll follows a replaced conversation scroller and releases on navigation', async () => {
+  const p = await fixture({ preserveScroll: true });
+  await scrollFixture(p);
+  await p.locator('[data-composer-markdown]').fill('Native click send');
+  await p.getByRole('button', { name: 'Send prompt', exact: true }).click();
+  await sentCount(p, 1);
+  await p.evaluate(() => {
+    const replacement = document.createElement('section');
+    replacement.id = scroller.id;
+    replacement.style.cssText = 'height:320px;overflow-y:auto;scroll-behavior:smooth';
+    while (scroller.firstChild) replacement.append(scroller.firstChild);
+    scroller.replaceWith(replacement);
+    window.oldScroller = scroller;
+    window.scroller = replacement;
+    scroller.scrollTo({ top: 1800, behavior: 'instant' });
+  });
+  await p.waitForTimeout(100);
+  assert.equal(await p.evaluate(() => scroller.scrollTop), 600);
+  assert.equal(await p.evaluate(() => oldScroller.style.scrollBehavior), 'smooth');
+  await p.evaluate(() => {
+    history.pushState({}, '', '/c/another');
+    document.getElementById('turns').append(document.createElement('div'));
+  });
+  await p.waitForTimeout(100);
+  assert.equal(await p.evaluate(() => scroller.style.scrollBehavior), 'smooth');
+  assert.deepEqual(p.errors, []);
+  await p.close();
+});
+
+test('keep visible text steady in the live reverse-flex layout during long streaming replies', async () => {
+  const p = await fixture({ preserveScroll: true });
+  await scrollFixture(p, { modern: true });
+  await p.evaluate(() => {
+    scroller.style.display = 'flex';
+    scroller.style.flexDirection = 'column-reverse';
+    document.getElementById('turns').style.flexShrink = '0';
+    scroller.scrollTo({ top: -900, behavior: 'instant' });
+    window.anchor = [...document.querySelectorAll('[data-message-author-role]')]
+      .find(e => e.getBoundingClientRect().top >= scroller.getBoundingClientRect().top);
+    window.anchorTop = anchor.getBoundingClientRect().top;
+  });
+  await p.locator('[data-composer-markdown]').fill('Reverse-layout long message. '.repeat(300));
+  await p.locator('[data-composer-markdown]').press('Enter');
+  await sentCount(p, 1);
+  await p.waitForTimeout(100);
+  assert.equal(await p.evaluate(() => anchor.getBoundingClientRect().top), await p.evaluate(() => anchorTop));
+  for (const height of [1800, 2600, 4000]) {
+    await p.evaluate(height => {
+      document.getElementById('turns').lastElementChild.style.height = `${height}px`;
+      scroller.scrollTo({ top: 0 });
+    }, height);
+    await p.waitForTimeout(100);
+    assert.equal(await p.evaluate(() => anchor.getBoundingClientRect().top), await p.evaluate(() => anchorTop));
+  }
+  assert.deepEqual(p.errors, []);
+  await p.close();
+});
+
+test('long queued prompts use text insertion before a native paste-to-file handler', async () => {
+  const p = await fixture({ active: true, preserveScroll: true });
+  await scrollFixture(p);
+  await p.evaluate(() => {
+    window.pasteConversions = 0;
+    editor.addEventListener('paste', event => {
+      if (event.clipboardData.getData('text/plain').length > 2000) {
+        event.preventDefault();
+        window.pasteConversions++;
+        clear(); update();
+      }
+    });
+  });
+  const text = 'A very long queued sentence. '.repeat(350);
+  await enqueue(p, text, true);
+  await p.evaluate(() => finish());
+  await sentCount(p, 1);
+  assert.deepEqual(await p.evaluate(() => sent), [text.trim()]);
+  assert.equal(await p.evaluate(() => pasteConversions), 0);
+  assert.equal(await p.evaluate(() => scroller.scrollTop), 600);
+  assert.deepEqual(p.errors, []);
+  await p.close();
+});
+
+test('keep visible text steady when the document itself scrolls', async () => {
+  const p = await fixture({ preserveScroll: true });
+  await scrollFixture(p);
+  await p.evaluate(() => {
+    scroller.style.height = 'auto';
+    scroller.style.overflowY = 'visible';
+    window.scrollTo({ top: 600, behavior: 'instant' });
+    window.anchor = [...document.querySelectorAll('[data-message-author-role]')]
+      .find(e => e.getBoundingClientRect().top >= 0);
+    window.anchorTop = anchor.getBoundingClientRect().top;
+    const native = addTurn;
+    window.addTurn = (...args) => { native(...args); window.scrollTo(0, document.body.scrollHeight); };
+  });
+  await p.locator('[data-composer-markdown]').fill('Document scrolling test');
+  // Focus can scroll the composer into view before Enter; preserve the reading
+  // position present at the actual send gesture.
+  await p.evaluate(() => { window.scrollTo({ top: 600, behavior: 'instant' }); });
+  await p.evaluate(() => editor.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })));
+  await sentCount(p, 1);
+  await p.waitForTimeout(100);
+  assert.equal(await p.evaluate(() => anchor.getBoundingClientRect().top), await p.evaluate(() => anchorTop));
+  assert.deepEqual(p.errors, []);
   await p.close();
 });
