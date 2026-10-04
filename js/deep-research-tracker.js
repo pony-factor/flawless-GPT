@@ -53,9 +53,11 @@
     if (remainingMs !== null) {
       if (remainingMs <= 0) reset = 'Reset due';
       else {
+        const days = remainingMs > 36 * 60 * 60_000;
         const hours = remainingMs >= 60 * 60_000;
-        const value = Math.max(1, Math.round(remainingMs / (hours ? 60 * 60_000 : 60_000)));
-        const unit = hours ? 'hour' : 'minute';
+        const divisor = days ? 24 * 60 * 60_000 : hours ? 60 * 60_000 : 60_000;
+        const value = Math.max(1, Math.round(remainingMs / divisor));
+        const unit = days ? 'day' : hours ? 'hour' : 'minute';
         reset = `Resets in ${value} ${unit}${value === 1 ? '' : 's'}`;
       }
     }
@@ -135,7 +137,7 @@
     const text = serverText() || `Deep Research · ${count} · ${reset}`;
     if (widget.textContent !== text) widget.textContent = text;
     widget.title = serverQuota
-      ? 'ChatGPT’s Deep Research report allowance. Click to refresh. Lightweight allowances are excluded. Reset countdown uses hours, then minutes during the final hour.'
+      ? 'ChatGPT’s Deep Research report allowance. Click to refresh. Lightweight allowances are excluded. Reset countdown uses days above 36 hours, hours down to one hour, then minutes.'
       : 'Waiting for ChatGPT’s research allowance. Click to check again or open the native tools menu.';
   }
 

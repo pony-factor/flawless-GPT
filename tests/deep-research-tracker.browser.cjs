@@ -68,7 +68,7 @@ test('native initialization fills the tracker automatically and clicking refresh
     assert.equal(response.unrelated_private_field, 'must stay in page response');
     await page.waitForFunction(() => document.getElementById('ghrc-deep-research-tracker')?.textContent.includes('13 reports remaining'));
     const widget = page.locator('#ghrc-deep-research-tracker');
-    assert.match(await widget.innerText(), /Resets in \d+ hours/);
+    assert.match(await widget.innerText(), /Resets in \d+ days/);
     const exposed = await page.evaluate(() => JSON.parse(document.documentElement.getAttribute('data-ghrc-deep-research-usage')));
     assert.deepEqual(Object.keys(exposed).sort(), ['observedAt', 'remaining', 'resetAt']);
     remaining = 0;
