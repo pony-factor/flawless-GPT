@@ -751,9 +751,9 @@
     title.textContent = `Queue · ${queue.length}`;
     const status = panel.querySelector(".ghrc-message-queue-status");
     status.hidden = !queuePaused;
-    status.textContent = queuePaused ? "Queue stopped; messages are saved" : "";
+    status.textContent = queuePaused ? "Stopped - messages saved" : "";
     const toggle = panel.querySelector(".ghrc-message-queue-toggle");
-    toggle.textContent = queuePaused ? "Resume queue" : "Stop";
+    toggle.textContent = queuePaused ? "Resume" : "Wait";
     toggle.setAttribute("aria-label", toggle.textContent);
     list.replaceChildren(...queue.map(createItemRow));
 
