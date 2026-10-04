@@ -20,7 +20,7 @@ test('import chooses a category, cancellation never publishes, and report links 
         return { ok: true, repository: 'Research', branch: 'main', path: 'Markets/report.md' };
       } } };
     });
-    for (const file of ['vendor/turndown.js', 'vendor/turndown-plugin-gfm.js', 'js/research-publisher.js']) await page.addScriptTag({ content: fs.readFileSync(file, 'utf8') });
+    for (const file of ['vendor/turndown.js', 'vendor/turndown-plugin-gfm.js', 'js/research-import-dialog.js', 'js/research-publisher.js']) await page.addScriptTag({ content: fs.readFileSync(file, 'utf8') });
     const button = page.getByRole('button', { name: 'Add to repo', exact: true });
     await button.click();
     await page.getByRole('dialog').waitFor();
