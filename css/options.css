@@ -78,6 +78,55 @@ form {
   padding: 16px;
 }
 
+
+.standalone-settings-tabs {
+  background: light-dark(#ffffff, #0d1117);
+  border: 1px solid light-dark(#d0d7de, #3d444d);
+  border-radius: 10px;
+  display: grid;
+  gap: 4px;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  margin-bottom: 12px;
+  padding: 4px;
+  position: sticky;
+  top: 12px;
+  z-index: 2;
+}
+
+button.standalone-settings-tab {
+  background: transparent;
+  border: 0;
+  color: light-dark(#24292f, #f0f6fc);
+  min-width: 0;
+  padding: 9px 8px;
+  white-space: nowrap;
+}
+
+button.standalone-settings-tab:hover {
+  background: light-dark(#f6f8fa, #161b22);
+  color: inherit;
+}
+
+button.standalone-settings-tab[aria-selected="true"] {
+  background: #a97dee;
+  color: #ffffff;
+}
+
+.standalone-settings-panel[hidden] {
+  display: none;
+}
+
+.standalone-first-fieldset {
+  margin-top: 0;
+}
+
+@media (max-width: 599px) {
+  .standalone-settings-tabs {
+    grid-template-columns: repeat(5, minmax(112px, 1fr));
+    overflow-x: auto;
+  }
+}
+
 .settings-foldout {
   border: 1px solid light-dark(#d0d7de, #3d444d);
   border-radius: 8px;

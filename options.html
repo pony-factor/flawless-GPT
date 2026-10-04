@@ -20,11 +20,11 @@
         box-shadow: 0 0 0 1px #a97dee;
       }
 
-      button:not(.secondary) {
+      button:not(.secondary):not(.standalone-settings-tab) {
         background: #a97dee;
       }
 
-      button:not(.secondary):hover {
+      button:not(.secondary):not(.standalone-settings-tab):hover {
         background: #9668df;
       }
 
@@ -50,7 +50,16 @@
         </div>
       </header>
 
+      <nav class="standalone-settings-tabs" role="tablist" aria-label="Settings categories">
+        <button id="settings-tab-github" class="standalone-settings-tab" type="button" role="tab" aria-selected="true" aria-controls="settings-panel-github">GitHub</button>
+        <button id="settings-tab-dashboard" class="standalone-settings-tab" type="button" role="tab" aria-selected="false" aria-controls="settings-panel-dashboard" tabindex="-1">Dashboard</button>
+        <button id="settings-tab-personalization" class="standalone-settings-tab" type="button" role="tab" aria-selected="false" aria-controls="settings-panel-personalization" tabindex="-1">Personalization</button>
+        <button id="settings-tab-deep-research" class="standalone-settings-tab" type="button" role="tab" aria-selected="false" aria-controls="settings-panel-deep-research" tabindex="-1">Research</button>
+        <button id="settings-tab-chatgpt" class="standalone-settings-tab" type="button" role="tab" aria-selected="false" aria-controls="settings-panel-chatgpt" tabindex="-1">ChatGPT</button>
+      </nav>
+
       <form id="settings-form">
+        <section id="settings-panel-github" class="standalone-settings-panel" role="tabpanel" aria-labelledby="settings-tab-github">
         <details id="token-settings" class="settings-foldout" open>
           <summary>
             <span>GitHub tokens</span>
@@ -75,10 +84,10 @@
         <label>GitHub accounts</label>
         <p class="help">Drag accounts to set their dashboard order. Turn off “Show on dashboard” to hide an account without disconnecting it; hidden accounts remain available to repository search.</p>
         <div id="github-accounts" class="github-accounts"></div>
+        </section>
 
-        <hr class="section-divider" />
-        <fieldset>
-          <legend>Dashboard layout</legend>
+        <section id="settings-panel-dashboard" class="standalone-settings-panel" role="tabpanel" aria-labelledby="settings-tab-dashboard" hidden>
+        <fieldset class="standalone-first-fieldset" aria-label="Dashboard settings">
           <label class="preference">
             <input id="show-repository-search" type="checkbox" checked />
             <span>
@@ -140,10 +149,21 @@
           <div id="pinned-repositories" class="pinned-repositories"></div>
         </fieldset>
 
-
         <hr class="section-divider" />
-        <fieldset>
-          <legend>ChatGPT / Codex personalization</legend>
+        <fieldset id="highlighted-pages-settings">
+          <legend>Highlights</legend>
+          <p class="help">Add webpages and PDF documents to a single horizontal shelf beneath the repository dashboard. PDFs show their first page. Preview details are cached locally and only refreshed when you ask.</p>
+          <div class="highlighted-page-add">
+            <input id="highlighted-page-url" type="url" inputmode="url" autocomplete="url" spellcheck="false" placeholder="https://example.com/page" aria-label="Webpage URL" />
+            <button id="add-highlighted-page" class="secondary" type="button">Add</button>
+          </div>
+          <p id="highlighted-pages-status" class="help highlighted-pages-status" role="status" aria-live="polite"></p>
+          <div id="highlighted-pages-list" class="highlighted-pages-settings-list"></div>
+        </fieldset>
+        </section>
+
+        <section id="settings-panel-personalization" class="standalone-settings-panel" role="tabpanel" aria-labelledby="settings-tab-personalization" hidden>
+        <fieldset class="standalone-first-fieldset" aria-label="ChatGPT and Codex personalization settings">
           <p class="help">Keep your ChatGPT custom instructions here and mirror the same managed personalization block into the Codex VS Code extension.</p>
           <label for="codex-custom-instructions">Custom instructions</label>
           <textarea
@@ -178,22 +198,10 @@
           </div>
           <p id="codex-personalization-status" class="help" role="status" aria-live="polite"></p>
         </fieldset>
+        </section>
 
-        <hr class="section-divider" />
-        <fieldset id="highlighted-pages-settings">
-          <legend>Highlights</legend>
-          <p class="help">Add webpages and PDF documents to a single horizontal shelf beneath the repository dashboard. PDFs show their first page. Preview details are cached locally and only refreshed when you ask.</p>
-          <div class="highlighted-page-add">
-            <input id="highlighted-page-url" type="url" inputmode="url" autocomplete="url" spellcheck="false" placeholder="https://example.com/page" aria-label="Webpage URL" />
-            <button id="add-highlighted-page" class="secondary" type="button">Add</button>
-          </div>
-          <p id="highlighted-pages-status" class="help highlighted-pages-status" role="status" aria-live="polite"></p>
-          <div id="highlighted-pages-list" class="highlighted-pages-settings-list"></div>
-        </fieldset>
-
-        <hr class="section-divider" />
-        <fieldset id="deep-research-settings">
-          <legend>Deep Research</legend>
+        <section id="settings-panel-deep-research" class="standalone-settings-panel" role="tabpanel" aria-labelledby="settings-tab-deep-research" hidden>
+        <fieldset id="deep-research-settings" class="standalone-first-fieldset" aria-label="Research settings">
           <label class="preference">
             <input id="show-deep-research-tracker" type="checkbox" checked />
             <span>
@@ -214,10 +222,10 @@
           </div>
           <p id="research-publisher-status" class="help" role="status" aria-live="polite"></p>
         </fieldset>
+        </section>
 
-        <hr class="section-divider" />
-        <fieldset>
-          <legend>ChatGPT display</legend>
+        <section id="settings-panel-chatgpt" class="standalone-settings-panel" role="tabpanel" aria-labelledby="settings-tab-chatgpt" hidden>
+        <fieldset class="standalone-first-fieldset" aria-label="ChatGPT display settings">
           <label for="composer-placeholder">Composer placeholder</label>
           <input id="composer-placeholder" type="text" placeholder="For example, Dash" aria-describedby="composer-placeholder-help" />
           <p id="composer-placeholder-help" class="help">Choose the text shown in the empty chat input. Leave blank to use ChatGPT’s default.</p>
@@ -362,6 +370,7 @@
             </span>
           </label>
         </fieldset>
+        </section>
 
         <p id="status" role="status" aria-live="polite">Changes save automatically.</p>
       </form>

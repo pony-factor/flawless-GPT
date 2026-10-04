@@ -3,6 +3,47 @@
     clientId: "Iv23liukJaqMAIiIIfOz",
     appSlug: "flawless-chatgpt",
   });
+
+  const settingsTabs = [...document.querySelectorAll(".standalone-settings-tab")];
+  const settingsPanels = [...document.querySelectorAll(".standalone-settings-panel")];
+
+  function activateSettingsTab(tab, focus = false) {
+    if (!tab) return;
+
+    for (const candidate of settingsTabs) {
+      const selected = candidate === tab;
+      candidate.setAttribute("aria-selected", String(selected));
+      candidate.tabIndex = selected ? 0 : -1;
+    }
+
+    for (const panel of settingsPanels) {
+      panel.hidden = panel.id !== tab.getAttribute("aria-controls");
+    }
+
+    sessionStorage.setItem("flawless-options-tab", tab.id);
+    if (focus) tab.focus();
+  }
+
+  settingsTabs.forEach((tab, index) => {
+    tab.addEventListener("click", () => activateSettingsTab(tab));
+    tab.addEventListener("keydown", (event) => {
+      if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+      event.preventDefault();
+
+      let nextIndex = index;
+      if (event.key === "ArrowLeft") nextIndex = (index - 1 + settingsTabs.length) % settingsTabs.length;
+      if (event.key === "ArrowRight") nextIndex = (index + 1) % settingsTabs.length;
+      if (event.key === "Home") nextIndex = 0;
+      if (event.key === "End") nextIndex = settingsTabs.length - 1;
+      activateSettingsTab(settingsTabs[nextIndex], true);
+    });
+  });
+
+  const savedSettingsTab = sessionStorage.getItem("flawless-options-tab");
+  activateSettingsTab(
+    settingsTabs.find((tab) => tab.id === savedSettingsTab) || settingsTabs[0],
+  );
+
   const artwork = document.getElementById("standalone-artwork");
   const animatedPath = artwork?.dataset.animatedSrc;
 
