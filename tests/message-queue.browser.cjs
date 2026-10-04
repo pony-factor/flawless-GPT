@@ -1407,16 +1407,16 @@ for (const reverse of [false, true]) for (const singleParagraph of [false, true]
     assert.ok(await p.evaluate(() => reply.textContent.length > 150000 && active));
     assert.equal(await p.evaluate(() => scroller.querySelectorAll('img,pre').length), 0);
     for (const delta of [240, -480, 360, -180]) {
-      const before = await p.evaluate(() => ({ top: reply.getBoundingClientRect().top, ticks: streamTicks }));
+      const before = await p.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve({ top: reply.getBoundingClientRect().top, ticks: streamTicks })))));
       await p.mouse.wheel(0, delta);
       await p.waitForTimeout(150);
-      const after = await p.evaluate(() => ({ top: reply.getBoundingClientRect().top, ticks: streamTicks }));
+      const after = await p.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve({ top: reply.getBoundingClientRect().top, ticks: streamTicks })))));
       assert.ok(after.ticks > before.ticks, 'text continues generating during scrolling');
       assert.ok(Math.abs(after.top - (before.top - delta)) <= 1, `wheel ${delta} moves visible text while streaming: ${JSON.stringify({ before, after })}`);
     }
-    const held = await p.evaluate(() => reply.getBoundingClientRect().top);
+    const held = await p.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve(reply.getBoundingClientRect().top)))));
     await p.waitForTimeout(200);
-    assert.ok(Math.abs(await p.evaluate(() => reply.getBoundingClientRect().top) - held) <= 1);
+    assert.ok(Math.abs(await p.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve(reply.getBoundingClientRect().top))))) - held) <= 1);
     await p.evaluate(() => clearInterval(streamTimer));
     assert.deepEqual(p.errors, []);
     await p.close();

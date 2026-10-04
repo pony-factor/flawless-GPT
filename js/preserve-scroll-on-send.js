@@ -346,6 +346,9 @@
     guard.acceptingInput = false;
     clearTimeout(inputTimer);
     event.preventDefault();
+    // A streaming update can move the native scroller before the pending
+    // animation frame restores it. Apply the wheel to the reading position.
+    restorePosition();
     const scale = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? container.clientHeight : 1;
     container.scrollTop += event.deltaY * scale;
     container.scrollLeft += event.deltaX * scale;
