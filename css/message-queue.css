@@ -120,6 +120,15 @@ html[data-theme="dark"] #ghrc-message-queue {
   width: 24px;
 }
 
+.ghrc-message-queue-move-controls {
+  display: inline-flex;
+  gap: 0;
+}
+
+.ghrc-message-queue-move-controls button {
+  width: 20px;
+}
+
 .ghrc-message-queue-controls button:hover:not(:disabled),
 #ghrc-message-queue-button:hover:not(:disabled) {
   background: color-mix(in srgb, currentColor 10%, transparent);
