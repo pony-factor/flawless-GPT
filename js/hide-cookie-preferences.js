@@ -1,4 +1,6 @@
 (() => {
+  const context = globalThis.__ghrcExtensionContext;
+  if (context?.active() === false) return;
   const SETTING_KEY = "hideCookiePreferences";
   const MARKER_ATTR = "data-ghrc-cookie-preferences-link";
   const STYLE_ID = "ghrc-hide-cookie-preferences-style";
@@ -24,7 +26,7 @@
 
   function scan() {
     scanScheduled = false;
-    if (!enabled) return;
+    if (!enabled || context?.active() === false) return;
     ensureStyle();
     for (const link of document.querySelectorAll("a")) {
       link.toggleAttribute(MARKER_ATTR, isCookiePreferencesLink(link));
@@ -32,7 +34,7 @@
   }
 
   function scheduleScan() {
-    if (!enabled || scanScheduled) return;
+    if (!enabled || scanScheduled || context?.active() === false) return;
     scanScheduled = true;
     requestAnimationFrame(scan);
   }
@@ -54,13 +56,16 @@
     setEnabled(changes[SETTING_KEY].newValue);
   });
 
-  new MutationObserver(scheduleScan).observe(document, {
+  const observer = new MutationObserver(scheduleScan);
+  context?.onStop(() => observer.disconnect());
+  observer.observe(document, {
     childList: true,
     subtree: true,
     characterData: true,
   });
 
   void chrome.storage.local.get({ [SETTING_KEY]: false }).then((settings) => {
+    if (context?.active() === false) return;
     setEnabled(settings[SETTING_KEY]);
-  });
+  }).catch(error => context?.handleError(error));
 })();

@@ -62,7 +62,8 @@ test('normal warm pins render and unpin', async () => {
 });
 test('pending settings reject safely in display, clipboard, dashboard and spellcheck scripts', async () => {
   const p = await fixture({ delayed: true });
-  for (const script of ['compact-header', 'collapse-sidebar', 'chat-display', 'clipboard-send', 'content', 'spellcheck-launcher', 'force-high-thinking', 'owner-grid']) {
+  await p.evaluate(() => document.body.insertAdjacentHTML('beforeend', '<section id="github-repositories-for-chatgpt"><footer class="ghrc-dashboard-footer"></footer></section>'));
+  for (const script of ['compact-header', 'collapse-sidebar', 'chat-display', 'clipboard-send', 'content', 'spellcheck-launcher', 'force-high-thinking', 'owner-grid', 'hide-cookie-preferences', 'chatgpt-disclaimer', 'block-voice-prompts', 'youtube-search', 'highlighted-pages']) {
     await p.addScriptTag({ content: read(`js/${script}.js`) });
   }
   await p.evaluate(() => {
