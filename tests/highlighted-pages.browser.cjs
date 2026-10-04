@@ -30,6 +30,10 @@ before(async () => {
   const section = options.match(/<fieldset id="highlighted-pages-settings">[\s\S]*?<\/fieldset>/)[0];
   const template = options.match(/<template id="highlighted-page-template">[\s\S]*?<\/template>/)[0];
   fs.writeFileSync(path.join(extension, "fixture.html"), `<!doctype html><link rel="stylesheet" href="css/options.css"><link rel="stylesheet" href="css/styles.css"><link rel="stylesheet" href="css/highlighted-pages.css">${section}${template}<div id="github-repositories-for-chatgpt"><p>Repository dashboard</p></div><script src="js/highlighted-pages-options.js"></script><script src="js/highlighted-pages.js"></script>`);
+  const popup = fs.readFileSync(path.join(root, "popup.html"), "utf8");
+  const popupSection = popup.match(/<fieldset id="highlighted-pages-settings">[\s\S]*?<\/fieldset>/)[0];
+  const popupTemplate = popup.match(/<template id="highlighted-page-template">[\s\S]*?<\/template>/)[0];
+  fs.writeFileSync(path.join(extension, "popup-fixture.html"), `<!doctype html>${popupSection}${popupTemplate}<script src="js/highlighted-pages-options.js"></script>`);
   context = await chromium.launchPersistentContext(path.join(temporary, "profile"), {
     executablePath: process.env.BROWSER_EXECUTABLE || "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser",
     headless: true,
@@ -59,6 +63,22 @@ after(async () => {
   await context?.close();
   await new Promise(resolve => server ? server.close(resolve) : resolve());
   if (temporary) fs.rmSync(temporary, { recursive: true, force: true });
+});
+
+test("popup renders saved highlights and supports renaming without an exception", async () => {
+  const popup = await context.newPage();
+  const errors = [];
+  popup.on("pageerror", error => errors.push(error.message));
+  await page.evaluate(async () => chrome.storage.local.set({ highlightedPages: [{ id: "popup-test", url: "https://example.com/", title: "Example" }] }));
+  await popup.goto(new URL("popup-fixture.html", page.url()).href);
+  const rename = popup.locator(".rename-highlight");
+  await rename.waitFor();
+  popup.once("dialog", dialog => dialog.accept("Renamed from popup"));
+  await rename.click();
+  await popup.waitForFunction(() => document.querySelector(".highlighted-page-setting-copy strong")?.textContent === "Renamed from popup");
+  assert.deepEqual(errors, []);
+  await page.evaluate(async () => chrome.storage.local.set({ highlightedPages: [] }));
+  await popup.close();
 });
 
 test("adding and refreshing a PDF caches the complete first page, preserves links, and fits the card", async () => {

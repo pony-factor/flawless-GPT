@@ -1,5 +1,7 @@
 (() => {
   "use strict";
+  const context = globalThis.__ghrcExtensionContext;
+  if (context?.active() === false) return;
   const SETTING_KEY = "showChatgptDisclaimer";
   const MARKER = "data-ghrc-chatgpt-disclaimer";
   const STYLE_ID = "ghrc-chatgpt-disclaimer-style";
@@ -8,7 +10,7 @@
 
   function scan() {
     scheduled = false;
-    if (!document.documentElement) return;
+    if (!document.documentElement || context?.active() === false) return;
     if (!document.getElementById(STYLE_ID)) {
       const style = document.createElement("style");
       style.id = STYLE_ID;
@@ -26,7 +28,7 @@
   }
 
   function scheduleScan() {
-    if (scheduled) return;
+    if (scheduled || context?.active() === false) return;
     scheduled = true;
     requestAnimationFrame(scan);
   }
@@ -36,9 +38,12 @@
     shown = Boolean(changes[SETTING_KEY].newValue);
     scheduleScan();
   });
-  new MutationObserver(scheduleScan).observe(document, { childList: true, subtree: true, characterData: true });
+  const observer = new MutationObserver(scheduleScan);
+  context?.onStop(() => observer.disconnect());
+  observer.observe(document, { childList: true, subtree: true, characterData: true });
   void chrome.storage.local.get({ [SETTING_KEY]: false }).then(settings => {
+    if (context?.active() === false) return;
     shown = Boolean(settings[SETTING_KEY]);
     scheduleScan();
-  });
+  }).catch(error => context?.handleError(error));
 })();

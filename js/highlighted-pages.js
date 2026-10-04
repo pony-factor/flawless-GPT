@@ -1,5 +1,7 @@
 (() => {
   "use strict";
+  const context = globalThis.__ghrcExtensionContext;
+  if (context?.active() === false) return;
 
   const WIDGET_ID = "github-repositories-for-chatgpt";
   const SECTION_ID = "ghrc-highlighted-pages";
@@ -70,6 +72,7 @@
   }
 
   async function mount() {
+    if (context?.active() === false) return;
     const widget = document.getElementById(WIDGET_ID);
     if (!widget) {
       document.getElementById(SECTION_ID)?.remove();
@@ -77,7 +80,7 @@
     }
 
     const stored = await chrome.storage.local.get({ [STORAGE_KEY]: [] });
-    if (!widget.isConnected) return;
+    if (!widget.isConnected || context?.active() === false) return;
     const pages = normalizedPages(stored[STORAGE_KEY]);
     document.getElementById(SECTION_ID)?.remove();
     if (!pages.length) return;
@@ -109,11 +112,11 @@
   }
 
   function scheduleMount() {
-    if (mountScheduled) return;
+    if (mountScheduled || context?.active() === false) return;
     mountScheduled = true;
     requestAnimationFrame(() => {
       mountScheduled = false;
-      void mount();
+      void mount().catch(error => context?.handleError(error));
     });
   }
 
@@ -142,6 +145,7 @@
     ));
     if (widgetChanged) scheduleMount();
   });
-  observer.observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ["style"] });
+  context?.onStop(() => observer.disconnect());
+  observer.observe(document, { childList: true, subtree: true, attributes: true, attributeFilter: ["style"] });
   scheduleMount();
 })();

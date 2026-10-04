@@ -1,4 +1,6 @@
 (() => {
+  const context = globalThis.__ghrcExtensionContext;
+  if (context?.active() === false) return;
   const WIDGET_ID = "github-repositories-for-chatgpt";
   const SEARCH_GROUP_CLASS = "ghrc-footer-searches";
   const YOUTUBE_SEARCH_CLASS = "ghrc-youtube-search";
@@ -68,15 +70,17 @@
         return;
       }
 
+      if (context?.active() === false) return;
       void openYouTubeSearch(query).catch((error) => {
-        console.error("YouTube search failed", error);
+        if (context) context.handleError(error);
+        else console.error("YouTube search failed", error);
       });
     });
     return form;
   }
 
   function mountFooterSearches() {
-    if (!settingLoaded) return;
+    if (!settingLoaded || context?.active() === false) return;
 
     document.querySelectorAll(`#${WIDGET_ID} .ghrc-dashboard-footer`).forEach((footer) => {
       let group = footer.querySelector(`:scope > .${SEARCH_GROUP_CLASS}`);
@@ -115,7 +119,7 @@
   }
 
   function scheduleMount() {
-    if (mountScheduled) return;
+    if (mountScheduled || context?.active() === false) return;
     mountScheduled = true;
     queueMicrotask(() => {
       mountScheduled = false;
@@ -131,14 +135,16 @@
   });
 
   const observer = new MutationObserver(scheduleMount);
-  observer.observe(document.documentElement, {
+  context?.onStop(() => observer.disconnect());
+  observer.observe(document, {
     childList: true,
     subtree: true,
   });
 
   void chrome.storage.local.get({ [SETTING_KEY]: true }).then((settings) => {
+    if (context?.active() === false) return;
     showYoutubeSearch = settings[SETTING_KEY] !== false;
     settingLoaded = true;
     scheduleMount();
-  });
+  }).catch(error => context?.handleError(error));
 })();

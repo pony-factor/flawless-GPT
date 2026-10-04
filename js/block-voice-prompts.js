@@ -1,4 +1,6 @@
 (() => {
+  const context = globalThis.__ghrcExtensionContext;
+  if (context?.active() === false) return;
   const SETTING_KEY = "blockVoicePrompts";
   const MARKER = "data-ghrc-voice-prompt";
   const STYLE_ID = "ghrc-block-voice-prompts-style";
@@ -42,7 +44,7 @@
 
   function scan() {
     scheduled = false;
-    if (!enabled) return;
+    if (!enabled || context?.active() === false) return;
     ensureStyle();
     const prompts = new Set();
     for (const button of document.querySelectorAll('button, [role="button"]')) {
@@ -59,7 +61,7 @@
   }
 
   function scheduleScan() {
-    if (!enabled || scheduled) return;
+    if (!enabled || scheduled || context?.active() === false) return;
     scheduled = true;
     requestAnimationFrame(scan);
   }
@@ -70,7 +72,9 @@
     else document.querySelectorAll(`[${MARKER}]`).forEach((panel) => panel.removeAttribute(MARKER));
   }
 
-  new MutationObserver(scheduleScan).observe(document, {
+  const observer = new MutationObserver(scheduleScan);
+  context?.onStop(() => observer.disconnect());
+  observer.observe(document, {
     childList: true,
     subtree: true,
     characterData: true,
@@ -80,5 +84,7 @@
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area === "local" && changes[SETTING_KEY]) setEnabled(changes[SETTING_KEY].newValue);
   });
-  void chrome.storage.local.get({ [SETTING_KEY]: false }).then((settings) => setEnabled(settings[SETTING_KEY]));
+  void chrome.storage.local.get({ [SETTING_KEY]: false }).then((settings) => {
+    if (context?.active() !== false) setEnabled(settings[SETTING_KEY]);
+  }).catch(error => context?.handleError(error));
 })();
