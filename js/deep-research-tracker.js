@@ -51,18 +51,18 @@
     const stale = Date.now() - serverQuota.observedAt > 10 * 60_000
       || (serverQuota.resetAt !== null && serverQuota.resetAt <= Date.now());
     const count = stale ? `${serverQuota.remaining} last checked · Refresh allowance`
-      : `${serverQuota.remaining} reports remaining`;
+      : `${serverQuota.remaining} remaining`;
     const remainingMs = serverQuota.resetAt === null ? null : serverQuota.resetAt - Date.now();
-    let reset = 'Reset unknown';
+    let reset = 'reset unknown';
     if (remainingMs !== null) {
-      if (remainingMs <= 0) reset = 'Reset due';
+      if (remainingMs <= 0) reset = 'reset due';
       else {
         const days = remainingMs > 36 * 60 * 60_000;
         const hours = remainingMs >= 60 * 60_000;
         const divisor = days ? 24 * 60 * 60_000 : hours ? 60 * 60_000 : 60_000;
         const value = Math.max(1, Math.round(remainingMs / divisor));
-        const unit = days ? 'day' : hours ? 'hour' : 'minute';
-        reset = `Resets in ${value} ${unit}${value === 1 ? '' : 's'}`;
+        const unit = days ? 'd' : hours ? 'h' : 'm';
+        reset = `resets ${value}${unit}`;
       }
     }
     return `Deep Research · ${count} · ${reset}`;

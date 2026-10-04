@@ -130,14 +130,14 @@ test('native initialization fills the tracker automatically and clicking refresh
     }
     const response = await page.evaluate(async () => (await fetch('/backend-api/conversation/init', { method: 'POST', body: '{}' })).json());
     assert.equal(response.unrelated_private_field, 'must stay in page response');
-    await page.waitForFunction(() => document.getElementById('ghrc-deep-research-tracker')?.textContent.includes('13 reports remaining'));
+    await page.waitForFunction(() => document.getElementById('ghrc-deep-research-tracker')?.textContent.includes('13 remaining'));
     const widget = page.locator('#ghrc-deep-research-tracker');
-    assert.match(await widget.innerText(), /Resets in \d+ days/);
+    assert.match(await widget.innerText(), /13 remaining · resets \d+d/);
     const exposed = await page.evaluate(() => JSON.parse(document.documentElement.getAttribute('data-ghrc-deep-research-usage')));
     assert.deepEqual(Object.keys(exposed).sort(), ['observedAt', 'remaining', 'resetAt']);
     remaining = 0;
     await widget.click();
-    await page.waitForFunction(() => document.getElementById('ghrc-deep-research-tracker').textContent.includes('0 reports remaining'));
+    await page.waitForFunction(() => document.getElementById('ghrc-deep-research-tracker').textContent.includes('0 remaining'));
     assert.equal(requests, 2);
     assert.equal(await page.locator('#prompt-textarea').innerText(), 'My draft');
   } finally { await browser.close(); }
