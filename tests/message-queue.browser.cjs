@@ -1492,3 +1492,72 @@ test('keep visible text steady when the document itself scrolls', async () => {
   assert.deepEqual(p.errors, []);
   await p.close();
 });
+
+async function enableAppMentions(page) {
+  await page.evaluate(() => {
+    window.sentApps = [];
+    editor.addEventListener('paste', event => {
+      const html = event.clipboardData.getData('text/html');
+      if (!html) return;
+      event.preventDefault();
+      document.execCommand('insertHTML', false, html);
+      editor.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    button.addEventListener('click', () => {
+      if (!window.active && !window.rejectSend) window.sentApps.push(
+        [...editor.querySelectorAll('[app-mention-path]')].map(node => node.getAttribute('app-mention-path')));
+    }, true);
+  });
+}
+
+for (const [label, connector] of [['Deep research', 'connector_openai_deep_research'], ['CourtListener', 'courtlistener']]) {
+  test(`queued ${label} preserves app identity through storage and prompt edits`, async () => {
+    let p = await fixture({ active: true });
+    await enableAppMentions(p);
+    await p.evaluate(({ label, connector }) => {
+      editor.innerHTML = '<p><span contenteditable="false"></span> Investigate this topic</p>';
+      const mention = editor.querySelector('span');
+      mention.textContent = label;
+      mention.setAttribute('app-mention-path', 'app://' + connector);
+      mention.setAttribute('app-mention-name', connector);
+      mention.setAttribute('app-mention-display-name', label);
+      mention.setAttribute('data-prompt-link-href', 'app://' + connector);
+      editor.dispatchEvent(new Event('input', { bubbles: true }));
+    }, { label, connector });
+    await p.locator('[data-composer-markdown]').press('Enter');
+    await p.locator('.ghrc-message-queue-editor').waitFor();
+    const saved = await p.evaluate(() => structuredClone(storage));
+    assert.equal(saved.queuedChatMessages['conversation:test'][0].mentions[0].attributes['app-mention-path'], 'app://' + connector);
+    await p.close();
+    p = await fixture({ active: true, stored: saved });
+    await enableAppMentions(p);
+    await p.locator('.ghrc-message-queue-editor').fill(label + ' Investigate another topic');
+    await p.evaluate(() => {
+      editor.innerHTML = '<p><span app-mention-path="app://draft-app" app-mention-name="draft-app" contenteditable="false">Draft app</span> Later draft</p>';
+      editor.dispatchEvent(new Event('input', { bubbles: true }));
+      finish();
+    });
+    await sentCount(p, 1);
+    assert.deepEqual(await p.evaluate(() => sentApps), [['app://' + connector]]);
+    await p.waitForFunction(() => editor.querySelector('[app-mention-path="app://draft-app"]'));
+    assert.equal(await p.evaluate(() => read()), 'Draft app Later draft');
+    assert.deepEqual(p.errors, []);
+    await p.close();
+  });
+}
+
+test('app restoration failure keeps the message queued and pauses instead of sending plain text', async () => {
+  const p = await fixture({ active: true });
+  await p.evaluate(() => {
+    editor.innerHTML = '<p><span app-mention-path="app://research" contenteditable="false">Research</span> Topic</p>';
+    editor.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await p.locator('[data-composer-markdown]').press('Enter');
+  await p.locator('.ghrc-message-queue-editor').waitFor();
+  await p.evaluate(() => finish());
+  await p.waitForFunction(() => storage.queuedChatMessagesPaused?.['conversation:test'] === true);
+  assert.deepEqual(await p.evaluate(() => sent), []);
+  assert.equal(await p.locator('.ghrc-message-queue-editor').count(), 1);
+  assert.deepEqual(p.errors, []);
+  await p.close();
+});
