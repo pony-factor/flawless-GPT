@@ -1039,9 +1039,67 @@
     return true;
   }
 
-  // Content scripts share an isolated world. Clipboard sends enter the FIFO
-  // without replacing the user's draft or clicking the native Stop button.
-  globalThis.__ghrcMessageQueue = { enqueueText: text => context.run(() => enqueueText(text)), findActionButton };
+  async function sendClipboardText(text) {
+    if (!context.active() || !stateLoaded || routeSyncRunning || conversationKey() !== activeKey) return false;
+    text = normalizedText(text);
+    if (!text.trim()) return false;
+    const composer = findComposerInput();
+    if (!composer) return false;
+    if (queue.length || responseIsActive(composer) || nativeSubmissionPending(composer)
+      || sendingItemId || enqueueRunning || interruptRunning) return enqueueText(text);
+    // Preserve attachments and selected context for the existing draft.
+    if (hasComposerContext(composer)) return enqueueText(text);
+
+    const key = activeKey;
+    const draft = composerText(composer);
+    const draftMentions = composerMentions(composer);
+    const focused = document.activeElement;
+    const beforeUserTurns = roleTurns("user").length;
+    let replaced = false;
+    interruptRunning = true;
+    window.dispatchEvent(new Event("ghrc:before-composer-send"));
+    scheduleMount();
+    try {
+      replaced = true;
+      if (!await replaceComposerText(composer, text)) return false;
+      const deadline = Date.now() + SUBMIT_TIMEOUT_MS;
+      while (Date.now() < deadline) {
+        if (!context.active() || key !== activeKey || conversationKey() !== key || routeSyncRunning
+          || composer !== findComposerInput() || !composer.isConnected
+          || !textMatchesComposer(composer, text) || hasComposerContext(composer)) return false;
+        if (responseIsActive(composer) || queue.length) return enqueueText(text);
+        const sendButton = findSendButton(composer);
+        if (sendButton && !sendButton.disabled && sendButton.getAttribute("aria-disabled") !== "true") {
+          sendButton.click();
+          return await waitForSubmission(composer, text, beforeUserTurns);
+        }
+        await new Promise(resolve => window.setTimeout(resolve, 80));
+      }
+      return false;
+    } finally {
+      const sameConversation = key === activeKey || (key.startsWith("new:")
+        && activeKey.startsWith("conversation:") && conversationKey() === activeKey);
+      if (replaced && context.active() && sameConversation && conversationKey() === activeKey
+        && composer === findComposerInput()) {
+        const current = composerText(composer);
+        const restored = !current.trim() || textMatchesComposer(composer, text)
+          ? draft : (draft ? `${draft}\n${current}` : current);
+        await replaceComposerText(composer, restored, moveMentions(draftMentions, draft, restored));
+        if (focused?.isConnected) focused.focus({ preventScroll: true });
+      }
+      interruptRunning = false;
+      scheduleMount();
+      schedulePump();
+    }
+  }
+
+  // Content scripts share an isolated world; clipboard sends bypass the queue
+  // when idle, and otherwise join the FIFO without clicking Stop.
+  globalThis.__ghrcMessageQueue = {
+    enqueueText: text => context.run(() => enqueueText(text)),
+    sendClipboardText: text => context.run(() => sendClipboardText(text)),
+    findActionButton,
+  };
 
   async function enqueueComposerMessage() {
     if (!context.active()) return false;

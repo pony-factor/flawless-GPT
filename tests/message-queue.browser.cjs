@@ -735,16 +735,24 @@ test('homepage queue anchors to Start Voice instead of embedded dashboard search
 });
 
 for (const active of [false, true]) {
-  test(`clipboard button mounts empty and queues without interrupting (active=${active})`, async () => {
+  test(`clipboard button sends when idle and queues when active (active=${active})`, async () => {
     const p = await fixture({ active, voice: true, clipboard: true, liveMarkup: true });
     await p.locator('#ghrc-clipboard-send-button').waitFor();
-    await p.evaluate(() => {
+    await p.evaluate(active => {
       Object.defineProperty(navigator, 'clipboard', { value: { readText: async () => 'Clipboard prompt' } });
-    });
+      // Idle sends must work without writing an intermediate queue item.
+      if (!active) window.rejectQueueSave = true;
+    }, active);
     await p.locator('[data-composer-markdown]').fill('Keep this draft');
     await p.locator('#ghrc-clipboard-send-button').click();
-    await p.locator('.ghrc-message-queue-editor').waitFor();
-    assert.equal(await p.evaluate(() => read()), 'Keep this draft');
+    if (active) {
+      await p.locator('.ghrc-message-queue-editor').waitFor();
+      assert.equal(await p.evaluate(() => read()), 'Keep this draft');
+    } else {
+      await sentCount(p, 1);
+      assert.equal(await p.locator('.ghrc-message-queue-editor').count(), 0);
+      assert.equal(await p.evaluate(() => Object.values(storage.queuedChatMessages || {}).flat().length), 0);
+    }
     assert.equal(await p.evaluate(() => stops), 0);
     if (active) await p.evaluate(() => finish());
     await sentCount(p, 1);
@@ -755,6 +763,24 @@ for (const active of [false, true]) {
     await p.close();
   });
 }
+
+test('idle clipboard joins an existing paused queue in FIFO order', async () => {
+  const p = await fixture({ clipboard: true, stored: {
+    queuedChatMessages: { 'conversation:test': [{ id: 'first', text: 'First prompt' }] },
+    queuedChatMessagesPaused: { 'conversation:test': true },
+  } });
+  await p.locator('#ghrc-clipboard-send-button').waitFor();
+  await p.evaluate(() => {
+    Object.defineProperty(navigator, 'clipboard', { value: { readText: async () => 'Clipboard prompt' } });
+  });
+  await p.locator('#ghrc-clipboard-send-button').click();
+  await p.waitForFunction(() => document.querySelectorAll('.ghrc-message-queue-editor').length === 2);
+  assert.deepEqual(await p.locator('.ghrc-message-queue-editor').evaluateAll(elements => elements.map(e => e.value)), ['First prompt', 'Clipboard prompt']);
+  assert.deepEqual(await p.evaluate(() => sent), []);
+  assert.equal(await p.evaluate(() => stops), 0);
+  assert.deepEqual(p.errors, []);
+  await p.close();
+});
 
 test('clipboard stays immediately left of the hat without repeated button moves', async () => {
   const p = await fixture({ active: true, clipboard: true });
