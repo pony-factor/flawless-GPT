@@ -148,6 +148,34 @@ async function fixture({ active = false, voice = false, editable = true, stored 
   page.errors = errors;
   return page;
 }
+
+for (const pending of ['generation', 'image-load']) test(`image-only reply advances the queue after ${pending} finishes`, async () => {
+  const p = await fixture({ active: true, liveMarkup: true });
+  await p.evaluate(async pending => {
+    document.querySelector('[data-content-search-unit-key$=":assistant"]').remove();
+    const group = document.querySelector('[data-fixture-turn]');
+    group.insertAdjacentHTML('beforeend', '<div data-testid="generated-image-gallery"><button data-testid="generated-image-preview"><img></button></div>');
+    window.loadImage = async () => {
+      const image = document.querySelector('[data-testid="generated-image-preview"] img');
+      image.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j1ioAAAAASUVORK5CYII=';
+      await image.decode();
+    };
+    if (pending === 'generation') await loadImage();
+    else { window.active = false; update(); }
+  }, pending);
+  await enqueue(p, 'After the image');
+  await p.waitForTimeout(2000);
+  assert.equal(await p.evaluate(() => sent.length), 0);
+  await p.evaluate(async pending => {
+    if (pending === 'generation') { window.active = false; update(); }
+    else await loadImage();
+  }, pending);
+  await sentCount(p, 1);
+  assert.deepEqual(await p.evaluate(() => sent), ['After the image']);
+  await p.waitForFunction(() => !document.querySelector('.ghrc-message-queue-editor'));
+  assert.deepEqual(p.errors, []);
+  await p.close();
+});
 async function enqueue(page, text, enter = false) {
   const count = await page.locator('.ghrc-message-queue-editor').count();
   const editor = page.locator('[data-composer-markdown],#prompt-textarea');

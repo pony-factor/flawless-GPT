@@ -397,6 +397,7 @@
   function roleTurns(role) {
     const roleNodes = [...document.querySelectorAll(
       `[data-message-author-role="${role}"], [data-content-search-unit-key$=":${role}"]`
+      + (role === "assistant" ? ', [data-testid="generated-image-gallery"]' : '')
     )];
     const turns = [];
     const seen = new Set();
@@ -404,7 +405,7 @@
     for (const node of roleNodes) {
       const turn = node.closest('[data-testid^="conversation-turn-"]')
         || node.closest("article")
-        || (node.hasAttribute("data-content-search-unit-key") ? node.closest(".group") : null)
+        || (node.matches('[data-content-search-unit-key], [data-testid="generated-image-gallery"]') ? node.closest(".group") : null)
         || node;
       if (!seen.has(turn)) {
         seen.add(turn);
@@ -418,9 +419,15 @@
     const latest = assistantTurns[assistantTurns.length - 1];
     if (!latest) return false;
 
+    // Image-only replies can omit the assistant role and text action toolbar.
+    // Require a decoded generated preview, rather than a loading placeholder.
+    const generatedImages = [...latest.querySelectorAll('[data-testid="generated-image-preview"] img')];
+    if (generatedImages.length && generatedImages.every(image => image.complete && image.naturalWidth > 0)
+      && !latest.querySelector('[aria-busy="true"], [role="progressbar"]')) return true;
+
     // Current ChatGPT groups user and assistant content in the same container.
     // Its user "Copy message" action must not count as assistant completion.
-    if (latest.querySelector('[data-content-search-unit-key$=":assistant"]')
+    if (latest.querySelector('[data-content-search-unit-key]')
       && !latest.querySelector('[data-message-author-role="assistant"]')) {
       return Boolean(latest.querySelector(
         '.turn-action-controls button[aria-label="Copy"], '
