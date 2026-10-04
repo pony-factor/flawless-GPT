@@ -38,7 +38,7 @@
     card.className = "ghrc-highlighted-page";
     if (page.documentType === "pdf") card.classList.add("ghrc-highlighted-page-pdf");
     card.href = page.url;
-    card.target = "_blank";
+    card.target = "_self";
     card.rel = "noopener noreferrer";
     card.title = page.url;
 
