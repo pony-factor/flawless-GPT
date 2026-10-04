@@ -70,11 +70,11 @@ The login service automatically derives this checkout's extension ID using Chrom
 
 To stop and remove the local service, run `launchctl bootout gui/$(id -u)/com.flawless-chatgpt.auth` and delete `~/Library/LaunchAgents/com.flawless-chatgpt.auth.plist`. This retains the Keychain credential and browser session.
 
-### ChatGPT personalization
+### Web commit personalization
 
-Flawless ChatGPT can keep a browser-local copy of the Custom Instructions text you use on ChatGPT web. "Import from clipboard" reads the clipboard only after you click it, and existing values from the older Codex-named storage keys are migrated automatically.
+The **Personalization** tab contains one editable **Web commit guidance** field. Flawless stores that text directly in `chrome.storage.local.webCommitGuidance`; there is no clipboard import and no local Codex synchronization.
 
-The Codex Web co-author toggle stores the browser-local preference that commits made through ChatGPT or GitHub tools should include `Co-authored-by: Codex Web <noreply@openai.com>`. Personalization does not write `~/.codex/AGENTS.md`, inspect `CODEX_HOME`, import PGP keys, or change global Git configuration. Commit signing is intentionally kept separate from personalization.
+Existing guidance from the older `codexCustomInstructions` / `chatgptCustomInstructions` keys is migrated into `webCommitGuidance`. If the older Codex Web co-author preference was enabled, its trailer instruction is folded into the migrated guidance rather than kept as a separate setting. Personalization does not write `~/.codex/AGENTS.md`, inspect `CODEX_HOME`, import PGP keys, or change global Git configuration. Commit signing remains a separate feature.
 
 ### Token storage
 

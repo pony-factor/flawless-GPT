@@ -163,26 +163,16 @@
         </section>
 
         <section id="settings-panel-personalization" class="standalone-settings-panel" role="tabpanel" aria-labelledby="settings-tab-personalization" hidden>
-        <fieldset class="standalone-first-fieldset" aria-label="ChatGPT personalization settings">
-          <p class="help">Keep a browser-local copy of the Custom Instructions text you use on ChatGPT web. These preferences stay in Flawless and do not configure a local Codex installation.</p>
-          <label for="chatgpt-custom-instructions">Custom instructions</label>
+        <fieldset class="standalone-first-fieldset" aria-label="Web commit personalization settings">
+          <label for="web-commit-guidance">Web commit guidance</label>
+          <p class="help">Write the instructions ChatGPT should follow when it creates or edits commits through web and GitHub tools. This text is saved directly as <code>webCommitGuidance</code>.</p>
           <textarea
-            id="chatgpt-custom-instructions"
-            rows="8"
+            id="web-commit-guidance"
+            rows="12"
             spellcheck="true"
-            placeholder="Paste the Custom Instructions text you use on ChatGPT web."
+            placeholder="For example: keep commits focused, explain material changes, and preserve my preferred co-author trailer."
           ></textarea>
-          <div class="token-actions">
-            <button id="import-chatgpt-personalization" class="secondary" type="button">Import from clipboard</button>
-          </div>
-          <label class="preference">
-            <input id="chatgpt-web-coauthor" type="checkbox" checked />
-            <span>
-              <strong>Codex Web co-author</strong>
-              <small>Remember that commits made through ChatGPT or GitHub tools should include the Codex Web co-author trailer.</small>
-            </span>
-          </label>
-          <p id="chatgpt-personalization-status" class="help" role="status" aria-live="polite"></p>
+          <p id="web-commit-guidance-status" class="help" role="status" aria-live="polite"></p>
         </fieldset>
         </section>
 
@@ -427,7 +417,7 @@
     <script src="js/options.js"></script>
     <script src="js/highlighted-pages-options.js"></script>
     <script src="js/research-publisher-options.js"></script>
-    <script src="js/chatgpt-personalization.js"></script>
+    <script src="js/web-commit-guidance.js"></script>
     <script src="js/owner-grid-options.js"></script>
     <script src="js/options-page.js"></script>
     <script src="js/autofocus-options.js"></script>
