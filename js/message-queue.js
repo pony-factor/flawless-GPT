@@ -175,7 +175,7 @@
   function queueCanAdvance(snapshot, settledMs) {
     if (!snapshot?.roleStateKnown) return false;
     if (snapshot.responseActive || !snapshot.composerReady) return false;
-    if (snapshot.userTurns > snapshot.assistantTurns) return false;
+    if (snapshot.userTurns > 0 && !snapshot.latestUserAnswered) return false;
     if (snapshot.userTurns > 0 && !snapshot.latestAssistantComplete) return false;
     return settledMs >= COMPLETE_SETTLE_MS;
   }
@@ -477,6 +477,12 @@
     const composer = findComposerInput();
     const userTurns = roleTurns("user");
     const assistantTurns = roleTurns("assistant");
+    // Earlier interrupted replies can leave more user messages than answers.
+    // Check message order instead of requiring lifetime counts to balance.
+    const latestUser = [...document.querySelectorAll('[data-message-author-role="user"], [data-content-search-unit-key$=":user"]')].at(-1);
+    const latestAssistant = [...document.querySelectorAll('[data-message-author-role="assistant"], [data-content-search-unit-key$=":assistant"], [data-testid="generated-image-gallery"]')].at(-1);
+    const latestUserAnswered = Boolean(latestUser && latestAssistant
+      && (latestUser.compareDocumentPosition(latestAssistant) & Node.DOCUMENT_POSITION_FOLLOWING));
     const turnCount = document.querySelectorAll('[data-testid^="conversation-turn-"], [data-content-search-unit-key]').length;
     const roleStateKnown = turnCount === 0 || userTurns.length + assistantTurns.length > 0;
 
@@ -486,6 +492,7 @@
         && composer.getAttribute("aria-disabled") !== "true"),
       userTurns: userTurns.length,
       assistantTurns: assistantTurns.length,
+      latestUserAnswered,
       latestAssistantComplete: latestAssistantIsComplete(assistantTurns),
       roleStateKnown,
     };
