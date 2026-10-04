@@ -1022,6 +1022,48 @@ test('sidebar toggles preserve visible text through width reflow and native scro
   await p.close();
 });
 
+for (const zoom of [1, 1.25, 2]) test(`portrait sidebar reflow preserves the screen position at scale ${zoom}`, async () => {
+  const p = await fixture({ preserveScroll: true });
+  await p.setViewportSize({ width: 900, height: 1600 });
+  await scrollFixture(p);
+  await p.evaluate(zoom => {
+    scroller.style.zoom = zoom;
+    scroller.style.height = '320.5px';
+    scroller.style.width = '300px';
+    scroller.scrollTop = 600;
+    window.anchor = [...document.querySelectorAll('[data-message-author-role]')]
+      .find(e => e.getBoundingClientRect().bottom > scroller.getBoundingClientRect().top);
+    window.anchorTop = anchor.getBoundingClientRect().top;
+    const button = document.createElement('button');
+    button.setAttribute('aria-label', 'Show sidebar');
+    button.style.position = 'fixed';
+    document.body.append(button);
+    button.onclick = () => {
+      // Narrow layouts can move the conversation viewport as well as resize it.
+      scroller.style.position = 'relative';
+      scroller.style.top = `${2 / zoom}px`;
+      scroller.style.width = '250px';
+    };
+    button.click();
+  }, zoom);
+  await p.waitForTimeout(150);
+  assert.equal(await p.evaluate(() => anchor.getBoundingClientRect().top), await p.evaluate(() => anchorTop));
+  // A fractional native scroll must also be corrected at display scale.
+  await p.evaluate(() => { scroller.scrollTop += 1 / 2; });
+  await p.waitForTimeout(100);
+  assert.equal(await p.evaluate(() => anchor.getBoundingClientRect().top), await p.evaluate(() => anchorTop));
+  await p.evaluate(zoom => {
+    // This move falls exactly between two representable scroll positions.
+    scroller.style.top = `${2.5 / zoom}px`;
+    document.getElementById('turns').append(document.createElement('div'));
+  }, zoom);
+  await p.waitForTimeout(100);
+  const residual = await p.evaluate(() => anchor.getBoundingClientRect().top - anchorTop);
+  assert.ok(residual >= 0 && residual <= 0.51, `rounded correction moved text by ${residual}px`);
+  assert.deepEqual(p.errors, []);
+  await p.close();
+});
+
 test('first response remains freely scrollable after receiving its conversation URL', async () => {
   const p = await fixture({ preserveScroll: true, route: '/' });
   await scrollFixture(p, { short: true });

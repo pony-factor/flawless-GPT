@@ -129,6 +129,13 @@
       : container.getBoundingClientRect();
   }
 
+  function anchorTop(element, container) {
+    // A tall composer can scroll the outer document while the conversation
+    // has its own scroller. Compensate layout movement, not that outer scroll.
+    return element.getBoundingClientRect().top
+      + (container === document.scrollingElement ? 0 : window.scrollY);
+  }
+
   function readingAnchor(container) {
     const viewport = containerViewport(container);
     const messages = [...container.querySelectorAll(MESSAGE_SELECTOR)];
@@ -137,7 +144,7 @@
       for (const element of [...blocks, message]) {
         const rect = element.getBoundingClientRect();
         if (rect.height && rect.bottom > viewport.top && rect.top < viewport.bottom) {
-          return { element, offset: rect.top - viewport.top };
+          return { element, top: anchorTop(element, container) };
         }
       }
     }
@@ -163,12 +170,21 @@
     // Reverse-flex threads use negative offsets relative to the bottom. Keep
     // visible text at the same screen position as streaming adds content.
     const hasAnchor = anchor?.element.isConnected && container.contains(anchor.element);
+    // Rects include CSS scaling; scrollTop remains in the element's own units.
+    const scale = container.currentCSSZoom
+      || container.getBoundingClientRect().height / container.offsetHeight || 1;
     const targetTop = hasAnchor
-      ? container.scrollTop + anchor.element.getBoundingClientRect().top
-        - containerViewport(container).top - anchor.offset
+      ? container.scrollTop + (anchorTop(anchor.element, container) - anchor.top) / scale
       : guard.scrollTop;
-    if (Math.abs(container.scrollTop - targetTop) > 0.5) {
+    if (Math.abs(container.scrollTop - targetTop) > 0.01) {
+      const previousTop = container.scrollTop;
+      const previousError = hasAnchor ? Math.abs(anchorTop(anchor.element, container) - anchor.top) : 0;
       container.scrollTop = targetTop;
+      // Chromium rounds scroll offsets to available pixels. At a half-pixel
+      // boundary, do not turn a small drift into an equally large opposite one.
+      if (hasAnchor && Math.abs(anchorTop(anchor.element, container) - anchor.top) >= previousError - 0.01) {
+        container.scrollTop = previousTop;
+      }
     }
     if (hasAnchor) guard.scrollTop = container.scrollTop;
     else guard.anchor = readingAnchor(container);
