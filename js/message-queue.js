@@ -42,7 +42,7 @@
 
   function composerContext(composer = findComposerInput()) {
     const form = findComposerForm(composer);
-    if (!form) return { files: [], quote: null };
+    if (!form) return { files: [], selections: [], quote: null };
     const files = [...form.querySelectorAll('button[aria-label*="Remove" i]')]
       .filter(button => /file|attachment|image|upload/i.test(button.getAttribute("aria-label") || ""));
     const quoteRoot = form.querySelector('[data-composer-quote], [data-testid="composer-reply-preview"], [data-testid="composer-quote"], blockquote');
@@ -50,12 +50,18 @@
     const quote = quoteRoot || quoteButton?.closest('[data-composer-quote], blockquote')
       || quoteButton?.parentElement;
     const attachmentSurface = form.querySelector('[data-composer-attachments]');
-    return { files, quote, quoteButton, unknown: Boolean(attachmentSurface?.childElementCount && !files.length && !quote) };
+    const selections = [...form.querySelectorAll('button[aria-label^="Remove selected text" i]')]
+      .map(button => ({
+        button,
+        root: button.parentElement,
+        text: button.parentElement?.querySelector('.whitespace-pre-wrap')?.textContent || "",
+      }));
+    return { files, selections, quote, quoteButton, unknown: Boolean(attachmentSurface?.childElementCount && !files.length && !quote && !selections.length) };
   }
 
   function hasComposerContext(composer) {
     const state = composerContext(composer);
-    return Boolean(state.files.length || state.quote || state.unknown);
+    return Boolean(state.files.length || state.selections.length || state.quote || state.unknown);
   }
 
   async function captureComposerContext(composer) {
@@ -78,13 +84,15 @@
     }
     const quotedContent = state.quote?.cloneNode(true);
     for (const button of quotedContent?.querySelectorAll("button") || []) button.remove();
-    const quote = (quotedContent?.textContent || "").trim();
-    if (state.quote && (!quote || !state.quoteButton)) return null;
+    const legacyQuote = (quotedContent?.textContent || "").trim();
+    if (state.quote && (!legacyQuote || !state.quoteButton)) return null;
+    if (state.selections.some(selection => !selection.text.trim())) return null;
+    const quote = [legacyQuote, ...state.selections.map(selection => selection.text.trim())].filter(Boolean).join("\n\n");
     return { attachments, quote, state };
   }
 
   async function clearComposerContext(snapshot, composer) {
-    for (const button of [...snapshot.state.files, snapshot.state.quoteButton].filter(Boolean)) button.click();
+    for (const button of [...snapshot.state.files, snapshot.state.quoteButton, ...snapshot.state.selections.map(selection => selection.button)].filter(Boolean)) button.click();
     await new Promise(resolve => window.setTimeout(resolve, 80));
     return !hasComposerContext(composer);
   }
@@ -92,6 +100,9 @@
   function contextMatches(snapshot, composer) {
     const current = composerContext(composer);
     return current.quote === snapshot.quote && current.unknown === snapshot.unknown
+      && current.selections.length === snapshot.selections.length
+      && current.selections.every((selection, index) => selection.button === snapshot.selections[index].button
+        && selection.root === snapshot.selections[index].root && selection.text === snapshot.selections[index].text)
       && current.files.length === snapshot.files.length
       && current.files.every((button, index) => button === snapshot.files[index]);
   }
@@ -132,6 +143,12 @@
 
   function normalizedText(value) {
     return typeof value === "string" ? value.replace(/\r\n/g, "\n") : "";
+  }
+
+  function textWithQuote(text, quote) {
+    if (!quote) return text;
+    const quoted = quote.split("\n").map(line => line.trim() ? `> ${line}` : ">").join("\n");
+    return text.trim() ? `${quoted}\n\n${text}` : quoted;
   }
 
   function normalizeQueueItems(items) {
@@ -922,10 +939,10 @@
     try {
       const composer = findComposerInput();
       const text = normalizedText(composerText(composer));
-      if (!composer || !text.trim()) return false;
+      if (!composer) return false;
       const snapshot = await captureComposerContext(composer);
       if (!snapshot || !contextMatches(snapshot.state, composer)) return false;
-      const queuedText = snapshot.quote ? `> ${snapshot.quote.replace(/\n/g, "\n> ")}\n\n${text}` : text;
+      const queuedText = textWithQuote(text, snapshot.quote);
       const queued = await enqueueText(queuedText, snapshot.attachments);
       if (queued && !await clearComposerContext(snapshot, composer)) {
         queuePaused = true;
@@ -1152,7 +1169,7 @@
       if (context.active() && activeKey === key && composer === findComposerInput()) {
         const snapshot = await contextRequest;
         if (!snapshot || !contextMatches(snapshot.state, composer)) return;
-        const queuedText = snapshot.quote ? `> ${snapshot.quote.replace(/\n/g, "\n> ")}\n\n${text}` : text;
+        const queuedText = textWithQuote(text, snapshot.quote);
         const queued = await enqueueText(queuedText, snapshot.attachments);
         if (queued && !await clearComposerContext(snapshot, composer)) {
           queuePaused = true;
@@ -1215,7 +1232,9 @@
     }
     const snapshot = lifecycleSnapshot();
     const overviewReady = location.pathname === "/" && !stateLoaded;
-    if (text.trim() && !nativeSubmissionPending(composer) && (stateLoaded || overviewReady)
+    const composerState = composerContext(composer);
+    const hasMessage = Boolean(text.trim() || composerState.quote || composerState.selections.length);
+    if (hasMessage && !nativeSubmissionPending(composer) && (stateLoaded || overviewReady)
       && activeKey === conversationKey() && !queue.length && !enterPending && !routeSyncRunning
       && queueCanAdvance(snapshot, COMPLETE_SETTLE_MS)) {
       // Mark the gap before ChatGPT paints Stop or the next user turn.
@@ -1226,7 +1245,7 @@
     window.dispatchEvent(new Event("ghrc:before-composer-send"));
     event.preventDefault();
     event.stopImmediatePropagation();
-    if (text.trim()) void context.run(() => queueComposerEnter(composer, text, conversationKey()));
+    if (hasMessage) void context.run(() => queueComposerEnter(composer, text, conversationKey()));
   }
   // Capture before React's document/composer handlers can turn Enter into Stop.
   window.addEventListener("keydown", handleComposerEnter, true);
