@@ -95,7 +95,8 @@
     section.append(heading, row);
 
     syncLayout(widget, section);
-    widget.insertAdjacentElement("afterend", section);
+    const anchor = document.getElementById('ghrc-deep-research-dashboard') || widget;
+    anchor.insertAdjacentElement("afterend", section);
   }
 
   function syncLayout(widget, section) {
@@ -127,7 +128,8 @@
       section?.remove();
       return;
     }
-    if (section && widget.nextElementSibling === section) {
+    const anchor = document.getElementById('ghrc-deep-research-dashboard') || widget;
+    if (section && anchor.nextElementSibling === section) {
       syncLayout(widget, section);
       return;
     }

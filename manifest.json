@@ -47,7 +47,8 @@
       ],
       "js": [
         "js/clipboard-utm-sanitizer.js",
-        "js/chatgpt-route-events.js"
+        "js/chatgpt-route-events.js",
+        "js/deep-research-usage.js"
       ],
       "run_at": "document_start",
       "world": "MAIN"
@@ -105,7 +106,8 @@
         "css/clipboard-send.css",
         "css/top-hat-send-button.css",
         "css/message-queue.css",
-        "css/highlighted-pages.css"
+        "css/highlighted-pages.css",
+        "css/deep-research-tracker.css"
       ],
       "js": [
         "js/youtube-search.js",
@@ -114,7 +116,8 @@
         "js/2048.js",
         "js/clipboard-send.js",
         "js/message-queue.js",
-        "js/highlighted-pages.js"
+        "js/highlighted-pages.js",
+        "js/deep-research-tracker.js"
       ],
       "run_at": "document_start"
     },
@@ -135,7 +138,8 @@
     {
       "resources": [
         "artwork/spellcheck-only.png",
-        "artwork/calligraphy-initials.png"
+        "artwork/calligraphy-initials.png",
+        "artwork/research-telescope.png"
       ],
       "matches": [
         "https://chatgpt.com/*"

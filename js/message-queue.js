@@ -1167,11 +1167,28 @@
     return true;
   }
 
+  function composerAutocompleteIsOpen(composer) {
+    // The composer owns Enter while its plugin/file suggestions are open.
+    // Modern ChatGPT portals use plain buttons rather than ARIA menu items.
+    const activeOption = document.getElementById(composer.getAttribute('aria-activedescendant') || '');
+    if (isVisible(activeOption) && !activeOption.closest('[inert]')) return true;
+    if (composer.getAttribute('aria-expanded') === 'true') {
+      for (const id of (composer.getAttribute('aria-controls') || '').split(/\s+/)) {
+        const popup = document.getElementById(id);
+        if (isVisible(popup) && !popup.closest('[inert]')) return true;
+      }
+    }
+    return [...document.querySelectorAll('[data-mention-list-scroll-area]')]
+      .some(popup => isVisible(popup) && !popup.closest('[inert]')
+        && getComputedStyle(popup).visibility !== 'hidden');
+  }
+
   function handleComposerEnter(event) {
     if (!context.active()) return;
     const composer = event.target?.closest?.('#prompt-textarea, [data-composer-markdown][contenteditable="true"]');
     if (!composer || composer !== findComposerInput()) return;
     if (!shouldQueueComposerEnter(event)) return;
+    if (composerAutocompleteIsOpen(composer)) return;
     const text = normalizedText(composerText(composer));
     if (event.repeat || sendingItemId || pendingEnterTexts.has(text) || enqueueRunning || interruptRunning) {
       event.preventDefault();

@@ -168,6 +168,62 @@ test('standalone queue button is opt-in and follows setting changes', async () =
   await p.close();
 });
 
+for (const menuMarkup of [
+  '<div data-mention-list-scroll-area><button type="button" data-list-navigation-item="true">Deep research</button></div>',
+  '<div id="plugin-options" role="listbox"><div id="plugin-option" role="option">Deep research</div></div>',
+]) {
+  test(`busy Enter selects a partial plugin mention instead of queueing (${menuMarkup.includes('scroll-area') ? 'native portal' : 'ARIA autocomplete'})`, async () => {
+    const p = await fixture({ active: true });
+    await p.locator('[data-composer-markdown]').fill('@deep-re');
+    await p.evaluate(markup => {
+      const popup = document.createElement('section');
+      popup.id = 'autocomplete-fixture';
+      popup.innerHTML = markup;
+      document.body.append(popup);
+      if (popup.querySelector('[role="listbox"]')) {
+        editor.setAttribute('aria-expanded', 'true');
+        editor.setAttribute('aria-controls', 'plugin-options');
+        editor.setAttribute('aria-activedescendant', 'plugin-option');
+      }
+      window.pluginSelections = 0;
+      // Model the native document capture handler, before composer send handlers.
+      document.addEventListener('keydown', event => {
+        if (event.key !== 'Enter' || !popup.isConnected) return;
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        window.pluginSelections++;
+        editor.textContent = 'Deep research';
+        popup.remove();
+        editor.removeAttribute('aria-expanded');
+        editor.removeAttribute('aria-controls');
+        editor.removeAttribute('aria-activedescendant');
+      }, true);
+    }, menuMarkup);
+    await p.locator('[data-composer-markdown]').press('Enter');
+    assert.equal(await p.evaluate(() => window.pluginSelections), 1);
+    assert.equal(await p.locator('[data-composer-markdown]').innerText(), 'Deep research');
+    assert.equal(await p.locator('.ghrc-message-queue-editor').count(), 0);
+    assert.equal(await p.evaluate(() => window.stops), 0);
+    assert.equal(await p.evaluate(() => window.sent.length), 0);
+    // Once autocomplete closes, the next Enter follows the usual queue behavior.
+    await enqueue(p, 'Research this topic', true);
+    assert.equal(await p.locator('.ghrc-message-queue-editor').count(), 1);
+    assert.deepEqual(p.errors, []);
+    await p.close();
+  });
+}
+
+test('hidden or inert autocomplete does not swallow a normal busy Enter', async () => {
+  const p = await fixture({ active: true });
+  await p.evaluate(() => {
+    document.body.insertAdjacentHTML('beforeend', '<div data-mention-list-scroll-area style="display:none"><button>Deep research</button></div><div data-mention-list-scroll-area inert><button>Deep research</button></div>');
+  });
+  await enqueue(p, 'Queue normally', true);
+  assert.equal(await p.locator('.ghrc-message-queue-editor').count(), 1);
+  assert.deepEqual(p.errors, []);
+  await p.close();
+});
+
 for (const route of ['/', '/?temporary-chat=true', '/c/test']) {
   test(`busy Enter queues before a host document capture handler on ${route}`, async () => {
     const p = await fixture({ active: true, route });
