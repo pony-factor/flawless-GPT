@@ -9,6 +9,7 @@
   const COLLAPSE_DELAY_MS = 90;
   const REVEAL_DELAY_MS = 350;
   const REVEAL_RETRY_MS = 750;
+  const MENU_HOVER_PADDING = 12;
   let initialCollapseFinished = false;
   let hoverRevealEnabled = false;
   let collapseTimer = null;
@@ -138,10 +139,43 @@
     if (!sidebar) return pointer.x <= FALLBACK_SIDEBAR_WIDTH;
 
     const bounds = sidebar.getBoundingClientRect();
-    return pointer.x >= bounds.left
+    if (pointer.x >= bounds.left
       && pointer.x <= bounds.right
       && pointer.y >= bounds.top
-      && pointer.y <= bounds.bottom;
+      && pointer.y <= bounds.bottom) return true;
+
+    // Include overflowing children and menus portaled outside the sidebar.
+    const hovered = document.elementFromPoint(pointer.x, pointer.y);
+    if (hovered && sidebar.contains(hovered)) return true;
+
+    const regions = [sidebar];
+    const menus = document.querySelectorAll('[role="menu"], [role="listbox"], [popover]');
+    for (let index = 0; index < regions.length; index += 1) {
+      const region = regions[index];
+      const triggers = region.querySelectorAll('[aria-expanded="true"][aria-controls]');
+      const controlledIds = new Set(Array.from(triggers).flatMap(trigger =>
+        trigger.getAttribute("aria-controls").split(/\s+/)));
+
+      for (const menu of menus) {
+        if (regions.includes(menu) || !menu.getClientRects().length) continue;
+        const style = getComputedStyle(menu);
+        if (style.visibility === "hidden" || menu.closest('[inert], [aria-hidden="true"]')) continue;
+        const labelledBy = (menu.getAttribute("aria-labelledby") || "").split(/\s+/);
+        const owned = controlledIds.has(menu.id) || labelledBy.some(id => {
+          const trigger = id && document.getElementById(id);
+          return trigger && region.contains(trigger)
+            && trigger.getAttribute("aria-expanded") === "true";
+        });
+        if (!owned) continue;
+        regions.push(menu);
+        const menuBounds = menu.getBoundingClientRect();
+        if (pointer.x >= menuBounds.left - MENU_HOVER_PADDING
+          && pointer.x <= menuBounds.right + MENU_HOVER_PADDING
+          && pointer.y >= menuBounds.top - MENU_HOVER_PADDING
+          && pointer.y <= menuBounds.bottom + MENU_HOVER_PADDING) return true;
+      }
+    }
+    return false;
   }
 
   function scheduleCollapse() {
