@@ -72,9 +72,11 @@ To stop and remove the local service, run `launchctl bootout gui/$(id -u)/com.fl
 
 ### Web commit personalization
 
-The **Personalization** tab contains one editable **Web commit guidance** field. Flawless stores that text directly in `chrome.storage.local.webCommitGuidance`; there is no clipboard import and no local Codex synchronization.
+The **Personalization** tab contains one editable **Web commit guidance** field. Flawless stores a local mirror in `chrome.storage.local.webCommitGuidance` and synchronizes it with ChatGPT's account-level Custom Instructions (`about_model_message`) while a signed-in `chatgpt.com` tab is open. Editing either ChatGPT's Personalization setting or the Flawless field updates the other side; no clipboard handoff is involved.
 
-Existing guidance from the older `codexCustomInstructions` / `chatgptCustomInstructions` keys is migrated into `webCommitGuidance`. If the older Codex Web co-author preference was enabled, its trailer instruction is folded into the migrated guidance rather than kept as a separate setting. Personalization does not write `~/.codex/AGENTS.md`, inspect `CODEX_HOME`, import PGP keys, or change global Git configuration. Commit signing remains a separate feature.
+Synchronization uses ChatGPT's own same-origin `/backend-api/user_system_messages` request path from the ChatGPT page. The extension reads the current payload before updating only the model-instruction field so unrelated personalization fields stay intact. Authentication is obtained ephemerally from the active ChatGPT session and is never written into extension storage. On the first sync for an account, ChatGPT's current setting wins so installing or upgrading Flawless cannot silently overwrite existing web personalization. After that, `webCommitGuidanceLastSynced` lets Flawless determine which side changed; local edits made while ChatGPT is closed are pushed the next time ChatGPT opens.
+
+Existing guidance from the older `codexCustomInstructions` / `chatgptCustomInstructions` keys is migrated into `webCommitGuidance`. If the older Codex Web co-author preference was enabled, its trailer instruction is folded into the migrated guidance rather than kept as a separate setting. Personalization never writes `~/.codex/AGENTS.md`, inspects `CODEX_HOME`, imports PGP keys, or changes global Git configuration. Commit signing remains a separate feature.
 
 ### Token storage
 

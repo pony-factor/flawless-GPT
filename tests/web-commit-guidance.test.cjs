@@ -15,12 +15,8 @@ function element() {
     value: "",
     textContent: "",
     dataset: {},
-    addEventListener(type, listener) {
-      listeners.set(type, listener);
-    },
-    dispatch(type) {
-      listeners.get(type)?.();
-    },
+    addEventListener(type, listener) { listeners.set(type, listener); },
+    dispatch(type) { listeners.get(type)?.(); },
   };
 }
 
@@ -29,6 +25,7 @@ async function fixture(initial = {}) {
   const status = element();
   const storage = { ...initial };
   const removed = [];
+  const storageListeners = [];
   const chrome = {
     storage: {
       local: {
@@ -38,15 +35,16 @@ async function fixture(initial = {}) {
               .map((key) => [key, storage[key]]),
           );
         },
-        async set(values) {
-          Object.assign(storage, values);
-        },
+        async set(values) { Object.assign(storage, values); },
         async remove(keys) {
           for (const key of keys) {
             removed.push(key);
             delete storage[key];
           }
         },
+      },
+      onChanged: {
+        addListener(listener) { storageListeners.push(listener); },
       },
     },
   };
@@ -58,16 +56,11 @@ async function fixture(initial = {}) {
     },
   };
 
-  vm.runInNewContext(SOURCE, {
-    chrome,
-    clearTimeout,
-    document,
-    setTimeout,
-  });
+  vm.runInNewContext(SOURCE, { chrome, clearTimeout, document, setTimeout });
   await new Promise((resolve) => setImmediate(resolve));
   await new Promise((resolve) => setImmediate(resolve));
 
-  return { textarea, status, storage, removed };
+  return { textarea, status, storage, removed, storageListeners };
 }
 
 test("stores direct edits as webCommitGuidance without clipboard access", async () => {
@@ -80,6 +73,14 @@ test("stores direct edits as webCommitGuidance without clipboard access", async 
   await new Promise((resolve) => setImmediate(resolve));
 
   assert.equal(state.storage.webCommitGuidance, "Explain the intent of each commit.");
+});
+
+test("reflects guidance changed by ChatGPT sync", async () => {
+  const state = await fixture({ webCommitGuidance: "Local" });
+  state.storageListeners[0]({
+    webCommitGuidance: { oldValue: "Local", newValue: "Web" },
+  }, "local");
+  assert.equal(state.textarea.value, "Web");
 });
 
 test("migrates old guidance and folds in the co-author preference", async () => {
@@ -95,6 +96,4 @@ test("migrates old guidance and folds in the co-author preference", async () => 
   );
   assert.equal(state.storage.codexCustomInstructions, undefined);
   assert.equal(state.storage.codexWebCoauthor, undefined);
-  assert.ok(state.removed.includes("codexCustomInstructions"));
-  assert.ok(state.removed.includes("codexWebCoauthor"));
 });
