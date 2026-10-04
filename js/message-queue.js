@@ -361,6 +361,15 @@
       return !composerText(composer).trim();
     }
 
+    // Native text insertion keeps large queued prompts as text. ChatGPT's
+    // paste handler converts long clipboard text into a file attachment.
+    document.execCommand("insertText", false, text);
+    await new Promise((resolve) => window.setTimeout(resolve, 50));
+    if (textMatchesComposer(composer, text)) return true;
+
+    range.selectNodeContents(composer);
+    selection.removeAllRanges();
+    selection.addRange(range);
     try {
       const clipboardData = new DataTransfer();
       clipboardData.setData("text/plain", text);
@@ -900,6 +909,7 @@
   async function enqueueComposerMessage() {
     if (!context.active()) return false;
     if (!stateLoaded || enqueueRunning || sendingItemId || routeSyncRunning || interruptRunning) return false;
+    window.dispatchEvent(new Event("ghrc:before-composer-send"));
     enqueueRunning = true;
     scheduleMount();
     try {
@@ -960,6 +970,7 @@
     let composerReplaced = false;
     let restoredContext = null;
     const focused = document.activeElement;
+    window.dispatchEvent(new Event("ghrc:before-composer-send"));
     sendingItemId = item.id;
     renderQueue();
 
@@ -1205,6 +1216,7 @@
       return;
     }
 
+    window.dispatchEvent(new Event("ghrc:before-composer-send"));
     event.preventDefault();
     event.stopImmediatePropagation();
     if (text.trim()) void context.run(() => queueComposerEnter(composer, text, conversationKey()));

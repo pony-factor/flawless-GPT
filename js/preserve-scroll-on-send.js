@@ -7,6 +7,7 @@
     'button[aria-label*="send" i]',
     'button[aria-label*="submit" i]',
   ].join(",");
+  const MESSAGE_SELECTOR = '[data-testid^="conversation-turn-"], [data-message-author-role], [data-content-search-unit-key]';
   const COMPOSER_SELECTOR = '#prompt-textarea, [contenteditable="true"]';
   const USER_SCROLL_KEYS = new Set([
     "ArrowUp",
@@ -21,9 +22,10 @@
   let enabled = false;
   let guard = null;
   let restoreScheduled = false;
+  let resizeObserver = null;
 
   function isScrollableElement(element) {
-    if (!element || element.scrollHeight <= element.clientHeight + 1) return false;
+    if (!element) return false;
     try {
       const overflowY = getComputedStyle(element).overflowY;
       return overflowY === "auto" || overflowY === "scroll" || overflowY === "overlay";
@@ -42,7 +44,7 @@
   }
 
   function findConversationScrollContainer() {
-    const turns = document.querySelectorAll('[data-testid^="conversation-turn-"]');
+    const turns = document.querySelectorAll(MESSAGE_SELECTOR);
     const lastTurn = turns[turns.length - 1];
     const turnScroller = scrollableAncestor(lastTurn);
     if (turnScroller) return turnScroller;
@@ -110,20 +112,57 @@
 
     const replacement = findConversationScrollContainer();
     if (!replacement) return null;
+    for (const [property, value, priority] of guard.styles) {
+      if (value) guard.container.style.setProperty(property, value, priority);
+      else guard.container.style.removeProperty(property);
+    }
     guard.container = replacement;
+    protectContainer(replacement);
     return replacement;
+  }
+
+  function containerViewport(container) {
+    return container === document.scrollingElement
+      ? { top: 0, bottom: window.innerHeight }
+      : container.getBoundingClientRect();
+  }
+
+  function readingAnchor(container) {
+    const viewport = containerViewport(container);
+    const messages = [...container.querySelectorAll(MESSAGE_SELECTOR)];
+    for (const message of messages) {
+      const blocks = [...message.querySelectorAll("p, li, pre, h1, h2, h3")];
+      for (const element of [...blocks, message]) {
+        const rect = element.getBoundingClientRect();
+        if (rect.height && rect.bottom > viewport.top && rect.top < viewport.bottom) {
+          return { element, offset: rect.top - viewport.top };
+        }
+      }
+    }
+    return null;
   }
 
   function restorePosition() {
     restoreScheduled = false;
     if (!enabled || !guard) return;
+    if (guard.path !== location.pathname) { stopGuard(); return; }
 
     const container = currentGuardContainer();
     if (!container) return;
 
-    if (Math.abs(container.scrollTop - guard.scrollTop) > 0.5) {
-      container.scrollTop = guard.scrollTop;
+    const anchor = guard.anchor;
+    // Reverse-flex threads use negative offsets relative to the bottom. Keep
+    // visible text at the same screen position as streaming adds content.
+    const hasAnchor = anchor?.element.isConnected && container.contains(anchor.element);
+    const targetTop = hasAnchor
+      ? container.scrollTop + anchor.element.getBoundingClientRect().top
+        - containerViewport(container).top - anchor.offset
+      : guard.scrollTop;
+    if (Math.abs(container.scrollTop - targetTop) > 0.5) {
+      container.scrollTop = targetTop;
     }
+    if (hasAnchor) guard.scrollTop = container.scrollTop;
+    else guard.anchor = readingAnchor(container);
     if (Math.abs(container.scrollLeft - guard.scrollLeft) > 0.5) {
       container.scrollLeft = guard.scrollLeft;
     }
@@ -136,12 +175,36 @@
   }
 
   function stopGuard() {
+    resizeObserver?.disconnect();
+    resizeObserver = null;
+    if (guard?.container) {
+      for (const [property, value, priority] of guard.styles) {
+        if (value) guard.container.style.setProperty(property, value, priority);
+        else guard.container.style.removeProperty(property);
+      }
+    }
     guard = null;
     restoreScheduled = false;
   }
 
+  function protectContainer(container) {
+    guard.styles = ["scroll-behavior", "overflow-anchor"].map(property => [
+      property, container.style.getPropertyValue(property), container.style.getPropertyPriority(property),
+    ]);
+    container.style.setProperty("scroll-behavior", "auto", "important");
+    container.style.setProperty("overflow-anchor", "none", "important");
+    resizeObserver?.disconnect();
+    resizeObserver = new ResizeObserver(() => { restorePosition(); scheduleRestore(); });
+    resizeObserver.observe(container);
+    for (const child of container.children) resizeObserver.observe(child);
+  }
+
   function beginGuard() {
     if (!enabled) return;
+    // Enter, native click, submit and FIFO sends belong to the same reading
+    // position. Never replace it with an intermediate native scroll offset.
+    if (guard && guard.path === location.pathname) { scheduleRestore(); return; }
+    stopGuard();
 
     const container = findConversationScrollContainer();
     if (!container) return;
@@ -149,8 +212,12 @@
     guard = {
       container,
       scrollTop: container.scrollTop,
+      anchor: readingAnchor(container),
       scrollLeft: container.scrollLeft,
+      path: location.pathname,
+      styles: [],
     };
+    protectContainer(container);
 
     queueMicrotask(scheduleRestore);
     requestAnimationFrame(scheduleRestore);
@@ -180,8 +247,8 @@
     if (event.target?.querySelector?.('#prompt-textarea, [data-composer-markdown][contenteditable="true"]')) beginGuard();
   }, true);
 
-  document.addEventListener("keydown", (event) => {
-    if (guard && isUserScrollKey(event)) {
+  window.addEventListener("keydown", (event) => {
+    if (guard && isUserScrollKey(event) && !event.target?.closest?.('input, textarea, [contenteditable="true"]')) {
       stopGuard();
       return;
     }
@@ -192,14 +259,18 @@
     if (!guard) return;
     const target = event.target === document ? document.scrollingElement : event.target;
     const container = currentGuardContainer();
-    if (target === container) scheduleRestore();
+    if (target === container) { restorePosition(); scheduleRestore(); }
   }, true);
 
   document.addEventListener("wheel", stopGuard, { capture: true, passive: true });
   document.addEventListener("touchmove", stopGuard, { capture: true, passive: true });
-  document.addEventListener("pointerdown", () => {
-    if (guard) stopGuard();
+  window.addEventListener("pointerdown", (event) => {
+    stopGuard();
+    // Capture before focus can scroll a tall composer into view.
+    if (isSendButtonTarget(event.target)) beginGuard();
   }, true);
+  window.addEventListener("ghrc:before-composer-send", beginGuard);
+  new MutationObserver(scheduleRestore).observe(document.documentElement, { childList: true, subtree: true });
 
   void loadPreference();
 })();
