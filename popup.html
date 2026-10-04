@@ -86,6 +86,15 @@
             aria-controls="panel-chatgpt"
             tabindex="-1"
           >ChatGPT</button>
+          <button
+            id="tab-deep-research"
+            class="popup-tab"
+            type="button"
+            role="tab"
+            aria-selected="false"
+            aria-controls="panel-deep-research"
+            tabindex="-1"
+          >Deep Research</button>
         </nav>
         <button id="open-full-settings" class="popup-tab" type="button">Full settings</button>
       </div>
@@ -195,9 +204,9 @@
           </fieldset>
         </section>
 
-        <section id="panel-chatgpt" class="popup-panel" role="tabpanel" aria-labelledby="tab-chatgpt" hidden>
-          <fieldset class="popup-first-fieldset">
-            <legend>ChatGPT display</legend>
+        <section id="panel-deep-research" class="popup-panel" role="tabpanel" aria-labelledby="tab-deep-research" hidden>
+          <fieldset id="deep-research-settings" class="popup-first-fieldset">
+            <legend>Deep Research</legend>
             <label class="preference">
               <input id="show-deep-research-tracker" type="checkbox" checked />
               <span>
@@ -205,6 +214,24 @@
                 <small>Shows remaining reports and the reset countdown below repositories and above the composer when the Deep Research plugin is selected.</small>
               </span>
             </label>
+            <label class="preference">
+              <input id="research-publisher-enabled" type="checkbox" />
+              <span>
+                <strong>Deep research publisher</strong>
+                <small>Adds an Add to repo button beside Download on completed research reports. Choose a category before importing Markdown to your linked repository.</small>
+              </span>
+            </label>
+            <p><a href="publisher-setup.html" target="_blank" rel="noopener">Link repository</a></p>
+            <div id="research-publisher-controls" hidden>
+              <button id="check-research-publisher" class="secondary" type="button">Check connection</button>
+            </div>
+            <p id="research-publisher-status" class="help" role="status" aria-live="polite"></p>
+          </fieldset>
+        </section>
+
+        <section id="panel-chatgpt" class="popup-panel" role="tabpanel" aria-labelledby="tab-chatgpt" hidden>
+          <fieldset class="popup-first-fieldset">
+            <legend>ChatGPT display</legend>
             <label for="composer-placeholder">Composer placeholder</label>
             <input id="composer-placeholder" type="text" placeholder="For example, Dash" aria-describedby="composer-placeholder-help" />
             <p id="composer-placeholder-help" class="help">Choose the text shown in the empty chat input. Leave blank to use ChatGPT’s default.</p>
@@ -257,18 +284,6 @@
                 <small>Hides the Work option and prevents Work mode from being selected.</small>
               </span>
             </label>
-            <label class="preference">
-              <input id="research-publisher-enabled" type="checkbox" />
-              <span>
-                <strong>Deep research publisher</strong>
-                <small>Adds an Add to repo button beside Download on completed research reports. Choose a category before importing Markdown to your linked repository.</small>
-              </span>
-            </label>
-            <div id="research-publisher-controls" hidden>
-              <p><a href="publisher-setup.html" target="_blank" rel="noopener">Link repository</a></p>
-              <button id="check-research-publisher" class="secondary" type="button">Check connection</button>
-            </div>
-            <p id="research-publisher-status" class="help" role="status" aria-live="polite"></p>
             <label class="preference">
               <input id="show-spellcheck-gpt-launcher" type="checkbox" />
               <span>

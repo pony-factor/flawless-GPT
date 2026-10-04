@@ -51,7 +51,7 @@
     const stale = Date.now() - serverQuota.observedAt > 10 * 60_000
       || (serverQuota.resetAt !== null && serverQuota.resetAt <= Date.now());
     const count = stale ? `${serverQuota.remaining} last checked · Refresh allowance`
-      : `${serverQuota.remaining} remaining`;
+      : `${serverQuota.remaining} left`;
     const remainingMs = serverQuota.resetAt === null ? null : serverQuota.resetAt - Date.now();
     let reset = 'reset unknown';
     if (remainingMs !== null) {
@@ -136,7 +136,7 @@
     // An old observation is not a live balance; require another native check.
     const fresh = Date.now() - observedAt < 5 * 60_000;
     const count = fresh && allowance.remaining !== null
-      ? `${allowance.full ? 'Full reports' : 'Reports (type unspecified)'}: ${allowance.remaining} remaining`
+      ? `${allowance.remaining} left`
       : 'Check allowance';
     const reset = fresh && allowance.reset ? allowance.reset : 'Reset unknown';
     const text = serverText() || `Deep Research · ${count} · ${reset}`;

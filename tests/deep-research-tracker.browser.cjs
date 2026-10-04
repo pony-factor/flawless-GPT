@@ -30,7 +30,7 @@ test('mounts, reads native usage, excludes messages, and cleans up on extension 
     await widget.waitFor();
     assert.match(await widget.innerText(), /Check allowance/);
     await widget.click();
-    await page.waitForFunction(() => document.getElementById('ghrc-deep-research-tracker').textContent.includes('Full reports: 0 remaining'));
+    await page.waitForFunction(() => document.getElementById('ghrc-deep-research-tracker').textContent.includes('0 left'));
     assert.match(await widget.innerText(), /Resets on October 20/);
     assert.equal(await page.locator('#prompt-textarea').innerText(), 'Keep my draft');
     assert.equal(await page.evaluate(() => window.submits), 0);
@@ -130,14 +130,14 @@ test('native initialization fills the tracker automatically and clicking refresh
     }
     const response = await page.evaluate(async () => (await fetch('/backend-api/conversation/init', { method: 'POST', body: '{}' })).json());
     assert.equal(response.unrelated_private_field, 'must stay in page response');
-    await page.waitForFunction(() => document.getElementById('ghrc-deep-research-tracker')?.textContent.includes('13 remaining'));
+    await page.waitForFunction(() => document.getElementById('ghrc-deep-research-tracker')?.textContent.includes('13 left'));
     const widget = page.locator('#ghrc-deep-research-tracker');
-    assert.match(await widget.innerText(), /13 remaining · resets \d+d/);
+    assert.match(await widget.innerText(), /13 left · resets \d+d/);
     const exposed = await page.evaluate(() => JSON.parse(document.documentElement.getAttribute('data-ghrc-deep-research-usage')));
     assert.deepEqual(Object.keys(exposed).sort(), ['observedAt', 'remaining', 'resetAt']);
     remaining = 0;
     await widget.click();
-    await page.waitForFunction(() => document.getElementById('ghrc-deep-research-tracker').textContent.includes('0 remaining'));
+    await page.waitForFunction(() => document.getElementById('ghrc-deep-research-tracker').textContent.includes('0 left'));
     assert.equal(requests, 2);
     assert.equal(await page.locator('#prompt-textarea').innerText(), 'My draft');
   } finally { await browser.close(); }
