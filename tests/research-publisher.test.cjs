@@ -9,7 +9,7 @@ function background(enabled, nativeResult = { ok: true, repository: 'research', 
   const opened = [];
   const saved = {};
   const chrome = {
-    tabs: { create: async value => opened.push(value) },
+    tabs: { create: async value => opened.push(value), sendMessage: async () => ({ title: "DTC Bond Purchaser Tracking" }) },
     storage: {
       local: {
         get: async (defaults) => ({ ...defaults, ...(enabled === undefined ? {} : { researchPublisherEnabled: enabled }) }),
@@ -50,7 +50,7 @@ test('unset and disabled preferences never contact the native host', async () =>
 test('enabled launch sends a fixed action without caller-supplied paths', async () => {
   const app = background(true);
   assert.equal((await app.send()).ok, true);
-  assert.equal(JSON.stringify(app.calls), JSON.stringify([['org.research.publisher', { action: 'publish', title: 'Report', markdown: '# Report\nFull text', source: 'https://chatgpt.com/c/example' }]]));
+  assert.equal(JSON.stringify(app.calls), JSON.stringify([['org.research.publisher', { action: 'publish', title: 'Report', markdown: '# Report\nFull text', source: 'https://chatgpt.com/c/example', context: 'DTC Bond Purchaser Tracking' }]]));
 });
 
 test('successful status checks record a confirmed repository connection', async () => {

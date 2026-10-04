@@ -10,7 +10,8 @@ import subprocess
 import sys
 import shutil
 import tempfile
-from urllib.parse import urlparse
+import unicodedata
+from urllib.parse import urlparse, quote
 
 MAX_MESSAGE = 8 * 1024 * 1024
 MAX_REPORT = 4 * 1024 * 1024
@@ -182,6 +183,24 @@ def validate_category(category):
     return category
 
 
+def report_stem(title, context=""):
+    def words(text):
+        text = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode().lower()
+        text = re.sub(r"^(?:deep research|research report|report)\s*[:–—-]\s*", "", text)
+        return re.findall(r"[a-z0-9]+", text)
+    tokens = words(title)
+    if not tokens or all(word in {"deep", "research", "report", "final", "completed", "comprehensive", "analysis", "untitled", "executive", "summary", "overview", "introduction", "findings"} for word in tokens):
+        tokens = words(context) or tokens
+    return "-".join(tokens[:18])[:120].rstrip("-") or "research-report"
+
+
+def report_url(remote, branch, filename):
+    match = re.fullmatch(r"(?:https://github\.com/|git@github\.com:|ssh://git@github\.com/)([^/]+/[^/]+?)(?:\.git)?/?", remote)
+    if not match:
+        return None
+    return f"https://github.com/{match[1]}/blob/{quote(branch, safe='')}/{quote(filename, safe='/')}"
+
+
 def publish(message, config):
     title, markdown, source = validate(message)
     category = validate_category(message.get("category", ""))
@@ -194,17 +213,19 @@ def publish(message, config):
         git(repo, "check-ref-format", "--branch", branch)
     except (OSError, subprocess.SubprocessError):
         raise PublishError("Configure origin and a Git author in the linked repository, then try again.") from None
-    words = re.findall(r"[a-z0-9]+", title.lower())[:6]
-    stem = "-".join(words) or "research-report"
+    context = message.get("context", "")
+    if not isinstance(context, str) or len(context) > 2000:
+        raise PublishError("Invalid conversation context.")
+    stem = report_stem(title, context)
     suffix = hashlib.sha256((source + "\n" + title).encode()).hexdigest()[:10]
-    filename = f"{stem}-{suffix}.md"
+    filename = f"{stem}.md"
     if category:
         filename = f"{category}/{filename}"
     # The temporary bare clone has its own index; it never stages or edits the linked checkout.
     with tempfile.TemporaryDirectory(prefix="research-publish-") as temp:
         clone = Path(temp) / "repository.git"
         try:
-            git(Path(temp), "clone", "--bare", "--depth=1", "--single-branch", "--branch", branch, "--", remote, str(clone))
+            git(Path(temp), "clone", "--bare", "--single-branch", "--branch", branch, "--", remote, str(clone))
         except (OSError, subprocess.SubprocessError):
             raise PublishError("Could not fetch the linked branch. Check Git access and the connection, then retry.") from None
         parent = git(clone, "rev-parse", "HEAD")
@@ -215,6 +236,15 @@ def publish(message, config):
             entry = git(clone, "ls-tree", parent, "--", path)
             if entry and not entry.startswith("040000 tree "):
                 raise PublishError("This category conflicts with a repository file. Choose another category.")
+        # Preserve old imports and avoid overwriting a different report with the same title.
+        old_stem = "-".join(re.findall(r"[a-z0-9]+", title.lower())[:6]) or "research-report"
+        legacy = (category + "/" if category else "") + f"{old_stem}-{suffix}.md"
+        if git(clone, "ls-tree", parent, "--", legacy):
+            filename = legacy
+        elif git(clone, "ls-tree", parent, "--", filename):
+            identity = git(clone, "log", "-1", "--format=%B", "--", filename)
+            if f"Research-ID: {suffix}" not in identity:
+                filename = filename[:-3] + f"-{suffix}.md"
         git(clone, "read-tree", parent)
         blob = git(clone, "hash-object", "-w", "--stdin", input=markdown)
         git(clone, "update-index", "--add", "--cacheinfo", "100644", blob, filename)
@@ -224,13 +254,13 @@ def publish(message, config):
         if not unchanged:
             topic = " ".join(title.split()[:4])
             commit = git(clone, "-c", f"user.name={name}", "-c", f"user.email={email}",
-                         "commit-tree", tree, "-p", parent, "-m", f"📝 Add {topic} report")
+                         "commit-tree", tree, "-p", parent, "-m", f"📝 Add {topic} report\n\nResearch-ID: {suffix}")
             try:
                 git(clone, "push", "--", "origin", f"{commit}:refs/heads/{branch}")
             except (OSError, subprocess.SubprocessError):
                 raise PublishError("Push was not confirmed. Check Git access or branch rules, then retry; an identical report will not be duplicated.") from None
     return {"ok": True, "repository": repo.name, "branch": branch, "path": filename,
-            "commit": commit, "unchanged": unchanged}
+            "commit": commit, "unchanged": unchanged, "url": report_url(remote, branch, filename)}
 
 
 def handle(message, config, origin):
@@ -250,9 +280,15 @@ def handle(message, config, origin):
                 categories.append(validate_category(directory))
             except PublishError:
                 continue
-        return {"ok": True, "repository": Path(config["repo"]).name, "branch": config["branch"], "categories": categories}
-    if (set(message) not in ({"action", "title", "markdown", "source"},
-                            {"action", "title", "markdown", "source", "category"})
+        contents = {directory: [] for directory in ["", *categories]}
+        for path in git(Path(config["repo"]), "ls-tree", "-r", "--name-only", "HEAD").splitlines():
+            directory, _, name = path.rpartition("/")
+            if directory in contents and not name.startswith("."):
+                contents[directory].append(name)
+        return {"ok": True, "repository": Path(config["repo"]).name, "branch": config["branch"],
+                "categories": categories, "contents": contents}
+    if (not {"action", "title", "markdown", "source"}.issubset(message)
+            or set(message) - {"action", "title", "markdown", "source", "category", "context"}
             or message["action"] != "publish"):
         raise PublishError("Unsupported action.")
     return publish(message, config)

@@ -15,6 +15,7 @@
       repository: typeof result.repository === 'string' ? result.repository : '',
       branch: typeof result.branch === 'string' ? result.branch : '',
       categories: Array.isArray(result.categories) ? result.categories : [],
+      contents: result.contents && typeof result.contents === "object" ? result.contents : {},
       checkedAt: Date.now(),
     };
   }
@@ -108,6 +109,13 @@
           const connection = await sendToNative({ action: 'status' }, false);
           if (connection.repository !== automaticJob.repository || connection.branch !== automaticJob.branch)
             throw new Error('The linked repository changed during research. Use Add to repo to choose the destination again.');
+        }
+        if (publishing) {
+          try {
+            const context = await chrome.tabs.sendMessage(sender.tab.id, { type: 'research-report-context' }, { frameId: 0 });
+            if (typeof context?.title === 'string' && context.title.trim()) payload.context = context.title.slice(0, 2000);
+          } catch { /* The report title remains available when the conversation frame is gone. */ }
+          if (!payload.context && automaticJob?.title) payload.context = automaticJob.title;
         }
         const result = await sendToNative(payload, publishing);
         if (automaticJob) await globalThis.__ghrcResearchLaunch.finishImport(sender.tab.id, automaticJob.id, result);

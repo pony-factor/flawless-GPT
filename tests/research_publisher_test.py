@@ -68,6 +68,22 @@ class PublisherTests(unittest.TestCase):
         self.assertEqual(updated["path"], result["path"])
         self.assertNotEqual(updated["commit"], result["commit"])
 
+    def test_readable_names_use_conversation_for_generic_headings_and_handle_collisions(self):
+        message = {**self.message, "title": "Executive Summary", "context": "DTC Bond Purchaser Tracking"}
+        first = host.handle(message, self.config, self.origin)
+        self.assertEqual(first["path"], "dtc-bond-purchaser-tracking.md")
+        second = host.handle({**message, "source": "https://chatgpt.com/c/other", "markdown": "Another report"}, self.config, self.origin)
+        self.assertNotEqual(second["path"], first["path"])
+        # Identity must survive other imports and a new clone of the remote.
+        revised = host.handle({**message, "markdown": "Revised report"}, self.config, self.origin)
+        self.assertEqual(revised["path"], first["path"])
+        self.assertTrue(host.handle({**message, "markdown": "Revised report"}, self.config, self.origin)["unchanged"])
+        self.assertEqual(host.report_url("git@github.com:example/research.git", "main", "Markets/a b.md"),
+                         "https://github.com/example/research/blob/main/Markets/a%20b.md")
+        self.assertEqual(host.report_url("https://github.com/example/research.git", "topic/branch", "report.md"),
+                         "https://github.com/example/research/blob/topic%2Fbranch/report.md")
+        self.assertIsNone(host.report_url("/tmp/local.git", "main", "report.md"))
+
     def test_rejects_foreign_origin_paths_and_invalid_content(self):
         with patch.object(host, "publish") as publish:
             for message, caller in [(self.message, "other"), ({**self.message, "repo": "/other"}, self.origin),
@@ -98,6 +114,7 @@ class PublisherTests(unittest.TestCase):
         git(self.repo, "-c", "commit.gpgsign=false", "commit", "-m", "Category fixture")
         result = host.handle({"action": "status"}, self.config, self.origin)
         self.assertEqual(result["categories"], ["Markets", "Markets/Ownership"])
+        self.assertEqual(result["contents"]["Markets/Ownership"], ["report.md"])
 
     def test_install_links_branch_and_self_tests_bridge(self):
         manifest = installer.install("a" * 32, "brave", self.repo, self.base / "Application Support")

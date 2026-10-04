@@ -74,7 +74,7 @@ test('telescope precedes writing-block Copy, cancellation does not launch, and f
   await p.getByRole('button', { name: 'Cancel', exact: true }).click();
   assert.equal(await p.evaluate(() => calls.filter(message => message.type === 'start-research-launch').length), 0);
   await button.click();
-  await p.getByRole('combobox', { name: 'Category' }).fill('Markets');
+  await p.getByRole('textbox', { name: 'Category' }).fill('Markets');
   await p.getByRole('button', { name: 'Start research', exact: true }).click();
   await p.waitForFunction(() => calls.some(message => message.type === 'start-research-launch'));
   const start = await p.evaluate(() => calls.find(message => message.type === 'start-research-launch'));

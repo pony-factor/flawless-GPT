@@ -31,7 +31,7 @@
         if (status) status.textContent = result?.error || 'Automatic import could not finish. Use Add to repo to retry.';
       } else {
         const status = scope.querySelector('.ghrc-report-status');
-        if (status) status.textContent = `Imported: ${result.repository} / ${result.path} (${result.branch}).`;
+        if (status) globalThis.__ghrcResearchImportStatus(status, result);
       }
     } catch {
       // Partial reports and replaced sandbox documents are revisited by the next scan.
@@ -147,7 +147,7 @@
             if (!result?.ok) throw new Error(result?.error || 'Publishing failed. Try again.');
             button.title = `${result.unchanged ? 'Already in' : 'Added to'} ${result.repository} (${result.branch})`;
             button.setAttribute('aria-label', 'Report added to repo');
-            status.textContent = `${result.unchanged ? 'Already up to date' : 'Added'}: ${result.repository} / ${result.path} (${result.branch}).`;
+            globalThis.__ghrcResearchImportStatus(status, result);
           } catch (error) {
             status.textContent = error.message || 'Connection unavailable. Reload this page and try again.';
             button.disabled = false;
