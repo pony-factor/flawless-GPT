@@ -16,11 +16,13 @@
   const WORK_LABEL = /^(?:chatgpt\s+)?work(?:\s+mode)?$/i;
   const CHAT_LABEL = /^(?:chatgpt\s+)?chat(?:\s+mode)?$/i;
   const MAX_CHAT_SELECTION_ATTEMPTS = 3;
+  const CHAT_SELECTION_DELAY_MS = 500;
   let enabled = false;
   let scanScheduled = false;
   let selectingChat = false;
   let needsChatSelection = false;
   let chatSelectionAttempts = 0;
+  let chatSelectionTimer = null;
 
   function normalizedText(value) {
     return (value || "").replace(/\s+/g, " ").trim();
@@ -109,14 +111,28 @@
       chatControl ||= matchingChatControl;
     });
     const shouldSelectChat = needsChatSelection || pageAppearsToBeWorkMode();
+    if (!shouldSelectChat) {
+      chatSelectionAttempts = 0;
+      clearTimeout(chatSelectionTimer);
+      chatSelectionTimer = null;
+    }
     if (
       chatControl
       && shouldSelectChat
+      && chatSelectionTimer === null
       && chatSelectionAttempts < MAX_CHAT_SELECTION_ATTEMPTS
     ) {
-      needsChatSelection = false;
-      chatSelectionAttempts += 1;
-      selectChat(chatControl);
+      chatSelectionTimer = setTimeout(() => {
+        chatSelectionTimer = null;
+        if (!enabled || !chatControl.isConnected) {
+          scheduleScan();
+          return;
+        }
+        needsChatSelection = false;
+        chatSelectionAttempts += 1;
+        selectChat(chatControl);
+        scheduleScan();
+      }, CHAT_SELECTION_DELAY_MS);
     }
   }
 
@@ -130,6 +146,8 @@
     enabled = nextEnabled;
     needsChatSelection = enabled;
     chatSelectionAttempts = 0;
+    clearTimeout(chatSelectionTimer);
+    chatSelectionTimer = null;
     if (!document.documentElement) {
       requestAnimationFrame(() => setEnabled(nextEnabled));
       return;

@@ -51,6 +51,13 @@ test('selected mode detects Work even when the placeholder is customized', async
   await page.close();
 });
 
+test('startup retries recover when the first click happens before hydration', async () => {
+  const page = await fixture({ ignoreFirstClick: true });
+  await page.waitForFunction(() => document.getElementById('chat').getAttribute('aria-pressed') === 'true');
+  assert.equal(await page.evaluate(() => window.clicks), 2);
+  await page.close();
+});
+
 test('attribute-only restoration of Work is corrected after initial Chat selection', async () => {
   const page = await fixture();
   await page.waitForFunction(() => window.clicks === 1);
