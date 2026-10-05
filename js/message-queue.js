@@ -845,13 +845,32 @@
     return panel;
   }
 
+  function alignQueuePanel(panel, composer = findComposerInput()) {
+    if (!panel?.isConnected || !composer) return;
+    const textStart = composer.querySelector("p") || composer;
+    const style = getComputedStyle(textStart);
+    const textLeft = textStart.getBoundingClientRect().left
+      + (parseFloat(style.borderLeftWidth) || 0) + (parseFloat(style.paddingLeft) || 0);
+    const currentOffset = parseFloat(panel.style.getPropertyValue("--ghrc-queue-left-offset")) || 0;
+    const offset = Math.round((currentOffset + textLeft - panel.getBoundingClientRect().left) * 100) / 100;
+    const value = `${offset}px`;
+    if (panel.style.getPropertyValue("--ghrc-queue-left-offset") !== value) {
+      panel.style.setProperty("--ghrc-queue-left-offset", value);
+    }
+    queueResizeObserver?.observe(composer);
+    queueResizeObserver?.observe(panel.parentElement);
+  }
+
+  const queueResizeObserver = typeof ResizeObserver === "function"
+    ? new ResizeObserver(scheduleMount) : null;
+
   function renderQueue() {
     let panel = document.getElementById(PANEL_ID);
     if (!queue.length) {
       panel?.remove();
+      queueResizeObserver?.disconnect();
       return;
     }
-
     if (!panel) panel = createPanel();
     const title = panel.querySelector(".ghrc-message-queue-title");
     const list = panel.querySelector(".ghrc-message-queue-list");
@@ -870,7 +889,7 @@
     } else if (form && panel.nextElementSibling !== form) {
       form.before(panel);
     }
-
+    alignQueuePanel(panel);
   }
 
   function createQueueButton() {
@@ -966,6 +985,7 @@
       } else if (form && panel.nextElementSibling !== form) {
         form.before(panel);
       }
+      alignQueuePanel(document.getElementById(PANEL_ID), composer);
     }
   }
 
@@ -1477,10 +1497,13 @@
   });
 
   const pumpInterval = window.setInterval(schedulePump, PUMP_INTERVAL_MS);
+  window.addEventListener("resize", scheduleMount);
   document.addEventListener("visibilitychange", reschedulePumpForVisibility);
   context.onStop(() => {
     window.removeEventListener("keydown", handleComposerEnter, true);
     observer.disconnect();
+    queueResizeObserver?.disconnect();
+    window.removeEventListener("resize", scheduleMount);
     clearInterval(pumpInterval);
     clearScheduledPump();
     document.removeEventListener("visibilitychange", reschedulePumpForVisibility);

@@ -10,6 +10,8 @@
   margin: 0 auto 8px;
   max-width: calc(100vw - 28px);
   overflow: hidden;
+  position: relative;
+  left: var(--ghrc-queue-left-offset, 0px);
   width: min(38.4rem, 100%);
 }
 
