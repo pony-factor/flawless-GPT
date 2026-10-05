@@ -16,11 +16,13 @@
   const WORK_LABEL = /^(?:chatgpt\s+)?work(?:\s+mode)?$/i;
   const CHAT_LABEL = /^(?:chatgpt\s+)?chat(?:\s+mode)?$/i;
   const MAX_CHAT_SELECTION_ATTEMPTS = 3;
+  const CHAT_SELECTION_DELAY_MS = 500;
   let enabled = false;
   let scanScheduled = false;
   let selectingChat = false;
   let needsChatSelection = false;
   let chatSelectionAttempts = 0;
+  let chatSelectionTimer = null;
 
   function normalizedText(value) {
     return (value || "").replace(/\s+/g, " ").trim();
@@ -70,12 +72,16 @@
   }
 
   function pageAppearsToBeWorkMode() {
+    if ([...document.querySelectorAll(CONTROL_SELECTOR)].some((control) =>
+      isWorkControl(control) && ["aria-pressed", "aria-selected", "aria-checked"]
+        .some((attribute) => control.getAttribute(attribute) === "true")
+    )) return true;
     return [...document.querySelectorAll("[placeholder], [data-placeholder], [aria-label]")]
       .some((element) => [
         element.getAttribute("placeholder"),
         element.getAttribute("data-placeholder"),
         element.getAttribute("aria-label"),
-      ].some((label) => /^work on anything$/i.test(normalizedText(label))));
+      ].some((label) => /^work (?:on anything|with chatgpt)$/i.test(normalizedText(label))));
   }
 
   function selectChat(chatControl) {
@@ -105,14 +111,28 @@
       chatControl ||= matchingChatControl;
     });
     const shouldSelectChat = needsChatSelection || pageAppearsToBeWorkMode();
+    if (!shouldSelectChat) {
+      chatSelectionAttempts = 0;
+      clearTimeout(chatSelectionTimer);
+      chatSelectionTimer = null;
+    }
     if (
       chatControl
       && shouldSelectChat
+      && chatSelectionTimer === null
       && chatSelectionAttempts < MAX_CHAT_SELECTION_ATTEMPTS
     ) {
-      needsChatSelection = false;
-      chatSelectionAttempts += 1;
-      selectChat(chatControl);
+      chatSelectionTimer = setTimeout(() => {
+        chatSelectionTimer = null;
+        if (!enabled || !chatControl.isConnected) {
+          scheduleScan();
+          return;
+        }
+        needsChatSelection = false;
+        chatSelectionAttempts += 1;
+        selectChat(chatControl);
+        scheduleScan();
+      }, CHAT_SELECTION_DELAY_MS);
     }
   }
 
@@ -126,6 +146,8 @@
     enabled = nextEnabled;
     needsChatSelection = enabled;
     chatSelectionAttempts = 0;
+    clearTimeout(chatSelectionTimer);
+    chatSelectionTimer = null;
     if (!document.documentElement) {
       requestAnimationFrame(() => setEnabled(nextEnabled));
       return;
@@ -172,6 +194,8 @@
   new MutationObserver(scheduleScan).observe(document, {
     childList: true,
     subtree: true,
+    attributes: true,
+    attributeFilter: ["aria-pressed", "aria-selected", "aria-checked", "aria-label", "placeholder", "data-placeholder"],
   });
   void chrome.storage.local.get({ [SETTING_KEY]: false }).then((settings) => {
     setEnabled(Boolean(settings[SETTING_KEY]));
