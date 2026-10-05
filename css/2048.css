@@ -1,0 +1,293 @@
+#github-repositories-for-chatgpt .ghrc-2048-footer-left {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  grid-column: 1;
+  justify-self: start;
+  min-width: 0;
+}
+
+#github-repositories-for-chatgpt .ghrc-2048-launcher {
+  align-items: center;
+  background: var(--ghrc-canvas-subtle);
+  border: 1px solid var(--ghrc-border);
+  border-radius: 6px;
+  color: var(--ghrc-fg-muted);
+  cursor: pointer;
+  display: inline-flex;
+  flex: 0 0 auto;
+  height: 30px;
+  justify-content: center;
+  padding: 5px;
+  width: 30px;
+}
+
+#github-repositories-for-chatgpt .ghrc-2048-launcher:hover {
+  background: color-mix(in srgb, var(--ghrc-canvas-subtle) 85%, var(--ghrc-fg) 15%);
+  border-color: var(--ghrc-fg-muted);
+  color: var(--ghrc-fg);
+}
+
+#github-repositories-for-chatgpt .ghrc-2048-launcher:focus-visible {
+  outline: 2px solid var(--ghrc-accent);
+  outline-offset: 2px;
+}
+
+#github-repositories-for-chatgpt .ghrc-2048-launcher-icon {
+  height: 18px;
+  width: 18px;
+}
+
+#github-repositories-for-chatgpt .ghrc-2048-button-mash-mark {
+  fill: #747b86;
+  stroke: #4e5560;
+  stroke-linejoin: round;
+  stroke-width: 1.15px;
+}
+
+#github-repositories-for-chatgpt .ghrc-2048-button-mash-center {
+  fill: #a0a7b2;
+  stroke: #4e5560;
+  stroke-width: 1px;
+}
+
+.ghrc-2048-overlay {
+  box-sizing: border-box;
+  align-items: center;
+  background: rgba(0, 0, 0, 0.72);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: 18px;
+  position: fixed;
+  z-index: 2147483000;
+}
+
+.ghrc-2048-dialog {
+  box-sizing: border-box;
+  background: #0d1117;
+  border: 1px solid #30363d;
+  border-radius: 14px;
+  box-shadow: 0 20px 70px rgba(0, 0, 0, 0.52);
+  color: #f0f6fc;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  max-width: 100%;
+  padding: 18px;
+  width: min(640px, calc(100dvh - 170px));
+}
+
+.ghrc-2048-controls,
+.ghrc-2048-actions {
+  align-items: center;
+  display: flex;
+}
+
+.ghrc-2048-controls {
+  justify-content: space-between;
+}
+
+.ghrc-2048-close,
+.ghrc-2048-actions button {
+  background: #161b22;
+  border: 1px solid #30363d;
+  color: #f0f6fc;
+  cursor: pointer;
+}
+
+.ghrc-2048-close {
+  align-items: center;
+  border-radius: 50%;
+  display: inline-flex;
+  font: 300 24px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  height: 34px;
+  justify-content: center;
+  padding: 0;
+  width: 34px;
+}
+
+.ghrc-2048-jam-jar {
+  display: block;
+  height: 24px;
+  width: 24px;
+}
+
+.ghrc-2048-close:hover,
+.ghrc-2048-actions button:hover:not(:disabled) {
+  background: #21262d;
+  border-color: #8b949e;
+}
+
+.ghrc-2048-close:focus-visible,
+.ghrc-2048-actions button:focus-visible {
+  outline: 2px solid #58a6ff;
+  outline-offset: 2px;
+}
+
+.ghrc-2048-controls {
+  margin-bottom: 12px;
+}
+
+.ghrc-2048-score {
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  min-width: 76px;
+  padding: 7px 10px;
+  text-align: center;
+}
+
+.ghrc-2048-score span,
+.ghrc-2048-score strong {
+  display: block;
+}
+
+.ghrc-2048-score span {
+  color: #8b949e;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.ghrc-2048-score strong {
+  font-size: 17px;
+  margin-top: 1px;
+}
+
+.ghrc-2048-actions {
+  gap: 7px;
+}
+
+.ghrc-2048-actions button:not(.ghrc-2048-close) {
+  border-radius: 7px;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 8px 11px;
+}
+
+.ghrc-2048-actions button:disabled {
+  cursor: default;
+  opacity: 0.42;
+}
+
+.ghrc-2048-board {
+  aspect-ratio: 1;
+  background: #20262e;
+  border-radius: 8px;
+  contain: layout paint;
+  container-type: inline-size;
+  display: grid;
+  gap: 9px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-rows: repeat(4, minmax(0, 1fr));
+  overflow: hidden;
+  padding: 9px;
+  touch-action: none;
+}
+
+.ghrc-2048-tile {
+  align-items: center;
+  border-radius: 5px;
+  display: flex;
+  font-size: clamp(16px, 8cqw, 48px);
+  font-weight: 700;
+  justify-content: center;
+  line-height: 1;
+  min-width: 0;
+  user-select: none;
+}
+
+.ghrc-2048-tile-empty {
+  background: #303844;
+}
+
+.ghrc-2048-tile-2 {
+  background: #34404a;
+  color: #e6edf3;
+}
+
+.ghrc-2048-tile-4 {
+  background: #3f4b55;
+  color: #f0f6fc;
+}
+
+.ghrc-2048-tile-8 {
+  background: #8f5a30;
+  color: #f9f6f2;
+}
+
+.ghrc-2048-tile-16 {
+  background: #99502f;
+  color: #f9f6f2;
+}
+
+.ghrc-2048-tile-32 {
+  background: #9d4237;
+  color: #f9f6f2;
+}
+
+.ghrc-2048-tile-64 {
+  background: #9f3327;
+  color: #f9f6f2;
+}
+
+.ghrc-2048-tile-128 {
+  background: #8f7429;
+  color: #f9f6f2;
+  font-size: clamp(14px, 7cqw, 42px);
+}
+
+.ghrc-2048-tile-256 {
+  background: #92731f;
+  color: #f9f6f2;
+  font-size: clamp(14px, 7cqw, 42px);
+}
+
+.ghrc-2048-tile-512 {
+  background: #956d16;
+  color: #f9f6f2;
+  font-size: clamp(14px, 7cqw, 42px);
+}
+
+.ghrc-2048-tile-1024 {
+  background: #96640f;
+  color: #f9f6f2;
+  font-size: clamp(12px, 6cqw, 36px);
+}
+
+.ghrc-2048-tile-2048 {
+  background: #985b08;
+  color: #f9f6f2;
+  font-size: clamp(12px, 6cqw, 36px);
+}
+
+.ghrc-2048-tile-super {
+  background: #2b3139;
+  color: #f9f6f2;
+  font-size: clamp(10px, 5cqw, 30px);
+}
+
+.ghrc-2048-status {
+  color: #8b949e;
+  font-size: 12px;
+  height: 18px;
+  margin: 9px 0 0;
+  text-align: center;
+}
+
+@media (max-width: 560px) {
+  #github-repositories-for-chatgpt .ghrc-2048-footer-left {
+    grid-column: 1;
+  }
+
+  .ghrc-2048-dialog {
+    padding: 14px;
+  }
+}
+
+@container (max-width: 420px) {
+  #github-repositories-for-chatgpt .ghrc-2048-footer-left {
+    grid-column: 1;
+    grid-row: 1;
+  }
+}

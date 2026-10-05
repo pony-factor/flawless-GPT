@@ -21,6 +21,7 @@ function fixture({ draft = '', paste = 'accept', disabled = false } = {}) {
     },
   };
   const context = {
+    chrome: { runtime: { id: "fixture" }, storage: { local: {} } },
     Date: { now: () => now },
     location: { pathname: '/g/g-dyK63miav-spellcheck-only' },
     HTMLTextAreaElement: class {}, HTMLInputElement: class {},
@@ -38,6 +39,7 @@ function fixture({ draft = '', paste = 'accept', disabled = false } = {}) {
     },
   };
   vm.createContext(context);
+  vm.runInContext(fs.readFileSync(require("node:path").join(__dirname, "../js/extension-context.js"), "utf8"), context);
   vm.runInContext(source.slice(0, source.indexOf('  chrome.storage.onChanged')) + `
     globalThis.api = { pasteIntoComposer, submitWhenReady, findSendButton,
       handoff(text) { pendingClipboardText = text; return runClipboardHandoff(); } };

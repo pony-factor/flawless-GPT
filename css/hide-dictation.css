@@ -1,6 +1,10 @@
 html[data-ghrc-hide-dictation]
   button[data-testid="composer-speech-button"],
 html[data-ghrc-hide-dictation]
-  button[aria-label*="dictat" i] {
+  button[aria-label*="dictat" i],
+html[data-ghrc-hide-dictation]
+  form button[data-testid*="voice" i],
+html[data-ghrc-hide-dictation]
+  form button[aria-label*="voice" i] {
   display: none !important;
 }

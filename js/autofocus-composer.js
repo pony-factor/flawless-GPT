@@ -3,23 +3,22 @@
   const HOMEPAGE_BOOT_ATTR = "data-ghrc-homepage-booting";
   const COMPOSER_READY_ATTR = "data-ghrc-composer-ready";
   const CONFIRM_DELAY_MS = 160;
-  const RETRY_DELAYS_MS = [0, 320, 900];
+  const SETTLE_DELAY_MS = 1800;
+  const RETRY_DELAYS_MS = [0, 160, 320, 900, SETTLE_DELAY_MS];
   let enabled = false;
   let pendingFocus = true;
   let lastUrl = location.href;
   let focusScheduled = false;
   let focusGeneration = 0;
   let confirmationTimer = null;
+  let settleTimer = null;
+  let focusedComposer = null;
   const retryTimers = new Set();
 
   function findComposerInput() {
-    const prompt = document.querySelector("#prompt-textarea");
-    if (!prompt || !prompt.isConnected) return null;
-    if (prompt.matches(":disabled") || prompt.getAttribute("aria-disabled") === "true") {
-      return null;
-    }
-    if (prompt.getClientRects().length === 0) return null;
-    return prompt;
+    return [...document.querySelectorAll('#prompt-textarea, [data-composer-markdown][contenteditable="true"]')]
+      .find(prompt => prompt.isConnected && !prompt.matches(':disabled, [contenteditable="false"]')
+        && prompt.getAttribute("aria-disabled") !== "true" && prompt.getClientRects().length > 0) || null;
   }
 
   function composerHasFocus(composer) {
@@ -40,6 +39,7 @@
 
     if (!composerHasFocus(composer)) composer.focus({ preventScroll: true });
     if (!composerHasFocus(composer) || confirmationTimer !== null) return;
+    focusedComposer = composer;
 
     const generation = focusGeneration;
     confirmationTimer = window.setTimeout(() => {
@@ -52,8 +52,20 @@
         return;
       }
 
-      pendingFocus = false;
       document.documentElement.setAttribute(COMPOSER_READY_ATTR, "true");
+      if (settleTimer === null) {
+        settleTimer = window.setTimeout(() => {
+          settleTimer = null;
+          if (generation !== focusGeneration) return;
+          const settledComposer = findComposerInput();
+          if (!settledComposer || !composerHasFocus(settledComposer)) {
+            scheduleFocus();
+            return;
+          }
+          pendingFocus = false;
+          clearFocusTimers();
+        }, SETTLE_DELAY_MS);
+      }
     }, CONFIRM_DELAY_MS);
   }
 
@@ -71,11 +83,20 @@
     requestAnimationFrame(() => {
       focusScheduled = false;
       checkForNavigation();
+      if (enabled && focusedComposer && !focusedComposer.isConnected
+          && (!document.activeElement || document.activeElement === document.body)) {
+        focusedComposer = null;
+        beginFocusCycle();
+      }
       focusComposer();
     });
   }
 
   function clearFocusTimers() {
+    if (settleTimer !== null) {
+      clearTimeout(settleTimer);
+      settleTimer = null;
+    }
     if (confirmationTimer !== null) {
       clearTimeout(confirmationTimer);
       confirmationTimer = null;
@@ -104,11 +125,12 @@
   }
 
   function cancelFocusCycleForUserInput(event) {
-    if (!pendingFocus || !event.isTrusted) return;
+    if (!event.isTrusted) return;
 
     const composer = findComposerInput();
     if (composer && (event.target === composer || composer.contains(event.target))) return;
 
+    focusedComposer = null;
     pendingFocus = false;
     focusGeneration += 1;
     clearFocusTimers();
@@ -142,6 +164,27 @@
     beginFocusCycle();
   });
 
+  window.addEventListener("ghrc:route-change", () => {
+    lastUrl = location.href;
+    beginFocusCycle();
+  });
+
+  document.addEventListener("click", event => {
+    if (!event.isTrusted || !enabled) return;
+    const control = event.target.closest?.('button, a, [role="button"], [role="menuitem"]');
+    if (!control) return;
+    const label = control.getAttribute("aria-label") || control.getAttribute("title") || control.textContent || "";
+    if (/^ask chatgpt$/i.test(label.trim()) || /^new chat(?:\s|$)/i.test(label.trim())
+        || control.getAttribute("data-testid") === "create-new-chat-button") {
+      beginFocusCycle();
+    }
+  }, true);
+
+  document.addEventListener("focusin", event => {
+    const composer = findComposerInput();
+    focusedComposer = composer && (event.target === composer || composer.contains(event.target)) ? composer : null;
+  }, true);
+
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible" && pendingFocus) scheduleFocus();
   });
@@ -154,7 +197,7 @@
     childList: true,
     subtree: true,
     attributes: true,
-    attributeFilter: [HOMEPAGE_BOOT_ATTR],
+    attributeFilter: [HOMEPAGE_BOOT_ATTR, "contenteditable", "disabled", "aria-disabled", "hidden", "style", "class"],
   });
 
   void loadPreference();

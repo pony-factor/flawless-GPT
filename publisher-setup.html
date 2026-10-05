@@ -9,18 +9,18 @@
   <body>
     <main>
       <h1>Link research repository</h1>
-      <p>Choose a local Git repository once. The Add to repo button beside Download on each completed research report saves its Markdown, commits it, and pushes it to that repository’s origin remote and linked branch.</p>
+      <p>Choose a local Git repository once. After the browser confirms the connection, the Add to repo button beside Download on each completed research report saves its Markdown, commits it, and pushes it to that repository’s origin remote and linked branch.</p>
       <ol>
         <li>Open Terminal in this extension’s folder.</li>
         <li>Run the command below, then choose your research repository folder.</li>
-        <li>Enable <strong>Deep research publisher</strong> in extension settings and use <strong>Check connection</strong> to see the linked repository and branch.</li>
-        <li>Refresh the ChatGPT report and click <strong>Add to repo</strong>, immediately left of Download.</li>
+        <li>Enable <strong>Deep research publisher</strong> in extension settings and use <strong>Check connection</strong> to confirm the browser can reach the linked repository and branch.</li>
+        <li>Refresh the ChatGPT report. <strong>Add to repo</strong> appears immediately left of Download only while the setting is enabled and the repository connection is confirmed.</li>
       </ol>
       <label for="publisher-browser">Browser</label>
       <select id="publisher-browser"><option value="brave">Brave</option><option value="chrome">Chrome</option></select>
       <pre id="publisher-install-command" style="white-space: pre-wrap; overflow-wrap: anywhere"></pre>
       <p>Requires macOS, Python 3, Git, and working Git push access. The branch selected when you link the repository remains the destination until you link it again. Dashboard accounts do not change that destination.</p>
-      <p>Reports are published through a temporary checkout of the remote branch. Your local files, index, and branch are left untouched. No download or app picker is needed for each report.</p>
+      <p>The installer self-tests the local bridge, but only <strong>Check connection</strong> confirms that Brave or Chrome can reach it. Reports are published through a temporary checkout of the remote branch. Your local files, index, and branch are left untouched.</p>
       <p>If you previously linked an app, run this updated installer to link its repository folder instead. Re-run it after updating the bridge, moving the repository, or changing the extension ID. Turning the checkbox off removes the report buttons.</p>
       <p><a href="options.html">Back to settings</a></p>
     </main>

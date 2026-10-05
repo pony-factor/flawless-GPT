@@ -7,6 +7,7 @@ const REPOSITORY_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 const WOOTEN_LINK_TAB_ID_KEY = "wootenLinkSearchTabId";
 const ownerProfileCache = new Map();
 const repositoryRefreshRequests = new Map();
+let repositoryLoadRequest = null;
 
 function githubHeaders(token) {
   const headers = {
@@ -104,7 +105,7 @@ async function loadOwnerProfiles(repositories, token = "") {
   return new Map(profiles);
 }
 
-async function loadAccessibleRepositories(token) {
+async function loadAccessibleRepositories(token, { allPages = true } = {}) {
   const repositories = [];
 
   for (let page = 1; ; page += 1) {
@@ -118,7 +119,7 @@ async function loadAccessibleRepositories(token) {
     const batch = await fetchGitHub(url.toString(), token);
     repositories.push(...batch);
 
-    if (batch.length < REPOSITORIES_PER_PAGE) {
+    if (!allPages || batch.length < REPOSITORIES_PER_PAGE) {
       break;
     }
   }
@@ -126,7 +127,7 @@ async function loadAccessibleRepositories(token) {
   return repositories;
 }
 
-async function loadPublicOwnerRepositories(owner, token) {
+async function loadPublicOwnerRepositories(owner, token, { allPages = true } = {}) {
   const repositories = [];
 
   for (let page = 1; ; page += 1) {
@@ -139,7 +140,7 @@ async function loadPublicOwnerRepositories(owner, token) {
     const batch = await fetchGitHub(url.toString(), token);
     repositories.push(...batch);
 
-    if (batch.length < REPOSITORIES_PER_PAGE) {
+    if (!allPages || batch.length < REPOSITORIES_PER_PAGE) {
       break;
     }
   }
@@ -147,9 +148,9 @@ async function loadPublicOwnerRepositories(owner, token) {
   return repositories;
 }
 
-async function loadPublicRepositories(ownerOrder, token = "") {
+async function loadPublicRepositories(ownerOrder, token = "", { allPages = true } = {}) {
   const ownerRepositories = await Promise.all(
-    ownerOrder.map((owner) => loadPublicOwnerRepositories(owner, token)),
+    ownerOrder.map((owner) => loadPublicOwnerRepositories(owner, token, { allPages })),
   );
   return ownerRepositories.flat();
 }
@@ -228,7 +229,7 @@ async function persistResolvedOwnerOrder(configuredOrder, resolvedOrder) {
 
 async function tokenSignature(tokens) {
   const serialized = JSON.stringify(
-    tokens.map(({ label, token }) => [label || "", token]),
+    tokens.map(({ label, token, cacheKey }) => [label || "", cacheKey || token]),
   );
   const digest = await crypto.subtle.digest(
     "SHA-256",
@@ -239,10 +240,10 @@ async function tokenSignature(tokens) {
     .join("");
 }
 
-async function loadRepositoryState() {
+async function loadRepositoryState({ refreshTokens = true } = {}) {
   const [settings, tokens] = await Promise.all([
     chrome.storage.local.get({ ownerOrder: DEFAULT_OWNER_ORDER }),
-    TokenVault.loadTokens(),
+    TokenVault.loadTokens({ refresh: refreshTokens }),
   ]);
 
   return {
@@ -271,18 +272,19 @@ async function loadRepositoryCache(state) {
   return cacheMatchesState(cache, state) ? cache : null;
 }
 
-async function saveRepositoryCache(payload, state) {
+async function saveRepositoryCache(payload, state, { complete = true } = {}) {
   await chrome.storage.local.set({
     [REPOSITORY_CACHE_KEY]: {
       fetchedAt: Date.now(),
       tokenSignature: state.tokenSignature,
       ownerOrder: normalizedOwnerOrder(payload.ownerOrder),
+      complete,
       payload,
     },
   });
 }
 
-async function repositoryPayload(state = null) {
+async function repositoryPayload(state = null, { complete = true } = {}) {
   const resolvedState = state || await loadRepositoryState();
   const { ownerOrder, tokens } = resolvedState;
   let repositories;
@@ -291,29 +293,38 @@ async function repositoryPayload(state = null) {
     const authenticatedRepositories = await Promise.all(
       tokens.map(async ({ label, token }, index) => {
         try {
-          return await loadAccessibleRepositories(token);
+          return await loadAccessibleRepositories(token, { allPages: complete });
         } catch (error) {
           throw new Error(`${label || `Token ${index + 1}`}: ${error.message}`);
         }
       }),
     );
     repositories = uniqueRepositories(authenticatedRepositories.flat());
-    const accessibleOwners = new Set(
-      repositories.map((repository) => repository.owner.login.toLowerCase()),
-    );
-    const missingPriorityOwners = ownerOrder.filter(
-      (owner) => !accessibleOwners.has(owner.toLowerCase()),
-    );
-    const priorityRepositories = await loadPublicRepositories(missingPriorityOwners);
-    repositories.push(...priorityRepositories);
-    repositories = uniqueRepositories(repositories);
+
+    // A cold first paint only needs the first authenticated page. Additional
+    // configured owners are folded in by the complete background refresh.
+    if (complete) {
+      const accessibleOwners = new Set(
+        repositories.map((repository) => repository.owner.login.toLowerCase()),
+      );
+      const missingPriorityOwners = ownerOrder.filter(
+        (owner) => !accessibleOwners.has(owner.toLowerCase()),
+      );
+      const priorityRepositories = await loadPublicRepositories(missingPriorityOwners);
+      repositories.push(...priorityRepositories);
+      repositories = uniqueRepositories(repositories);
+    }
   } else {
-    repositories = await loadPublicRepositories(ownerOrder);
+    repositories = await loadPublicRepositories(ownerOrder, "", { allPages: complete });
   }
 
-  const ownerProfiles = await loadOwnerProfiles(repositories, tokens[0]?.token);
+  const ownerProfiles = complete
+    ? await loadOwnerProfiles(repositories, tokens[0]?.token)
+    : new Map();
   const resolvedOrder = resolvedOwnerOrder(repositories, ownerOrder);
-  const resolvedOwnerState = await persistResolvedOwnerOrder(ownerOrder, resolvedOrder);
+  const resolvedOwnerState = complete
+    ? await persistResolvedOwnerOrder(ownerOrder, resolvedOrder)
+    : { ownerOrder, stateChanged: false };
 
   return {
     payload: {
@@ -327,34 +338,69 @@ async function repositoryPayload(state = null) {
   };
 }
 
+async function notifyRepositoryCacheUpdated() {
+  try {
+    const tabs = await chrome.tabs.query({});
+    await Promise.allSettled(
+      tabs
+        .filter((tab) => Number.isInteger(tab.id))
+        .map((tab) => chrome.tabs.sendMessage(tab.id, { type: "repository-cache-updated" })),
+    );
+  } catch (error) {
+    console.warn("Could not notify tabs about refreshed repository data:", error);
+  }
+}
+
 async function refreshRepositoryCache(state) {
   const key = repositoryStateKey(state);
   if (repositoryRefreshRequests.has(key)) return repositoryRefreshRequests.get(key);
 
-  const request = repositoryPayload(state)
-    .then(async ({ payload, stateChanged }) => {
-      const currentState = await loadRepositoryState();
-      const stillCurrent = !stateChanged
-        && currentState.tokenSignature === state.tokenSignature
-        && sameOwnerOrder(currentState.ownerOrder, payload.ownerOrder);
-      if (stillCurrent) await saveRepositoryCache(payload, state);
-      return payload;
-    })
-    .finally(() => {
-      repositoryRefreshRequests.delete(key);
-    });
+  const request = (async () => {
+    const refreshedState = await loadRepositoryState({ refreshTokens: true });
+    const { payload, stateChanged } = await repositoryPayload(
+      refreshedState,
+      { complete: true },
+    );
+    const currentState = await loadRepositoryState({ refreshTokens: false });
+    const stillCurrent = !stateChanged
+      && currentState.tokenSignature === refreshedState.tokenSignature
+      && sameOwnerOrder(currentState.ownerOrder, payload.ownerOrder);
+    if (stillCurrent) {
+      await saveRepositoryCache(payload, refreshedState, { complete: true });
+      await notifyRepositoryCacheUpdated();
+    }
+    return payload;
+  })().finally(() => {
+    repositoryRefreshRequests.delete(key);
+  });
 
   repositoryRefreshRequests.set(key, request);
   return request;
 }
 
+async function loadInitialRepositoryPayload(state) {
+  try {
+    const { payload } = await repositoryPayload(state, { complete: false });
+    return { payload, state };
+  } catch (error) {
+    if (!state.tokens.some(({ refreshable }) => refreshable)) throw error;
+    const refreshedState = await loadRepositoryState({ refreshTokens: true });
+    const { payload } = await repositoryPayload(refreshedState, { complete: false });
+    return { payload, state: refreshedState };
+  }
+}
+
 async function loadRepositoriesWithCache() {
-  const state = await loadRepositoryState();
+  // Cache validation deliberately uses the currently stored credential without
+  // refreshing it. GitHub App refresh can happen after cached data is visible.
+  const state = await loadRepositoryState({ refreshTokens: false });
   const cache = await loadRepositoryCache(state);
 
   if (cache) {
     const age = Math.max(0, Date.now() - cache.fetchedAt);
-    if (age > REPOSITORY_CACHE_TTL_MS) {
+    const incomplete = cache.complete === false;
+    const refreshing = incomplete || age > REPOSITORY_CACHE_TTL_MS;
+    if (refreshing) {
       void refreshRepositoryCache(state).catch((error) => {
         console.warn("Repository cache refresh failed:", error);
       });
@@ -365,18 +411,33 @@ async function loadRepositoriesWithCache() {
       ...cache.payload,
       cached: true,
       cacheAgeMs: age,
-      refreshing: age > REPOSITORY_CACHE_TTL_MS,
+      refreshing,
+      partial: incomplete,
     };
   }
 
-  const payload = await refreshRepositoryCache(state);
+  const initial = await loadInitialRepositoryPayload(state);
+  await saveRepositoryCache(initial.payload, initial.state, { complete: false });
+  void refreshRepositoryCache(initial.state).catch((error) => {
+    console.warn("Repository cache refresh failed:", error);
+  });
+
   return {
     ok: true,
-    ...payload,
+    ...initial.payload,
     cached: false,
     cacheAgeMs: 0,
-    refreshing: false,
+    refreshing: true,
+    partial: true,
   };
+}
+
+function requestRepositoryPayload() {
+  repositoryLoadRequest ||= loadRepositoriesWithCache()
+    .finally(() => {
+      repositoryLoadRequest = null;
+    });
+  return repositoryLoadRequest;
 }
 
 async function openWootenLink(urlValue) {
@@ -404,16 +465,31 @@ async function openWootenLink(urlValue) {
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type === "load-repositories") {
-    loadRepositoriesWithCache()
+    requestRepositoryPayload()
       .then((payload) => sendResponse(payload))
       .catch((error) => sendResponse({ ok: false, error: error.message }));
     return true;
   }
 
+  if (message?.type === "preload-repositories") {
+    requestRepositoryPayload()
+      .then(() => sendResponse({ ok: true }))
+      .catch((error) => sendResponse({ ok: false, error: error.message }));
+    return true;
+  }
+
   if (message?.type === "open-options") {
-    chrome.runtime.openOptionsPage();
-    sendResponse({ ok: true });
-    return false;
+    (async () => {
+      if (message.connectGithub) {
+        await chrome.storage.local.set({ githubAppConnectRequested: true });
+        await chrome.tabs.create({ url: chrome.runtime.getURL("options.html") });
+      } else {
+        await chrome.runtime.openOptionsPage();
+      }
+    })()
+      .then(() => sendResponse({ ok: true }))
+      .catch(() => sendResponse({ ok: false, error: "Could not open GitHub settings." }));
+    return true;
   }
 
   if (message?.type === "open-wooten-link") {

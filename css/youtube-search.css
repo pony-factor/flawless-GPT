@@ -1,0 +1,122 @@
+#github-repositories-for-chatgpt .ghrc-footer-searches {
+  align-items: center;
+  display: flex;
+  gap: 24px;
+  grid-column: 2;
+  justify-self: center;
+  min-width: 0;
+  width: min(100%, 560px);
+}
+
+#github-repositories-for-chatgpt .ghrc-footer-searches > .ghrc-wooten-link-search {
+  grid-column: auto;
+  flex: 1 1 0;
+  max-width: 280px;
+  width: 100%;
+}
+
+#github-repositories-for-chatgpt .ghrc-youtube-search {
+  align-items: center;
+  display: flex;
+  gap: 6px;
+  flex: 1 1 0;
+  max-width: 280px;
+  min-width: 0;
+  width: 100%;
+}
+
+#github-repositories-for-chatgpt .ghrc-youtube-search label {
+  align-items: center;
+  color: var(--ghrc-fg-muted);
+  display: flex;
+  font-size: 12px;
+  gap: 7px;
+  flex: 1;
+  min-width: 0;
+}
+
+#github-repositories-for-chatgpt .ghrc-youtube-logo {
+  display: block;
+  flex: 0 0 auto;
+  height: 22px;
+  width: 30px;
+}
+
+#github-repositories-for-chatgpt .ghrc-youtube-search input {
+  background: var(--ghrc-canvas);
+  border: 1px solid var(--ghrc-border);
+  border-radius: 6px;
+  color: var(--ghrc-fg);
+  font: 12px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  min-width: 0;
+  padding: 5px 8px;
+  width: 100%;
+}
+
+#github-repositories-for-chatgpt .ghrc-footer-searches > .ghrc-wooten-link-search label {
+  flex: 1;
+}
+
+#github-repositories-for-chatgpt .ghrc-footer-searches > .ghrc-wooten-link-search input {
+  flex: 1;
+  width: 100%;
+}
+
+#github-repositories-for-chatgpt .ghrc-youtube-search input::placeholder {
+  color: var(--ghrc-fg-muted);
+  opacity: 1;
+}
+
+#github-repositories-for-chatgpt .ghrc-youtube-submit {
+  background: var(--ghrc-canvas-subtle);
+  border: 1px solid var(--ghrc-border);
+  border-radius: 6px;
+  color: var(--ghrc-fg);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 400;
+  padding: 6px 10px;
+}
+
+#github-repositories-for-chatgpt .ghrc-youtube-submit:hover {
+  background: color-mix(in srgb, var(--ghrc-canvas-subtle) 85%, var(--ghrc-fg) 15%);
+  border-color: var(--ghrc-fg-muted);
+}
+
+#github-repositories-for-chatgpt .ghrc-youtube-submit:focus-visible,
+#github-repositories-for-chatgpt .ghrc-youtube-search input:focus-visible {
+  outline: 2px solid var(--ghrc-accent);
+  outline-offset: 2px;
+}
+
+@media (max-width: 920px) {
+  #github-repositories-for-chatgpt .ghrc-footer-searches {
+    flex-direction: column;
+    gap: 25px;
+  }
+}
+
+@media (max-width: 560px) {
+  #github-repositories-for-chatgpt .ghrc-footer-searches {
+    align-items: stretch;
+    grid-column: 1 / -1;
+    grid-row: 2;
+    width: 100%;
+  }
+
+  #github-repositories-for-chatgpt .ghrc-youtube-search {
+    width: 100%;
+  }
+
+  #github-repositories-for-chatgpt .ghrc-youtube-search label,
+  #github-repositories-for-chatgpt .ghrc-youtube-search input {
+    flex: 1;
+  }
+}
+
+@container (max-width: 420px) {
+  #github-repositories-for-chatgpt .ghrc-footer-searches {
+    grid-column: 1;
+    grid-row: 2;
+  }
+}

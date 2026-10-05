@@ -1,0 +1,236 @@
+#ghrc-message-queue {
+  --ghrc-queue-bg: var(--main-surface-primary, #ffffff);
+  --ghrc-queue-subtle: var(--main-surface-secondary, #f7f7f8);
+  --ghrc-queue-border: color-mix(in srgb, currentColor 16%, transparent);
+  background: var(--ghrc-queue-bg);
+  border: 1px solid var(--ghrc-queue-border);
+  border-radius: 16px;
+  box-sizing: border-box;
+  color: inherit;
+  margin: 0 auto 8px;
+  max-width: calc(100vw - 28px);
+  overflow: hidden;
+  position: relative;
+  left: var(--ghrc-queue-left-offset, 0px);
+  width: min(38.4rem, 100%);
+}
+
+html.dark #ghrc-message-queue,
+html[data-theme="dark"] #ghrc-message-queue {
+  --ghrc-queue-bg: var(--main-surface-primary, #212121);
+  --ghrc-queue-subtle: var(--main-surface-secondary, #2f2f2f);
+}
+
+#ghrc-message-queue * {
+  box-sizing: border-box;
+}
+
+.ghrc-message-queue-header {
+  align-items: baseline;
+  background: var(--ghrc-queue-subtle);
+  border-bottom: 1px solid var(--ghrc-queue-border);
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  padding: 8px 11px;
+}
+
+.ghrc-message-queue-title {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.ghrc-message-queue-status {
+  font-size: 11px;
+  opacity: 0.62;
+  text-align: right;
+}
+
+.ghrc-message-queue-list {
+  display: grid;
+}
+
+.ghrc-message-queue-item {
+  align-items: start;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  padding: 8px 10px;
+}
+
+.ghrc-message-queue-item + .ghrc-message-queue-item {
+  border-top: 1px solid var(--ghrc-queue-border);
+}
+
+.ghrc-message-queue-item[data-sending="true"] {
+  background: color-mix(in srgb, currentColor 5%, transparent);
+}
+
+.ghrc-message-queue-index {
+  border: 1px solid var(--ghrc-queue-border);
+  border-radius: 999px;
+  font-size: 10px;
+  line-height: 18px;
+  min-width: 28px;
+  opacity: 0.68;
+  padding: 0 6px;
+  text-align: center;
+}
+
+.ghrc-message-queue-editor {
+  background: transparent;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  line-height: 1.45;
+  min-height: 44px;
+  outline: 0;
+  overflow-y: auto;
+  padding: 1px 2px;
+  resize: none;
+  width: 100%;
+}
+
+.ghrc-message-queue-editor:focus {
+  background: color-mix(in srgb, currentColor 3%, transparent);
+  border-radius: 6px;
+  box-shadow: 0 0 0 1px color-mix(in srgb, currentColor 20%, transparent);
+}
+
+.ghrc-message-queue-controls {
+  display: flex;
+  gap: 2px;
+}
+
+.ghrc-message-queue-controls button,
+#ghrc-message-queue-button {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  display: inline-flex;
+  justify-content: center;
+}
+
+.ghrc-message-queue-controls button {
+  border-radius: 6px;
+  font-size: 13px;
+  height: 26px;
+  opacity: 0.66;
+  padding: 0;
+  width: 24px;
+}
+
+.ghrc-message-queue-move-controls {
+  display: inline-flex;
+  gap: 0;
+}
+
+.ghrc-message-queue-move-controls button {
+  width: 20px;
+}
+
+.ghrc-message-queue-controls button:hover:not(:disabled),
+#ghrc-message-queue-button:hover:not(:disabled) {
+  background: color-mix(in srgb, currentColor 10%, transparent);
+  opacity: 1;
+}
+
+.ghrc-message-queue-controls button:disabled {
+  cursor: default;
+  opacity: 0.2;
+}
+
+.ghrc-message-queue-controls button:focus-visible,
+#ghrc-message-queue-button:focus-visible,
+.ghrc-message-queue-editor:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+
+#ghrc-message-queue-button {
+  border-radius: 9999px;
+  flex: 0 0 auto;
+  height: 32px;
+  margin: 0 2px 0 0;
+  padding: 0;
+  position: relative;
+  width: 32px;
+}
+
+#ghrc-message-queue-button svg {
+  fill: none;
+  height: 18px;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+  width: 18px;
+}
+
+#ghrc-message-queue-button .ghrc-message-queue-badge {
+  align-items: center;
+  background: var(--text-primary, #111827);
+  border-radius: 999px;
+  color: var(--main-surface-primary, #ffffff);
+  display: flex;
+  font-size: 8px;
+  font-weight: 700;
+  height: 14px;
+  justify-content: center;
+  min-width: 14px;
+  padding: 0 3px;
+  position: absolute;
+  right: -2px;
+  top: -2px;
+}
+
+
+#ghrc-message-queue-button .ghrc-message-queue-badge[hidden] {
+  display: none;
+}
+
+@media (max-width: 560px) {
+  .ghrc-message-queue-header {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .ghrc-message-queue-status {
+    text-align: left;
+  }
+
+  .ghrc-message-queue-item {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .ghrc-message-queue-controls {
+    grid-column: 2;
+    justify-self: end;
+  }
+}
+
+.ghrc-message-queue-toggle {
+  background: transparent;
+  border: 1px solid var(--ghrc-queue-border);
+  border-radius: 6px;
+  color: inherit;
+  cursor: pointer;
+  flex-shrink: 0;
+  font: inherit;
+  font-size: 11px;
+  padding: 4px 8px;
+}
+
+.ghrc-message-queue-toggle:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+
+.ghrc-message-queue-controls .ghrc-message-queue-steer {
+  font-size: 11px;
+  padding: 0 6px;
+  width: auto;
+}

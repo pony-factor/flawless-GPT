@@ -23,6 +23,7 @@ header {
   align-items: center;
   display: flex;
   gap: 12px;
+  justify-content: center;
 }
 
 .standalone-artwork {
@@ -76,6 +77,55 @@ form {
   border: 1px solid light-dark(#d0d7de, #3d444d);
   border-radius: 10px;
   padding: 16px;
+}
+
+
+.standalone-settings-tabs {
+  background: light-dark(#ffffff, #0d1117);
+  border: 1px solid light-dark(#d0d7de, #3d444d);
+  border-radius: 10px;
+  display: grid;
+  gap: 4px;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  margin-bottom: 12px;
+  padding: 4px;
+  position: sticky;
+  top: 12px;
+  z-index: 2;
+}
+
+button.standalone-settings-tab {
+  background: transparent;
+  border: 0;
+  color: light-dark(#24292f, #f0f6fc);
+  min-width: 0;
+  padding: 9px 8px;
+  white-space: nowrap;
+}
+
+button.standalone-settings-tab:hover {
+  background: light-dark(#f6f8fa, #161b22);
+  color: inherit;
+}
+
+button.standalone-settings-tab[aria-selected="true"] {
+  background: #a97dee;
+  color: #ffffff;
+}
+
+.standalone-settings-panel[hidden] {
+  display: none;
+}
+
+.standalone-first-fieldset {
+  margin-top: 0;
+}
+
+@media (max-width: 599px) {
+  .standalone-settings-tabs {
+    grid-template-columns: repeat(5, minmax(112px, 1fr));
+    overflow-x: auto;
+  }
 }
 
 .settings-foldout {
@@ -215,12 +265,14 @@ legend {
   line-height: 1.4;
 }
 
+.github-accounts,
 .pinned-repositories,
 .token-list {
   display: grid;
   gap: 8px;
 }
 
+.github-accounts-empty,
 .pinned-repositories-empty {
   border: 1px dashed light-dark(#d0d7de, #3d444d);
   border-radius: 6px;
@@ -229,6 +281,59 @@ legend {
   margin: 0;
   padding: 12px;
   text-align: center;
+}
+
+.github-account {
+  align-items: center;
+  background: light-dark(#f6f8fa, #161b22);
+  border: 1px solid light-dark(#d0d7de, #3d444d);
+  border-radius: 6px;
+  cursor: grab;
+  display: grid;
+  gap: 9px;
+  grid-template-columns: auto minmax(0, 1fr);
+  padding: 7px 8px;
+}
+
+.github-account.dragging {
+  cursor: grabbing;
+  opacity: 0.55;
+}
+
+.github-account code {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.github-account-visibility {
+  align-items: center;
+  display: flex;
+  font-size: 12px;
+  font-weight: 500;
+  gap: 7px;
+  grid-column: 2;
+  margin: 0;
+}
+
+.github-account-visibility input {
+  margin: 0;
+  width: auto;
+}
+
+.github-account-controls {
+  display: flex;
+  gap: 4px;
+  grid-column: 2;
+}
+
+.github-account-controls button {
+  padding: 4px 7px;
+}
+
+.github-account-controls button:disabled {
+  cursor: default;
+  opacity: 0.45;
 }
 
 .pinned-repository {
@@ -374,11 +479,141 @@ button.secondary {
     justify-self: stretch;
   }
 
+  .github-account {
+    grid-template-columns: auto minmax(0, 1fr) auto auto;
+  }
+
+  .github-account-visibility,
+  .github-account-controls {
+    grid-column: auto;
+  }
+
   .pinned-repository {
     grid-template-columns: auto minmax(0, 1fr) auto;
   }
 
   .pin-controls {
     grid-column: auto;
+  }
+}
+
+
+.highlighted-page-add {
+  align-items: center;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.highlighted-page-add input {
+  min-width: 0;
+}
+
+.highlighted-pages-status {
+  min-height: 18px;
+}
+
+.highlighted-pages-status[data-state="error"] {
+  color: light-dark(#cf222e, #f85149);
+}
+
+.highlighted-pages-status[data-state="success"] {
+  color: light-dark(#1a7f37, #3fb950);
+}
+
+.highlighted-pages-settings-list {
+  display: grid;
+  gap: 8px;
+}
+
+.highlighted-page-setting {
+  align-items: center;
+  background: light-dark(#f6f8fa, #161b22);
+  border: 1px solid light-dark(#d0d7de, #3d444d);
+  border-radius: 7px;
+  cursor: grab;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: auto 44px minmax(0, 1fr);
+  padding: 8px;
+}
+
+.highlighted-page-setting.dragging {
+  cursor: grabbing;
+  opacity: 0.55;
+}
+
+.highlighted-page-setting-preview {
+  background: light-dark(#ffffff, #0d1117);
+  background-position: center;
+  background-size: cover;
+  border: 1px solid light-dark(#d0d7de, #3d444d);
+  border-radius: 6px;
+  height: 38px;
+  width: 42px;
+}
+
+.highlighted-page-setting-pdf .highlighted-page-setting-preview {
+  background-color: #ffffff;
+  background-repeat: no-repeat;
+  background-size: contain;
+}
+
+.highlighted-page-setting-copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.highlighted-page-setting-copy strong,
+.highlighted-page-setting-copy small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.highlighted-page-setting-copy small {
+  color: light-dark(#656d76, #9198a1);
+}
+
+.highlighted-page-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  grid-column: 3;
+}
+
+.highlighted-page-controls button {
+  padding: 4px 7px;
+}
+
+.highlighted-page-controls button:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.highlighted-pages-settings-empty {
+  border: 1px dashed light-dark(#d0d7de, #3d444d);
+  border-radius: 6px;
+  color: light-dark(#656d76, #9198a1);
+  font-size: 13px;
+  margin: 0;
+  padding: 12px;
+  text-align: center;
+}
+
+@media (min-width: 600px) {
+  .highlighted-page-setting {
+    grid-template-columns: auto 50px minmax(0, 1fr) auto;
+  }
+
+  .highlighted-page-setting-preview {
+    height: 42px;
+    width: 48px;
+  }
+
+  .highlighted-page-controls {
+    grid-column: auto;
+    flex-wrap: nowrap;
   }
 }

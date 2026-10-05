@@ -1,1 +1,9 @@
-importScripts("avatar-cache.js", "service-worker.js", "research-publisher-background.js");
+importScripts(
+  "avatar-cache.js",
+  "highlighted-pages-worker.js",
+  "service-worker.js",
+  "github-app-auth.js",
+  "youtube-search-worker.js",
+  "research-publisher-background.js",
+  "research-launcher-background.js"
+);

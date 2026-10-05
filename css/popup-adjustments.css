@@ -1,7 +1,8 @@
 body {
-  max-height: 640px;
+  height: 600px;
+  max-height: 600px;
   overflow-y: auto;
-  width: 480px;
+  width: 640px;
 }
 
 .popup-main {
@@ -40,7 +41,7 @@ body {
 .popup-tab-list {
   display: grid;
   gap: 4px;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .popup-tab {
@@ -108,10 +109,6 @@ body {
 }
 
 @media (min-width: 600px) {
-  body {
-    width: 480px;
-  }
-
   .popup-main {
     margin: 0;
     padding: 16px;

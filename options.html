@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>GitHub Repositories for ChatGPT</title>
+    <title>Flawless ChatGPT</title>
     <link rel="stylesheet" href="css/options.css" />
     <style>
       :root {
@@ -20,11 +20,11 @@
         box-shadow: 0 0 0 1px #a97dee;
       }
 
-      button:not(.secondary) {
+      button:not(.secondary):not(.standalone-settings-tab) {
         background: #a97dee;
       }
 
-      button:not(.secondary):hover {
+      button:not(.secondary):not(.standalone-settings-tab):hover {
         background: #9668df;
       }
 
@@ -45,12 +45,21 @@
           alt="Wizard character artwork by Squeaky_Belle"
         />
         <div>
-          <h1>GitHub Repositories for ChatGPT</h1>
+          <h1>Flawless ChatGPT</h1>
           <p>Manage repository access, dashboard layout, and ChatGPT display settings.</p>
         </div>
       </header>
 
+      <nav class="standalone-settings-tabs" role="tablist" aria-label="Settings categories">
+        <button id="settings-tab-github" class="standalone-settings-tab" type="button" role="tab" aria-selected="true" aria-controls="settings-panel-github">GitHub</button>
+        <button id="settings-tab-dashboard" class="standalone-settings-tab" type="button" role="tab" aria-selected="false" aria-controls="settings-panel-dashboard" tabindex="-1">Dashboard</button>
+        <button id="settings-tab-personalization" class="standalone-settings-tab" type="button" role="tab" aria-selected="false" aria-controls="settings-panel-personalization" tabindex="-1">Personalization</button>
+        <button id="settings-tab-deep-research" class="standalone-settings-tab" type="button" role="tab" aria-selected="false" aria-controls="settings-panel-deep-research" tabindex="-1">Research</button>
+        <button id="settings-tab-chatgpt" class="standalone-settings-tab" type="button" role="tab" aria-selected="false" aria-controls="settings-panel-chatgpt" tabindex="-1">ChatGPT</button>
+      </nav>
+
       <form id="settings-form">
+        <section id="settings-panel-github" class="standalone-settings-panel" role="tabpanel" aria-labelledby="settings-tab-github">
         <details id="token-settings" class="settings-foldout" open>
           <summary>
             <span>GitHub tokens</span>
@@ -72,19 +81,13 @@
         </details>
 
         <hr class="section-divider" />
-        <label for="owner-order">GitHub accounts</label>
-        <p class="help">Enter one GitHub username or organization name per line. The line order is the dashboard order. Additional accounts discovered through your GitHub tokens are appended automatically so every visible group can be placed exactly where you want it.</p>
-        <textarea
-          id="owner-order"
-          name="owner-order"
-          rows="6"
-          spellcheck="false"
-          placeholder="your-github-username&#10;your-organization"
-        ></textarea>
+        <label>GitHub accounts</label>
+        <p class="help">Drag accounts to set their dashboard order. Turn off “Show on dashboard” to hide an account without disconnecting it; hidden accounts remain available to repository search.</p>
+        <div id="github-accounts" class="github-accounts"></div>
+        </section>
 
-        <hr class="section-divider" />
-        <fieldset>
-          <legend>Dashboard layout</legend>
+        <section id="settings-panel-dashboard" class="standalone-settings-panel" role="tabpanel" aria-labelledby="settings-tab-dashboard" hidden>
+        <fieldset class="standalone-first-fieldset" aria-label="Dashboard settings">
           <label class="preference">
             <input id="show-repository-search" type="checkbox" checked />
             <span>
@@ -104,6 +107,13 @@
             <span>
               <strong>Show wooten.link search</strong>
               <small>Shows a reference search box at the bottom of the repository widget.</small>
+            </span>
+          </label>
+          <label class="preference">
+            <input id="show-youtube-search" type="checkbox" checked />
+            <span>
+              <strong>Show YouTube search</strong>
+              <small>Shows a YouTube search box at the bottom of the repository widget.</small>
             </span>
           </label>
 
@@ -140,8 +150,61 @@
         </fieldset>
 
         <hr class="section-divider" />
-        <fieldset>
-          <legend>ChatGPT display</legend>
+        <fieldset id="highlighted-pages-settings">
+          <legend>Highlights</legend>
+          <p class="help">Add webpages and PDF documents to a single horizontal shelf beneath the repository dashboard. PDFs show their first page. Preview details are cached locally and only refreshed when you ask.</p>
+          <div class="highlighted-page-add">
+            <input id="highlighted-page-url" type="url" inputmode="url" autocomplete="url" spellcheck="false" placeholder="https://example.com/page" aria-label="Webpage URL" />
+            <button id="add-highlighted-page" class="secondary" type="button">Add</button>
+          </div>
+          <p id="highlighted-pages-status" class="help highlighted-pages-status" role="status" aria-live="polite"></p>
+          <div id="highlighted-pages-list" class="highlighted-pages-settings-list"></div>
+        </fieldset>
+        </section>
+
+        <section id="settings-panel-personalization" class="standalone-settings-panel" role="tabpanel" aria-labelledby="settings-tab-personalization" hidden>
+        <fieldset class="standalone-first-fieldset" aria-label="Web commit personalization settings">
+          <label for="web-commit-guidance">Web commit guidance</label>
+          <p class="help">Edit the same Custom Instructions ChatGPT uses under Settings → Personalization. Flawless keeps a local <code>webCommitGuidance</code> mirror and syncs changes in either direction while ChatGPT is open.</p>
+          <textarea
+            id="web-commit-guidance"
+            rows="12"
+            spellcheck="true"
+            placeholder="For example: keep commits focused, explain material changes, and preserve my preferred co-author trailer."
+          ></textarea>
+          <p id="web-commit-guidance-status" class="help" role="status" aria-live="polite"></p>
+        </fieldset>
+        </section>
+
+        <section id="settings-panel-deep-research" class="standalone-settings-panel" role="tabpanel" aria-labelledby="settings-tab-deep-research" hidden>
+        <fieldset id="deep-research-settings" class="standalone-first-fieldset" aria-label="Research settings">
+          <label class="preference">
+            <input id="show-deep-research-tracker" type="checkbox" checked />
+            <span>
+              <strong>Show Deep Research allowance</strong>
+              <small>Shows remaining reports and the reset countdown below repositories and above the composer when the Deep Research plugin is selected.</small>
+            </span>
+          </label>
+          <label class="preference">
+            <input id="research-publisher-enabled" type="checkbox" />
+            <span>
+              <strong>Deep research publisher</strong>
+              <small>Adds an Add to repo button beside Download on completed research reports. Choose a category before importing Markdown to your linked repository.</small>
+            </span>
+          </label>
+          <p><a href="publisher-setup.html" target="_blank" rel="noopener">Link repository</a></p>
+          <div id="research-publisher-controls" hidden>
+            <button id="check-research-publisher" class="secondary" type="button">Check connection</button>
+          </div>
+          <p id="research-publisher-status" class="help" role="status" aria-live="polite"></p>
+        </fieldset>
+        </section>
+
+        <section id="settings-panel-chatgpt" class="standalone-settings-panel" role="tabpanel" aria-labelledby="settings-tab-chatgpt" hidden>
+        <fieldset class="standalone-first-fieldset" aria-label="ChatGPT display settings">
+          <label for="composer-placeholder">Composer placeholder</label>
+          <input id="composer-placeholder" type="text" placeholder="For example, Dash" aria-describedby="composer-placeholder-help" />
+          <p id="composer-placeholder-help" class="help">Choose the text shown in the empty chat input. Leave blank to use ChatGPT’s default.</p>
           <label class="preference">
             <input id="auto-focus-composer" type="checkbox" checked />
             <span>
@@ -150,10 +213,31 @@
             </span>
           </label>
           <label class="preference">
+            <input id="preserve-scroll-position-on-send" type="checkbox" />
+            <span>
+              <strong>Keep scroll position when sending</strong>
+              <small>Prevents ChatGPT from jumping to the bottom after you send a message, keeping your current reading position.</small>
+            </span>
+          </label>
+          <label class="preference">
+            <input id="hide-message-queue-button" type="checkbox" checked />
+            <span>
+              <strong>Hide Add to queue button</strong>
+              <small>Hides the dedicated composer button for queuing the current draft. Other queue behavior still works while this is hidden.</small>
+            </span>
+          </label>
+          <label class="preference">
+            <input id="block-voice-prompts" type="checkbox" />
+            <span>
+              <strong>Block voice popups</strong>
+              <small>Hides banners and popups promoting voice mode, including “Try voice.”</small>
+            </span>
+          </label>
+          <label class="preference">
             <input id="hide-dictation-button" type="checkbox" />
             <span>
-              <strong>Hide dictation microphone</strong>
-              <small>Hides the microphone used for dictation without hiding ChatGPT's voice-mode button.</small>
+              <strong>Hide microphone and voice buttons</strong>
+              <small>Hides the dictation microphone and ChatGPT's Start Voice / voice-mode button.</small>
             </span>
           </label>
           <label class="preference">
@@ -164,24 +248,19 @@
             </span>
           </label>
           <label class="preference">
+            <input id="hide-share-label" type="checkbox" />
+            <span>
+              <strong>Hide Share label</strong>
+              <small>Hides the “Share” text beside the chat's share icon.</small>
+            </span>
+          </label>
+          <label class="preference">
             <input id="disable-work-mode" type="checkbox" />
             <span>
               <strong>Disable Work mode</strong>
               <small>Hides the Work option and prevents Work mode from being selected.</small>
             </span>
           </label>
-          <label class="preference">
-            <input id="research-publisher-enabled" type="checkbox" />
-            <span>
-              <strong>Deep research publisher</strong>
-              <small>Adds an Add to repo button beside Download on completed research reports. Publishes Markdown to your linked repository.</small>
-            </span>
-          </label>
-          <div id="research-publisher-controls" hidden>
-            <p><a href="publisher-setup.html" target="_blank" rel="noopener">Link repository</a></p>
-            <button id="check-research-publisher" class="secondary" type="button">Check connection</button>
-          </div>
-          <p id="research-publisher-status" class="help" role="status" aria-live="polite"></p>
           <label class="preference">
             <input id="show-spellcheck-gpt-launcher" type="checkbox" />
             <span>
@@ -190,10 +269,31 @@
             </span>
           </label>
           <label class="preference">
+            <input id="show-2048-launcher" type="checkbox" />
+            <span>
+              <strong>Show 2048 game button</strong>
+              <small>Shows the 2048 launcher in the repository dashboard footer.</small>
+            </span>
+          </label>
+          <label class="preference">
             <input id="strip-utm-tracking" type="checkbox" checked />
             <span>
               <strong>Strip UTM tracking from links</strong>
               <small>Removes utm_* query parameters from links shown by ChatGPT while preserving other URL data.</small>
+            </span>
+          </label>
+          <label class="preference">
+            <input id="open-external-links-in-new-tabs" type="checkbox" checked />
+            <span>
+              <strong>Open links in new tabs</strong>
+              <small>Opens external links, including search references, in a new tab. Enabled by default.</small>
+            </span>
+          </label>
+          <label class="preference">
+            <input id="open-external-links-in-split-view" type="checkbox" />
+            <span>
+              <strong>Open links beside the response</strong>
+              <small>Shows a website preview on the right instead of opening a tab. Sites that block previews can be opened in a new tab.</small>
             </span>
           </label>
           <label class="preference">
@@ -210,7 +310,43 @@
               <small>Hides the conversation-history rate-limit modal and restores normal scrolling.</small>
             </span>
           </label>
+          <label class="preference">
+            <input id="hide-home-suggestions" type="checkbox" />
+            <span>
+              <strong>Hide new-chat suggestions</strong>
+              <small>Hides suggestions such as Create an image, Write or edit, and Search the web. Enabled by default.</small>
+            </span>
+          </label>
+          <label class="preference">
+            <input id="hide-model-controls" type="checkbox" />
+            <span>
+              <strong>Hide model and thinking controls</strong>
+              <small>Hides model selection and reasoning controls. Enabled by default; Maximize thinking still works.</small>
+            </span>
+          </label>
+          <label class="preference">
+            <input id="hide-conversation-feedback-prompt" type="checkbox" checked />
+            <span>
+              <strong>Hide conversation feedback prompt</strong>
+              <small>Hides the Is this conversation helpful so far? thumbs up/down prompt.</small>
+            </span>
+          </label>
+          <label class="preference">
+            <input id="hide-chatgpt-disclaimer" type="checkbox" checked />
+            <span>
+              <strong>Hide “ChatGPT can make mistakes” notice</strong>
+              <small>Hides the notice below the composer.</small>
+            </span>
+          </label>
+          <label class="preference">
+            <input id="hide-cookie-preferences" type="checkbox" />
+            <span>
+              <strong>Hide Cookie preferences link</strong>
+              <small>Hides the Cookie preferences link at the bottom of ChatGPT.</small>
+            </span>
+          </label>
         </fieldset>
+        </section>
 
         <p id="status" role="status" aria-live="polite">Changes save automatically.</p>
       </form>
@@ -235,6 +371,20 @@
         <button class="secondary remove-token" type="button" aria-label="Remove GitHub token">Remove</button>
       </div>
     </template>
+    <template id="github-account-template">
+      <div class="github-account" draggable="true">
+        <span class="drag-handle" aria-hidden="true">⋮⋮</span>
+        <code></code>
+        <label class="github-account-visibility">
+          <input class="github-account-visible" type="checkbox" checked />
+          <span>Show on dashboard</span>
+        </label>
+        <div class="github-account-controls">
+          <button class="secondary move-account-up" type="button" aria-label="Move account up">↑</button>
+          <button class="secondary move-account-down" type="button" aria-label="Move account down">↓</button>
+        </div>
+      </div>
+    </template>
     <template id="pinned-repository-template">
       <div class="pinned-repository" draggable="true">
         <span class="drag-handle" aria-hidden="true">⋮⋮</span>
@@ -246,9 +396,28 @@
         </div>
       </div>
     </template>
+    <template id="highlighted-page-template">
+      <div class="highlighted-page-setting" draggable="true">
+        <span class="drag-handle" aria-hidden="true">⋮⋮</span>
+        <div class="highlighted-page-setting-preview" aria-hidden="true"></div>
+        <div class="highlighted-page-setting-copy">
+          <strong></strong>
+          <small></small>
+        </div>
+        <div class="highlighted-page-controls">
+          <button class="secondary move-highlight-up" type="button" aria-label="Move highlighted webpage up">↑</button>
+          <button class="secondary move-highlight-down" type="button" aria-label="Move highlighted webpage down">↓</button>
+          <button class="secondary rename-highlight" type="button">Rename</button>
+          <button class="secondary refresh-highlight" type="button">Refresh</button>
+          <button class="secondary remove-highlight" type="button">Remove</button>
+        </div>
+      </div>
+    </template>
     <script src="js/token-vault.js"></script>
     <script src="js/options.js"></script>
+    <script src="js/highlighted-pages-options.js"></script>
     <script src="js/research-publisher-options.js"></script>
+    <script src="js/web-commit-guidance.js"></script>
     <script src="js/owner-grid-options.js"></script>
     <script src="js/options-page.js"></script>
     <script src="js/autofocus-options.js"></script>
