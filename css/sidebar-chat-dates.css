@@ -1,0 +1,12 @@
+a[href*="/c/"] > .ghrc-chat-date {
+  align-self: center;
+  color: var(--text-tertiary, var(--text-secondary, currentColor));
+  flex: 0 0 auto;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  margin-inline-end: 7px;
+  opacity: 0.58;
+  pointer-events: none;
+  white-space: nowrap;
+}

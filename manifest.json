@@ -47,6 +47,7 @@
       ],
       "js": [
         "js/clipboard-utm-sanitizer.js",
+        "js/sidebar-chat-dates-main.js",
         "js/chatgpt-route-events.js",
         "js/sidebar-tab-state.js",
         "js/deep-research-usage.js",
@@ -64,6 +65,7 @@
         "css/external-links.css",
         "css/compact-header.css",
         "css/chat-display.css",
+        "css/sidebar-chat-dates.css",
         "css/styles.css",
         "css/hide-dictation.css",
         "css/owner-grid.css",
@@ -77,6 +79,7 @@
         "js/compact-header.js",
         "js/2048-keyboard.js",
         "js/collapse-sidebar.js",
+        "js/sidebar-chat-dates.js",
         "js/dashboard-visibility.js",
         "js/disable-work-mode.js",
         "js/chat-display.js",
