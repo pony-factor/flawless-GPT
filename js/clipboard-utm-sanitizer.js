@@ -1,5 +1,8 @@
 (() => {
   const STRIP_UTM_TRACKING_ATTR = "data-ghrc-strip-utm-tracking";
+  const STRIP_COPIED_BOLD_ATTR = "data-ghrc-strip-copied-bold";
+  const NORMALIZE_COPIED_QUOTES_ATTR = "data-ghrc-normalize-copied-quotes";
+  const UNDERSCORE_COPIED_ITALICS_ATTR = "data-ghrc-underscore-copied-italics";
   const URL_PATTERN = /https?:\/\/[^\s<>"'`\])}]+/gi;
   const CONTENT_REFERENCE_PATTERN = /:chatgpt-content-reference\{[^}\r\n]*\}/g;
 
@@ -28,6 +31,60 @@
     return value
       .replace(CONTENT_REFERENCE_PATTERN, "")
       .replace(URL_PATTERN, stripTrackingFromUrlValue);
+  }
+
+  function stripMarkdownBold(value) {
+    if (typeof value !== "string" || !value) return value;
+    return value
+      .replace(/\*\*(?=\S)([^\r\n]*?\S)\*\*/g, "$1")
+      .replace(/__(?=\S)([^\r\n]*?\S)__/g, "$1");
+  }
+
+  function normalizeSmartQuotes(value) {
+    if (typeof value !== "string" || !value) return value;
+    return value
+      .replace(/[\u2018\u2019\u201A\u201B]/g, "'")
+      .replace(/[\u201C\u201D\u201E\u201F]/g, '"');
+  }
+
+  function normalizeMarkdownItalics(value) {
+    if (typeof value !== "string" || !value) return value;
+    return value.replace(/(^|[^*])\*(?!\*)([^*\r\n]+?)\*(?!\*)/g, "$1_$2_");
+  }
+
+  function normalizedCopyOptions(options = {}) {
+    if (typeof options === "boolean") {
+      return {
+        stripTracking: options,
+        stripBold: true,
+        plainQuotes: true,
+        underscoreItalics: true,
+      };
+    }
+    const source = options && typeof options === "object" ? options : {};
+    return {
+      stripTracking: source.stripTracking !== false,
+      stripBold: source.stripBold !== false,
+      plainQuotes: source.plainQuotes !== false,
+      underscoreItalics: source.underscoreItalics !== false,
+    };
+  }
+
+  function sanitizeCopiedHtml(value, options = {}) {
+    if (typeof value !== "string" || !value) return value;
+    const settings = normalizedCopyOptions(options);
+    let result = value;
+    if (settings.stripBold) {
+      result = result.replace(/<\/?(?:strong|b)\b[^>]*>/gi, "");
+    }
+    if (settings.underscoreItalics) {
+      result = result
+        .replace(/<(?:em|i)\b[^>]*>/gi, "_")
+        .replace(/<\/(?:em|i)>/gi, "_");
+    }
+    if (settings.plainQuotes) result = normalizeSmartQuotes(result);
+    if (settings.stripTracking) result = stripTrackingFromText(result);
+    return result;
   }
 
   function normalizeReferenceLabel(label) {
@@ -87,23 +144,45 @@
       .join(lineEnding);
   }
 
-  function sanitizeCopiedText(value, stripTracking = true) {
-    const inlineMarkdown = convertReferenceLinksToInlineMarkdown(value);
-    return stripTracking ? stripTrackingFromText(inlineMarkdown) : inlineMarkdown;
+  function sanitizeCopiedText(value, options = {}) {
+    const settings = normalizedCopyOptions(options);
+    let result = convertReferenceLinksToInlineMarkdown(value);
+    if (settings.stripBold) result = stripMarkdownBold(result);
+    if (settings.underscoreItalics) result = normalizeMarkdownItalics(result);
+    if (settings.plainQuotes) result = normalizeSmartQuotes(result);
+    if (settings.stripTracking) result = stripTrackingFromText(result);
+    return result;
   }
 
   if (typeof module !== "undefined" && module.exports) {
     module.exports = {
       stripTrackingFromUrlValue,
       stripTrackingFromText,
+      stripMarkdownBold,
+      normalizeSmartQuotes,
+      normalizeMarkdownItalics,
       convertReferenceLinksToInlineMarkdown,
       sanitizeCopiedText,
+      sanitizeCopiedHtml,
     };
     return;
   }
 
+  function attributeEnabled(name) {
+    return document.documentElement?.getAttribute(name) !== "false";
+  }
+
   function trackingRemovalEnabled() {
-    return document.documentElement?.getAttribute(STRIP_UTM_TRACKING_ATTR) !== "false";
+    return attributeEnabled(STRIP_UTM_TRACKING_ATTR);
+  }
+
+  function copyFormattingOptions() {
+    return {
+      stripTracking: trackingRemovalEnabled(),
+      stripBold: attributeEnabled(STRIP_COPIED_BOLD_ATTR),
+      plainQuotes: attributeEnabled(NORMALIZE_COPIED_QUOTES_ATTR),
+      underscoreItalics: attributeEnabled(UNDERSCORE_COPIED_ITALICS_ATTR),
+    };
   }
 
   function patchMethod(target, name, createReplacement) {
@@ -139,26 +218,26 @@
 
   if (clipboardPrototype) {
     patchMethod(clipboardPrototype, "writeText", (original) => function writeText(text) {
-      const value = sanitizeCopiedText(String(text), trackingRemovalEnabled());
+      const value = sanitizeCopiedText(String(text), copyFormattingOptions());
       return original.call(this, value);
     });
 
     if (typeof ClipboardItem !== "undefined" && typeof Blob !== "undefined") {
       patchMethod(clipboardPrototype, "write", (original) => function write(items) {
         try {
-          const stripTracking = trackingRemovalEnabled();
+          const options = copyFormattingOptions();
           const sanitizedItems = Array.from(items, (item) => {
             const data = {};
             for (const type of item.types) {
               const blob = item.getType(type);
               if (type === "text/plain") {
                 data[type] = blob.then(async (value) => new Blob(
-                  [sanitizeCopiedText(await value.text(), stripTracking)],
+                  [sanitizeCopiedText(await value.text(), options)],
                   { type: value.type || type },
                 ));
-              } else if (type === "text/html" && stripTracking) {
+              } else if (type === "text/html") {
                 data[type] = blob.then(async (value) => new Blob(
-                  [stripTrackingFromText(await value.text())],
+                  [sanitizeCopiedHtml(await value.text(), options)],
                   { type: value.type || type },
                 ));
               } else {

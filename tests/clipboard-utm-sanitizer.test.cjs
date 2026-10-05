@@ -8,8 +8,12 @@ const source = fs.readFileSync(sourcePath, 'utf8');
 const {
   stripTrackingFromUrlValue,
   stripTrackingFromText,
+  stripMarkdownBold,
+  normalizeSmartQuotes,
+  normalizeMarkdownItalics,
   convertReferenceLinksToInlineMarkdown,
   sanitizeCopiedText,
+  sanitizeCopiedHtml,
 } = require(sourcePath);
 
 test('removes ChatGPT UTM tracking from copied Markdown links', () => {
@@ -110,6 +114,59 @@ test('leaves non-tracking URLs and surrounding copy unchanged', () => {
   assert.equal(stripTrackingFromText(input), input);
 });
 
+test('strips Markdown bold while preserving its text', () => {
+  assert.equal(
+    stripMarkdownBold('A **bold** word and __another bold phrase__.'),
+    'A bold word and another bold phrase.',
+  );
+});
+
+test('converts smart quotes and apostrophes to plain ASCII', () => {
+  assert.equal(
+    normalizeSmartQuotes('“Quoted” and ‘apostrophe’'),
+    '"Quoted" and \'apostrophe\'',
+  );
+});
+
+test('normalizes single-star Markdown italics to underscores', () => {
+  assert.equal(
+    normalizeMarkdownItalics('*italic* and **bold**'),
+    '_italic_ and **bold**',
+  );
+});
+
+test('applies copied-response formatting defaults together', () => {
+  assert.equal(
+    sanitizeCopiedText('“**Bold** and *italic*”'),
+    '"Bold and _italic_"',
+  );
+});
+
+test('lets copied-response formatting transformations be disabled independently', () => {
+  const input = '“**Bold** and *italic*”';
+  assert.equal(
+    sanitizeCopiedText(input, {
+      stripTracking: false,
+      stripBold: false,
+      plainQuotes: false,
+      underscoreItalics: false,
+    }),
+    input,
+  );
+});
+
+test('removes rich-text bold and writes rich italics as underscore syntax', () => {
+  assert.equal(
+    sanitizeCopiedHtml('<p><strong>“Bold”</strong> and <em>italic</em></p>', {
+      stripTracking: false,
+      stripBold: true,
+      plainQuotes: true,
+      underscoreItalics: true,
+    }),
+    '<p>"Bold" and _italic_</p>',
+  );
+});
+
 function runtimeFixture(settingValue, { clipboardAvailable = true } = {}) {
   const writes = [];
   const opened = [];
@@ -145,6 +202,12 @@ test('intercepts ChatGPT clipboard writes when the preference is enabled', async
   const fixture = runtimeFixture('true');
   await fixture.clipboard.writeText('https://example.com/?utm_source=chatgpt.com&id=7');
   assert.deepEqual(fixture.writes, ['https://example.com/?id=7']);
+});
+
+test('normalizes copied response formatting in the clipboard runtime', async () => {
+  const fixture = runtimeFixture('true');
+  await fixture.clipboard.writeText('“**Bold** and *italic*”');
+  assert.deepEqual(fixture.writes, ['"Bold and _italic_"']);
 });
 
 test('converts copied reference links in the clipboard runtime', async () => {
