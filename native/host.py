@@ -8,149 +8,14 @@ import re
 import struct
 import subprocess
 import sys
-import shutil
 import tempfile
 import unicodedata
 from urllib.parse import urlparse, quote
 
 MAX_MESSAGE = 8 * 1024 * 1024
 MAX_REPORT = 4 * 1024 * 1024
-MAX_PERSONALIZATION = 512 * 1024
-START = "<!-- scm-toolkit-chatgpt-instructions:start -->"
-END = "<!-- scm-toolkit-chatgpt-instructions:end -->"
-CODEX_WEB_COAUTHOR = "Co-authored-by: Codex Web <noreply@openai.com>"
-COAUTHOR_INSTRUCTION = (
-    "When creating Git commits through web or GitHub tools, append this trailer after a blank line:\n"
-    + CODEX_WEB_COAUTHOR
-)
-
-
-
 class PublishError(Exception):
     pass
-
-
-def codex_agents_path():
-    root = Path(os.environ.get("FLAWLESS_CODEX_HOME") or os.environ.get("CODEX_HOME") or "~/.codex").expanduser()
-    return root / "AGENTS.md"
-
-
-def managed_instruction_block(instructions, web_codex_coauthor):
-    parts = [START]
-    text = str(instructions or "").strip()
-    if text:
-        parts.append(text)
-    if web_codex_coauthor:
-        if text:
-            parts.append("")
-        parts.append(COAUTHOR_INSTRUCTION)
-    parts.append(END)
-    return "\n".join(parts)
-
-
-def sync_codex_instructions(instructions, web_codex_coauthor, destination=None):
-    path = Path(destination) if destination is not None else codex_agents_path()
-    existing = path.read_text() if path.exists() else ""
-    pattern = re.compile(re.escape(START) + r".*?" + re.escape(END), flags=re.DOTALL)
-    unmanaged = pattern.sub("", existing).strip()
-    include = bool(str(instructions or "").strip()) or bool(web_codex_coauthor)
-    pieces = [piece for piece in (
-        unmanaged,
-        managed_instruction_block(instructions, web_codex_coauthor) if include else "",
-    ) if piece]
-    updated = "\n\n".join(pieces)
-    if updated:
-        updated += "\n"
-    if updated != existing:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(updated)
-    return path
-
-
-def read_codex_settings(destination=None):
-    path = Path(destination) if destination is not None else codex_agents_path()
-    if not path.exists():
-        return {"instructions": "", "webCodexCoauthor": False}
-    match = re.search(re.escape(START) + r"(.*?)" + re.escape(END), path.read_text(), flags=re.DOTALL)
-    if not match:
-        return {"instructions": "", "webCodexCoauthor": False}
-    body = match.group(1).strip()
-    if body == COAUTHOR_INSTRUCTION:
-        return {"instructions": "", "webCodexCoauthor": True}
-    suffix = "\n\n" + COAUTHOR_INSTRUCTION
-    if body.endswith(suffix):
-        return {"instructions": body[:-len(suffix)].strip(), "webCodexCoauthor": True}
-    return {"instructions": body, "webCodexCoauthor": False}
-
-
-def _gpg_fingerprint(secret_key, gpg):
-    result = subprocess.run(
-        [gpg, "--batch", "--with-colons", "--import-options", "show-only", "--import"],
-        input=secret_key, capture_output=True, text=True,
-    )
-    if result.returncode != 0:
-        raise PublishError(result.stderr.strip() or "Unable to inspect the PGP secret key.")
-    saw_secret = False
-    for line in result.stdout.splitlines():
-        fields = line.split(":")
-        if fields and fields[0] in {"sec", "ssb"}:
-            saw_secret = True
-            continue
-        if saw_secret and fields and fields[0] == "fpr" and len(fields) > 9 and fields[9]:
-            return fields[9]
-    raise PublishError("The supplied PGP material did not contain a secret signing key.")
-
-
-def import_pgp_secret_key(secret_key):
-    secret = str(secret_key or "").strip()
-    if not secret:
-        return None
-    gpg = shutil.which("gpg")
-    git_path = shutil.which("git")
-    if not gpg:
-        raise PublishError("GnuPG was not found on PATH.")
-    if not git_path:
-        raise PublishError("Git was not found on PATH.")
-    fingerprint = _gpg_fingerprint(secret, gpg)
-    imported = subprocess.run([gpg, "--batch", "--import"], input=secret, capture_output=True, text=True)
-    if imported.returncode != 0:
-        raise PublishError(imported.stderr.strip() or "Unable to import the PGP secret key.")
-    for key, value in (
-        ("user.signingkey", fingerprint),
-        ("commit.gpgsign", "true"),
-        ("gpg.format", "openpgp"),
-    ):
-        result = subprocess.run(
-            [git_path, "config", "--global", "--replace-all", key, value],
-            capture_output=True, text=True,
-        )
-        if result.returncode != 0:
-            raise PublishError(result.stderr.strip() or f"Unable to configure {key}.")
-    return fingerprint
-
-
-def handle_codex(message):
-    action = message.get("action")
-    if action == "codex-settings-status":
-        settings = read_codex_settings()
-        return {"ok": True, "agentsPath": str(codex_agents_path()), **settings}
-    if action != "sync-codex-settings":
-        return None
-    if set(message) != {"action", "instructions", "webCodexCoauthor", "pgpSecretKey"}:
-        raise PublishError("Invalid Codex personalization request.")
-    instructions = message["instructions"]
-    coauthor = message["webCodexCoauthor"]
-    secret = message["pgpSecretKey"]
-    if (not isinstance(instructions, str) or not isinstance(coauthor, bool)
-            or not isinstance(secret, str) or "\x00" in instructions or "\x00" in secret
-            or len(instructions.encode()) > MAX_PERSONALIZATION
-            or len(secret.encode()) > MAX_PERSONALIZATION):
-        raise PublishError("Invalid or oversized Codex personalization settings.")
-    path = sync_codex_instructions(instructions, coauthor)
-    fingerprint = import_pgp_secret_key(secret)
-    return {"ok": True, "agentsPath": str(path), "signingKey": fingerprint}
-
-
 
 
 def git(repo, *args, input=None):
@@ -266,9 +131,6 @@ def publish(message, config):
 def handle(message, config, origin):
     if origin != config.get("origin") or not isinstance(message, dict):
         raise PublishError("Unknown extension.")
-    codex_result = handle_codex(message)
-    if codex_result is not None:
-        return codex_result
     if not config.get("repo") or not config.get("branch"):
         raise PublishError("Use Link repository to update the local bridge for direct publishing.")
     if message == {"action": "status"}:
