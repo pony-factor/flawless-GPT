@@ -141,3 +141,38 @@ test('queue navigation catches invalidation after its storage read starts', asyn
   assert.equal(await p.evaluate(() => __ghrcExtensionContext.active()), false);
   await p.close();
 });
+
+for (const pendingAction of ['get', 'set']) {
+  test(`guidance sync cancels a pending ${pendingAction} bridge quietly on reload`, async () => {
+    const p = await fixture();
+    await p.evaluate(pendingAction => {
+      window.bridgeRequests = [];
+      window.guidanceWrites = 0;
+      chrome.storage.local.get = async () => ({
+        webCommitGuidance: 'Local', webCommitGuidanceLastSynced: 'Remote',
+      });
+      chrome.storage.local.set = async () => { guidanceWrites++; };
+      window.addEventListener('message', event => {
+        const message = event.data;
+        if (message?.channel !== 'flawless-web-commit-guidance' || message.direction !== 'request') return;
+        bridgeRequests.push(message.action);
+        if (message.action === pendingAction) return;
+        window.postMessage({ ...message, direction: 'response', ok: true, guidance: 'Remote' }, location.origin);
+      });
+    }, pendingAction);
+    await p.addScriptTag({ content: read('js/web-commit-guidance-sync.js') });
+    await p.waitForFunction(action => bridgeRequests.includes(action), pendingAction);
+    await p.evaluate(() => {
+      chrome.runtime = undefined;
+      __ghrcExtensionContext.active();
+      window.dispatchEvent(new Event('focus'));
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+    await p.waitForTimeout(100);
+    assert.deepEqual(p.errors, []);
+    assert.deepEqual(p.warnings, []);
+    assert.equal(await p.evaluate(() => guidanceWrites), 0);
+    assert.deepEqual(await p.evaluate(() => bridgeRequests), pendingAction === 'get' ? ['get'] : ['get', 'set']);
+    await p.close();
+  });
+}

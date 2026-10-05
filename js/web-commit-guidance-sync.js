@@ -19,6 +19,7 @@
   let pollTimer = null;
 
   function bridge(action, value = "") {
+    if (!context.active()) return Promise.resolve(null);
     const id = `web-commit-guidance-${Date.now()}-${++requestCounter}`;
     return new Promise((resolve, reject) => {
       function cleanup() {
@@ -28,7 +29,8 @@
       }
       function cancel() {
         cleanup();
-        reject(new Error("Extension context invalidated."));
+        // Shutdown is expected when the extension reloads, not a sync failure.
+        resolve(null);
       }
       const timeout = setTimeout(() => {
         cleanup();
@@ -63,6 +65,7 @@
   }
 
   async function setStatus(message, state = "") {
+    if (!context.active()) return;
     await chrome.storage.local.set({
       [STATUS_KEY]: { message, state, updatedAt: Date.now() },
     });
@@ -80,6 +83,7 @@
 
   async function pushLocal(local, accountId) {
     const updated = await bridge("set", local);
+    if (!updated || !context.active()) return;
     const canonical = updated.guidance;
     suppressedLocalValue = canonical;
     await chrome.storage.local.set({
@@ -102,12 +106,13 @@
     syncRunning = true;
     try {
       const remoteState = await bridge("get");
-      if (!context.active()) return;
+      if (!remoteState || !context.active()) return;
       const stored = await chrome.storage.local.get({
         [GUIDANCE_KEY]: null,
         [LAST_SYNCED_KEY]: null,
         [ACCOUNT_KEY]: null,
       });
+      if (!context.active()) return;
       const local = typeof stored[GUIDANCE_KEY] === "string" ? stored[GUIDANCE_KEY] : null;
       const lastSynced = typeof stored[LAST_SYNCED_KEY] === "string"
         ? stored[LAST_SYNCED_KEY]

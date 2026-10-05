@@ -23,7 +23,7 @@ function fixture({ get, set, bridgeError, delayedBridge = false } = {}) {
     removeEventListener(type, fn) { listeners.get(type)?.delete(fn); },
     postMessage(message) {
       calls.push(message.action);
-      if (delayedBridge) return;
+      if (delayedBridge === true || delayedBridge === message.action) return;
       queueMicrotask(() => {
         for (const fn of listeners.get("message") || []) fn({ source: window, data: {
           ...message, direction: "response", ok: !bridgeError,
@@ -100,6 +100,33 @@ test("reload cancels an outstanding bridge and prevents future polling", async (
   await flush();
   assertStopped(state);
   assert.deepEqual(state.calls, ["get"]);
+});
+
+test("reload cancels a pending push without writing guidance or status", async () => {
+  const state = fixture({
+    get: () => ({ webCommitGuidance: "Local", webCommitGuidanceLastSynced: "Remote" }),
+    delayedBridge: "set",
+  });
+  await flush();
+  assert.deepEqual(state.calls, ["get", "get", "set"]);
+  state.chrome.runtime = undefined;
+  state.sandbox.__ghrcExtensionContext.active();
+  await flush();
+  assertStopped(state);
+  assert.equal(state.stored.webCommitGuidance, "Remote");
+  assert.equal(state.stored.webCommitGuidanceSyncStatus, undefined);
+});
+
+test("a storage read resolving after reload does not start a write", async () => {
+  let resolveGet;
+  const state = fixture({ get: () => new Promise((resolve) => { resolveGet = resolve; }) });
+  await flush();
+  state.chrome.runtime = undefined;
+  state.sandbox.__ghrcExtensionContext.active();
+  resolveGet({ webCommitGuidance: null });
+  await flush();
+  assertStopped(state);
+  assert.deepEqual(state.calls, ["get", "get"]);
 });
 
 test("ordinary bridge failures still record an error and allow polling", async () => {
