@@ -6,6 +6,7 @@
   const SESSION_STORAGE_KEY = "encryptedGithubAppSessionV1";
   const CLIENT_ID_STORAGE_KEY = "githubAppClientId";
   const APP_SLUG_STORAGE_KEY = "githubAppSlug";
+  const AUTH_SERVICE_URL = "http://127.0.0.1:8787";
   const REPOSITORY_CACHE_KEY = "repositoryPayloadCacheV1";
   const AUTH_MARKER_KEY = "githubTokens";
   const IV_LENGTH = 12;
@@ -146,12 +147,20 @@
     });
   }
 
-  async function saveSession(session) {
-    await chrome.storage.local.set({
+  async function saveSession(
+    session,
+    { invalidateRepositories = true, notifyAuthChange = true } = {},
+  ) {
+    const updates = {
       [SESSION_STORAGE_KEY]: await encryptSession(session),
-      [AUTH_MARKER_KEY]: [{ githubApp: true, revision: crypto.randomUUID() }],
-    });
-    await chrome.storage.local.remove(REPOSITORY_CACHE_KEY);
+    };
+    if (notifyAuthChange) {
+      updates[AUTH_MARKER_KEY] = [{ githubApp: true, revision: crypto.randomUUID() }];
+    }
+    await chrome.storage.local.set(updates);
+    if (invalidateRepositories) {
+      await chrome.storage.local.remove(REPOSITORY_CACHE_KEY);
+    }
   }
 
   async function readStoredSession() {
@@ -218,15 +227,21 @@
       throw new Error("GitHub App Client ID changed. Reconnect GitHub.");
     }
 
-    const payload = await postOAuth("https://github.com/login/oauth/access_token", {
-      client_id: clientId,
-      grant_type: "refresh_token",
-      refresh_token: session.refreshToken,
-    });
+    const payload = session.authMethod === "web_flow"
+      ? await backendRequest("/refresh", { refresh_token: session.refreshToken })
+      : await postOAuth("https://github.com/login/oauth/access_token", {
+        client_id: clientId,
+        grant_type: "refresh_token",
+        refresh_token: session.refreshToken,
+      });
     if (payload.error) throw new Error(payload.error_description || payload.error);
 
     const refreshed = sessionFromTokenPayload(payload, clientId, session);
-    await saveSession(refreshed);
+    refreshed.authMethod = session.authMethod;
+    await saveSession(refreshed, {
+      invalidateRepositories: false,
+      notifyAuthChange: false,
+    });
     return refreshed;
   }
 
@@ -257,67 +272,59 @@
     return typeof profile.login === "string" ? profile.login : "";
   }
 
-  async function requestDeviceCode(clientId) {
-    const payload = await postOAuth("https://github.com/login/device/code", { client_id: clientId });
-    if (payload.error) throw new Error(payload.error_description || payload.error);
-    if (!payload.device_code || !payload.user_code || !payload.verification_uri) {
-      throw new Error("GitHub did not return a complete device authorization challenge.");
+  async function backendRequest(path, body) {
+    let response;
+    try {
+      response = await fetch(`${AUTH_SERVICE_URL}${path}`, body ? {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      } : {});
+    } catch {
+      throw new Error("GitHub login service is unavailable. Start the local login service, then try again.");
     }
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.error || "GitHub login could not complete.");
     return payload;
   }
 
-  function wait(milliseconds) {
-    return new Promise((resolve) => setTimeout(resolve, milliseconds));
+  function randomValue() {
+    return bytesToBase64(crypto.getRandomValues(new Uint8Array(32)))
+      .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
   }
 
-  async function completeDeviceFlow(device, clientId, onProgress = () => {}) {
-    const deadline = Date.now() + (Number(device.expires_in || 900) * 1000);
-    let intervalSeconds = Math.max(5, Number(device.interval || 5));
-
-    while (Date.now() < deadline) {
-      await wait(intervalSeconds * 1000);
-      const payload = await postOAuth("https://github.com/login/oauth/access_token", {
-        client_id: clientId,
-        device_code: device.device_code,
-        grant_type: "urn:ietf:params:oauth:grant-type:device_code",
-      });
-
-      if (payload.access_token) {
-        const session = sessionFromTokenPayload(payload, clientId);
-        session.login = await fetchCurrentLogin(session.accessToken);
-        await saveSession(session);
-        if (globalThis.TokenVault?.clearTokens) await globalThis.TokenVault.clearTokens();
-        await chrome.storage.local.set({
-          [AUTH_MARKER_KEY]: [{ githubApp: true, revision: crypto.randomUUID() }],
-        });
-        return session;
-      }
-
-      if (payload.error === "authorization_pending") {
-        onProgress("Waiting for GitHub authorization…");
-        continue;
-      }
-      if (payload.error === "slow_down") {
-        intervalSeconds += 5;
-        continue;
-      }
-      if (payload.error === "access_denied") throw new Error("GitHub authorization was cancelled.");
-      if (payload.error === "expired_token" || payload.error === "token_expired") {
-        throw new Error("The GitHub authorization code expired. Try connecting again.");
-      }
-      if (payload.error) throw new Error(payload.error_description || payload.error);
-    }
-
-    throw new Error("The GitHub authorization code expired. Try connecting again.");
-  }
-
-  async function connect(onChallenge = () => {}, onProgress = () => {}) {
+  async function connect() {
     const config = await loadConfig();
-    if (!config.clientId) throw new Error("Add the GitHub App Client ID in developer setup first.");
+    const health = await backendRequest("/health");
+    if (!health.configured) throw new Error("GitHub login needs setup. Configure the app's client secret in the local login service.");
+    if (health.clientId !== config.clientId) throw new Error("The login service is configured for a different GitHub App.");
 
-    const device = await requestDeviceCode(config.clientId);
-    onChallenge(device);
-    return completeDeviceFlow(device, config.clientId, onProgress);
+    const state = randomValue();
+    const verifier = randomValue();
+    const digest = await crypto.subtle.digest("SHA-256", encoder.encode(verifier));
+    const challenge = bytesToBase64(new Uint8Array(digest)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+    const redirectUri = chrome.identity.getRedirectURL("github");
+    const login = new URL(`${AUTH_SERVICE_URL}/login`);
+    login.search = new URLSearchParams({ extension_id: chrome.runtime.id, state, code_challenge: challenge });
+    let redirected;
+    try {
+      redirected = await chrome.identity.launchWebAuthFlow({ url: login.href, interactive: true });
+    } catch {
+      throw new Error("GitHub login was closed or could not open. Please try again.");
+    }
+    const callback = new URL(redirected);
+    const expected = new URL(redirectUri);
+    if (callback.origin !== expected.origin || callback.pathname !== expected.pathname
+      || callback.searchParams.get("state") !== state) throw new Error("GitHub login returned an invalid callback. Please try again.");
+    if (callback.searchParams.has("error")) throw new Error("GitHub authorization was declined or could not complete. Please try again.");
+    const loginCode = callback.searchParams.get("login_code");
+    if (!loginCode) throw new Error("GitHub login did not complete. Please try again.");
+    const payload = await backendRequest("/token", { login_code: loginCode, code_verifier: verifier });
+    const session = sessionFromTokenPayload(payload, config.clientId);
+    session.authMethod = "web_flow";
+    session.login = await fetchCurrentLogin(session.accessToken);
+    await saveSession(session);
+    return session;
   }
 
   function installUrl(appSlug) {
@@ -338,7 +345,6 @@
       .github-app-linking h2 { font-size: 16px; margin: 0 0 4px; }
       .github-app-linking .github-app-summary { margin: 0 0 10px; }
       .github-app-linking .github-app-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
-      .github-app-linking .github-app-code { font: 700 20px/1.4 ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: .08em; }
       .github-app-linking details { margin-top: 10px; }
       .github-app-linking details label { display: block; margin-top: 10px; }
       .github-app-linking details input { width: 100%; }
@@ -372,11 +378,15 @@
     summary.className = "github-app-summary help";
     const help = document.createElement("p");
     help.className = "help";
-    help.textContent = "Preferred account linking. Install the app on the account or organization and choose which repositories it may read, then authorize this extension.";
+    help.textContent = "Choose which repositories the GitHub App can access, then connect your GitHub account.";
+
+    const appLink = document.createElement("a");
+    appLink.target = "_blank";
+    appLink.rel = "noopener noreferrer";
 
     const actions = document.createElement("div");
     actions.className = "github-app-actions";
-    const installButton = createButton("Install / select repositories");
+    const installButton = createButton("Choose repositories");
     const connectButton = createButton("Connect GitHub", "");
     const disconnectButton = createButton("Disconnect");
     actions.append(installButton, connectButton, disconnectButton);
@@ -408,7 +418,7 @@
     slugInput.placeholder = "your-app-slug";
     developer.append(developerSummary, developerHelp, clientIdLabel, clientIdInput, slugLabel, slugInput);
 
-    card.append(heading, summary, help, actions, localStatus, developer);
+    card.append(heading, appLink, summary, help, actions, localStatus, developer);
     tokenSettings.parentElement.insertBefore(card, tokenSettings);
 
     const tokenTitle = tokenSettings.querySelector("summary span:first-child");
@@ -427,6 +437,9 @@
       ]);
       clientIdInput.value = config.clientId;
       slugInput.value = config.appSlug;
+      appLink.href = config.appSlug ? `https://github.com/apps/${encodeURIComponent(config.appSlug)}` : "";
+      appLink.textContent = config.appSlug || "";
+      appLink.hidden = !config.appSlug;
       developer.open = !config.clientId || !config.appSlug;
       installButton.disabled = !config.appSlug;
       disconnectButton.disabled = !session;
@@ -460,27 +473,18 @@
     connectButton.addEventListener("click", async () => {
       await persistConfig();
       if (popup) {
-        await chrome.storage.local.set({ githubAppConnectRequested: true });
-        chrome.runtime.openOptionsPage();
+        await chrome.runtime.sendMessage({ type: "open-options", connectGithub: true });
         window.close();
         return;
       }
 
       connectButton.disabled = true;
+      showLocalStatus("Opening GitHub authorization…");
       try {
-        const session = await connect(
-          (device) => {
-            showLocalStatus(`Enter code ${device.user_code} on GitHub. A GitHub tab has been opened.`);
-            localStatus.classList.add("github-app-code");
-            void chrome.tabs.create({ url: device.verification_uri });
-          },
-          (message) => showLocalStatus(message),
-        );
-        localStatus.classList.remove("github-app-code");
-        showLocalStatus(`Connected${session.login ? ` as @${session.login}` : ""}. Legacy token credentials were cleared.`, "success");
+        const session = await connect();
+        showLocalStatus(`Connected${session.login ? ` as @${session.login}` : ""}.`, "success");
         await render();
       } catch (error) {
-        localStatus.classList.remove("github-app-code");
         showLocalStatus(error.message, "error");
       } finally {
         connectButton.disabled = false;
@@ -514,12 +518,23 @@
     const patched = Object.freeze({
       ...globalThis.TokenVault,
       __githubAppPatched: true,
-      async loadTokens() {
+      async loadTokens({ refresh = true } = {}) {
         const stored = await chrome.storage.local.get({ [SESSION_STORAGE_KEY]: null });
         if (!stored[SESSION_STORAGE_KEY]) return legacyLoadTokens();
-        const token = await getAccessToken();
+        const session = await loadSession({ refresh });
+        const token = session?.accessToken || "";
         if (!token) throw new Error("GitHub App is connected but no usable access token is available.");
-        return [{ label: "GitHub App", token }];
+        return [{
+          label: "GitHub App",
+          token,
+          cacheKey: JSON.stringify([
+            "github-app",
+            session.clientId || "",
+            session.login || "",
+            session.authMethod || "",
+          ]),
+          refreshable: true,
+        }];
       },
     });
     globalThis.TokenVault = patched;

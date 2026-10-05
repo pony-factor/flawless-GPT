@@ -12,6 +12,22 @@
   top: calc(100% + 6px);
 }
 
+@container (min-width: 821px) {
+  #github-repositories-for-chatgpt .ghrc-search-area {
+    bottom: 0;
+    pointer-events: none;
+  }
+
+  #github-repositories-for-chatgpt .ghrc-search,
+  #github-repositories-for-chatgpt .ghrc-search-results {
+    pointer-events: auto;
+  }
+
+  #github-repositories-for-chatgpt .ghrc-search-results {
+    top: calc(100% + 6px);
+  }
+}
+
 @media (max-width: 920px) {
   #github-repositories-for-chatgpt .ghrc-search-area {
     left: 135px;

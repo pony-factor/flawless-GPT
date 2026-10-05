@@ -1,0 +1,32 @@
+html[data-ghrc-hide-share-label] [data-ghrc-share-label] {
+  display: none !important;
+}
+
+/* Apply the default before asynchronous preferences and React hydration. */
+html:not([data-ghrc-show-home-suggestions]) [class~="group/home-suggestions"],
+html:not([data-ghrc-show-home-suggestions]) [class~="group/home-suggestion-list-item"],
+html:not([data-ghrc-show-home-suggestions]) div:has(> [class~="group/home-suggestions"]:only-child) {
+  display: none !important;
+}
+
+html:not([data-ghrc-show-model-controls]) button[aria-label="Select ChatGPT model"],
+html:not([data-ghrc-show-model-controls]) [data-codex-intelligence-trigger],
+html:not([data-ghrc-show-model-controls]) [data-ghrc-model-control] {
+  display: none !important;
+}
+
+html[data-ghrc-hide-conversation-feedback-prompt] [data-ghrc-conversation-feedback-prompt] {
+  display: none !important;
+}
+
+#prompt-textarea [data-ghrc-placeholder-text]::before,
+[data-composer-markdown][contenteditable="true"] [data-ghrc-placeholder-text]::before,
+#prompt-textarea[data-ghrc-placeholder-text]::before,
+[data-composer-markdown][contenteditable="true"][data-ghrc-placeholder-text]::before {
+  content: attr(data-ghrc-placeholder-text) !important;
+}
+
+html[data-ghrc-composer-placeholder] :is(#prompt-textarea, [data-composer-markdown]) [data-placeholder]::before,
+html[data-ghrc-composer-placeholder] :is(#prompt-textarea, [data-composer-markdown])[data-placeholder]::before {
+  content: var(--ghrc-composer-placeholder) !important;
+}
