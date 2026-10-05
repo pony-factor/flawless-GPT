@@ -33,6 +33,7 @@
   let queuePaused = false;
   let showQueueButton = false;
   let persistPending = Promise.resolve();
+  const pendingQueueStorageWrites = new Set();
   let queueStateRequest = null;
   let enterPending = 0;
   let enterChain = Promise.resolve();
@@ -603,6 +604,11 @@
     return queue.map(({ id, text, createdAt, attachments, mentions }) => ({ id, text, createdAt, attachments, mentions }));
   }
 
+  function queueStorageSignature(state) {
+    if (!state || typeof state !== "object") return "";
+    return JSON.stringify(Object.keys(state).sort().map((key) => [key, state[key]]));
+  }
+
   function persistQueue() {
     if (!context.active()) return Promise.resolve();
     if (saveTimer !== null) {
@@ -625,9 +631,17 @@
       else delete next[key];
       if (paused) pausedState[key] = true;
       else delete pausedState[key];
-      await chrome.storage.local.set({
-        [STORAGE_KEY]: next, [PAUSED_STORAGE_KEY]: pausedState,
-      });
+      const queueChanged = queueStorageSignature(stored[STORAGE_KEY]) !== queueStorageSignature(next);
+      const queueWriteSignature = queueStorageSignature(next);
+      if (queueChanged) pendingQueueStorageWrites.add(queueWriteSignature);
+      try {
+        await chrome.storage.local.set({
+          [STORAGE_KEY]: next, [PAUSED_STORAGE_KEY]: pausedState,
+        });
+      } catch (error) {
+        pendingQueueStorageWrites.delete(queueWriteSignature);
+        throw error;
+      }
     });
     return persistPending;
   }
@@ -1471,6 +1485,11 @@
     const nextState = changes[STORAGE_KEY].newValue;
     if (!nextState || typeof nextState !== "object") return;
     const nextQueue = normalizeQueueItems(nextState[activeKey]);
+    const queueWriteSignature = queueStorageSignature(nextState);
+    if (pendingQueueStorageWrites.delete(queueWriteSignature)) {
+      storageState = nextState;
+      return;
+    }
     if (JSON.stringify(nextQueue) === JSON.stringify(storageCopy())) return;
 
     storageState = nextState;
