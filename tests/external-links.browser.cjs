@@ -17,7 +17,12 @@ async function fixture(settings = {}) {
   await page.evaluate(settings => {
     window.settingsListeners = [];
     window.openedLinks = [];
+    window.copiedLinks = [];
     window.open = (...args) => openedLinks.push(args);
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText: async value => copiedLinks.push(value) },
+    });
     window.chrome = { storage: { local: { get: async defaults => ({ ...defaults, ...settings }) }, onChanged: { addListener: listener => settingsListeners.push(listener) } } };
   }, settings);
   await page.addStyleTag({ content: read('css/external-links.css') });
@@ -39,6 +44,11 @@ test('split preview reserves space, loads the source, and restores layout and fo
   const main = await page.locator('main').boundingBox();
   const preview = await page.locator('#ghrc-link-preview').boundingBox();
   assert.ok(main.x + main.width <= preview.x + 1);
+  const controls = page.locator('#ghrc-link-preview .ghrc-preview-control');
+  assert.equal(await controls.nth(0).getAttribute('aria-label'), 'Copy link');
+  assert.equal(await controls.nth(1).getAttribute('aria-label'), 'Open in new tab');
+  await controls.nth(0).click();
+  assert.deepEqual(await page.evaluate(() => copiedLinks), ['https://example.org/source?keep=1#section']);
   assert.equal(await page.locator('#ghrc-link-preview a').last().getAttribute('href'), 'https://example.org/source?keep=1#section');
   await page.keyboard.press('Escape');
   assert.equal(await page.locator('#ghrc-link-preview').count(), 0);
