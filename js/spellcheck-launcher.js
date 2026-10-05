@@ -1,4 +1,6 @@
 (() => {
+  const context = globalThis.__ghrcExtensionContext;
+  if (!context?.active()) return;
   const LAUNCHER_ID = "ghrc-spellcheck-gpt-launcher";
   const HOST_ATTR = "data-ghrc-spellcheck-launcher-host";
   const ENABLED_KEY = "showSpellcheckGptLauncher";
@@ -26,7 +28,7 @@
   }
 
   function findComposerInput() {
-    return document.querySelector("#prompt-textarea");
+    return document.querySelector('#prompt-textarea, [data-composer-markdown][contenteditable="true"]');
   }
 
   function findComposer() {
@@ -273,6 +275,7 @@
   }
 
   function mountLauncher() {
+    if (!context.active()) return;
     scheduleClipboardHandoff();
 
     if (!enabled || !isHomePage()) {
@@ -293,6 +296,7 @@
   }
 
   function scheduleMount() {
+    if (!context.active()) return;
     if (mountScheduled) return;
     mountScheduled = true;
     requestAnimationFrame(() => {
@@ -303,6 +307,7 @@
 
   async function loadSettings() {
     const settings = await chrome.storage.local.get({ [ENABLED_KEY]: false });
+    if (!context.active()) return;
     enabled = Boolean(settings[ENABLED_KEY]);
     await chrome.storage.local.remove(LEGACY_ICON_KEY);
     scheduleMount();
@@ -315,7 +320,8 @@
   });
 
   pendingClipboardText = takeClipboardHandoff();
-  void loadSettings();
+  void context.run(loadSettings);
   const observer = new MutationObserver(scheduleMount);
+  context.onStop(() => observer.disconnect());
   observer.observe(document.documentElement, { childList: true, subtree: true });
 })();

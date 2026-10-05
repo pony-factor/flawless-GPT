@@ -1,4 +1,4 @@
-# GitHub Repositories for ChatGPT
+# Flawless ChatGPT
 
 A Brave/Chrome extension that adds a GitHub-style repository dashboard directly
 below the composer on ChatGPT's new-chat page, with optional ChatGPT interface
@@ -17,6 +17,7 @@ The dashboard:
 - strips UTM tracking parameters from links shown by ChatGPT by default;
 - can skip ChatGPT's external-site warning and dismiss its history rate-limit
   modal independently;
+- queues follow-up messages locally while ChatGPT is responding, keeps them editable and reorderable, and sends them FIFO only after the active response fully completes;
 - adds columns for any other GitHub accounts the connected tokens can access;
 - pins important repositories at the top of their user or organization column;
 - searches across every loaded repository; and
@@ -51,6 +52,31 @@ comes from each token's GitHub settings. Tokens and GitHub accounts can be
 added, removed, or reordered at any time. Existing single-token settings are
 migrated automatically. Use a fine-grained token with read-only access to only
 the repository metadata the extension should display.
+
+### GitHub App login
+
+Connect GitHub opens the Flawless ChatGPT app's browser authorization page and returns to the extension automatically. Choose repositories to install the app on a personal account or organization and select its repository access.
+
+The small local login service exchanges GitHub's authorization code; the extension stores the resulting session in its encrypted browser vault. The service listens only on `127.0.0.1:8787`, accepts the configured extension identity, and keeps access tokens out of redirect URLs.
+
+To configure it on macOS:
+
+1. In the app settings, set the callback URL to `http://127.0.0.1:8787/github/callback` and generate a client secret. App settings: https://github.com/settings/apps/flawless-chatgpt
+2. Run `swift auth/configure-secret.swift` and paste the secret into the secure local dialog. It saves the credential in macOS Keychain; do not put it in the repository or extension settings.
+3. Run `python3 auth/install.py` to install the login service, which starts automatically at login. Run the installer again after changing the Keychain credential to restart it.
+4. Reload the extension and select Connect GitHub.
+
+The login service automatically derives this checkout's extension ID using Chromium's algorithm, including a public manifest key when present. No extension ID is needed during normal setup. After moving the checkout, rerun `python3 auth/install.py` to update the service's launch path and restart it. For additional installations, repeat `--extension-id YOUR_EXTENSION_ID`, or set `GITHUB_APP_EXTENSION_IDS` to a comma-separated list when starting the service manually. These add to the automatically detected identity. The server also accepts `GITHUB_APP_CLIENT_SECRET` from its environment for non-Keychain setups. Existing device-flow sessions can still refresh; new connections use browser authorization.
+
+To stop and remove the local service, run `launchctl bootout gui/$(id -u)/com.flawless-chatgpt.auth` and delete `~/Library/LaunchAgents/com.flawless-chatgpt.auth.plist`. This retains the Keychain credential and browser session.
+
+### Web commit personalization
+
+The **Personalization** tab contains one editable **Web commit guidance** field. Flawless stores a local mirror in `chrome.storage.local.webCommitGuidance` and synchronizes it with ChatGPT's account-level Custom Instructions (`about_model_message`) while a signed-in `chatgpt.com` tab is open. Editing either ChatGPT's Personalization setting or the Flawless field updates the other side; no clipboard handoff is involved.
+
+Synchronization uses ChatGPT's own same-origin `/backend-api/user_system_messages` request path from the ChatGPT page. The extension reads the current payload before updating only the model-instruction field so unrelated personalization fields stay intact. Authentication is obtained ephemerally from the active ChatGPT session and is never written into extension storage. On the first sync for an account, ChatGPT's current setting wins so installing or upgrading Flawless cannot silently overwrite existing web personalization. After that, `webCommitGuidanceLastSynced` lets Flawless determine which side changed; local edits made while ChatGPT is closed are pushed the next time ChatGPT opens.
+
+Existing guidance from the older `codexCustomInstructions` / `chatgptCustomInstructions` keys is migrated into `webCommitGuidance`. If the older Codex Web co-author preference was enabled, its trailer instruction is folded into the migrated guidance rather than kept as a separate setting. Personalization never writes `~/.codex/AGENTS.md`, inspects `CODEX_HOME`, imports PGP keys, or changes global Git configuration. Commit signing remains a separate feature.
 
 ### Token storage
 
@@ -96,11 +122,75 @@ by default. UTM removal strips `utm_*` query parameters while preserving other
 query parameters and URL fragments. When Work mode is disabled, the extension
 switches an available Work selector back to Chat, hides Work controls, and blocks
 their selection. The external-site setting clicks ChatGPT's own **Open link**
-confirmation when the exact external-site dialog appears. The history setting
-hides the known conversation-history rate-limit modal, clears the page locks it
+confirmation when the exact external-site dialog appears. **Open links in new
+tabs** is enabled by default and keeps external links, including search
+references, from replacing the chat. Disable it to reuse the current tab when
+warning bypass is enabled. **Open links beside the response** takes precedence
+and shows a website preview in a right-hand pane. Close it with **Close** or
+**Escape**. Websites or ChatGPT security policies may block embedded previews;
+the pane always provides **Open in new tab**. This extension preview is separate
+from the browser’s native split-tab view. Modifier clicks keep browser behavior.
+The history setting hides the known conversation-history rate-limit modal, clears the page locks it
 leaves behind, and preserves native wheel and touch scrolling if stale modal
-listeners remain. The extension does not perform a cross-origin request to the
-destination itself.
+listeners remain. Link previews load the destination in a sandboxed iframe.
+
+## Queued messages
+
+Use the stack-plus button beside ChatGPT's composer to queue the current draft. While ChatGPT is already responding, pressing **Enter** also adds the draft to the queue instead of interrupting the active response; **Shift+Enter** still inserts a newline. Pending messages appear directly above the composer and can be edited, reordered, or removed before they are sent.
+
+Queues are stored in `chrome.storage.local` per conversation, so pending text survives page reloads and normal extension updates. A queue created during the first response of a new chat is migrated to that conversation once ChatGPT assigns its `/c/...` URL. Navigating away leaves that conversation's queue stored locally until the conversation is opened again.
+
+Automatic sending deliberately does **not** rely on a quiet DOM or the end of ChatGPT's thinking phase. The next item is eligible only when the stop/generation control is gone, the normal send control is ready, user and assistant turns are balanced, the latest assistant turn exposes a completed-response action, and that completed state remains stable for a short settle window. This prevents the queue from firing in the transition between thinking and answer generation.
+
+## Deep research publisher
+
+**Deep research publisher** is off by default in both settings views. Enabling it
+adds an **Add to repo** icon immediately left of the download/export control on
+completed deep research reports, including the embedded report card. Clicking it
+opens an import launcher where you can choose an existing category, enter a new
+category (including nested folders), or leave it empty for the repository root.
+Only **Import report** captures the full report as Markdown and commits and
+pushes it to the chosen category in the linked repository. Cancel leaves the
+repository unchanged. Report links open in a new browser tab, and expanding a
+report hides the chat composer until the report is collapsed.
+
+Use **Link repository** in settings for the one-time macOS setup. The page supplies
+an installer command for your extension ID and browser (Chrome or Brave). Run it
+from this extension's folder and select the local research repository. Python 3,
+Git, an origin remote, a Git author, and working push access are required. Use
+**Check connection** to see the destination repository and branch. The installer
+pins the current branch; link again to change it. Existing app-only connections
+must run the updated installer and select the app's repository folder.
+For Brave, the installer also creates a compatibility link in Chrome's native-host
+folder when no publisher registration already exists there.
+
+The button preserves headings, links, lists, and tables from the report. It reads
+the full report pages, including text clipped by the preview, rather than the
+surrounding chat. The report widget's DOM must be loaded; this integration targets
+the current research widget and may need updating if ChatGPT changes its markup.
+
+Publishing uses a temporary bare clone of the remote branch and a separate Git
+index. Local files, staged changes, and the checkout's branch are untouched.
+Filenames include a stable suffix based on the conversation and report title;
+retrying an identical report produces no additional commit. Concurrent remote
+updates or branch restrictions cause a visible error, never a force-push. The
+button reports success only after Git confirms the push (or the same content is
+already on the remote). Failed attempts can be retried from the report.
+
+The bridge uses Chrome's [native messaging protocol](https://developer.chrome.com/docs/extensions/develop/concepts/native-messaging).
+It accepts reports only from this extension's research-frame content script and
+uses the repository selected locally, not a path supplied by the webpage. GitHub
+dashboard tokens are not sent to the bridge. Turn the checkbox off to remove the
+buttons. To uninstall the connection, remove `org.research.publisher.json` from
+your browser's `NativeMessagingHosts` folder under `~/Library/Application Support`
+and the corresponding browser folder under `~/Library/Application Support/Research Publisher`.
+For Brave, also remove the compatibility link at
+`~/Library/Application Support/Google/Chrome/NativeMessagingHosts/org.research.publisher.json`
+if it points to Brave's registration.
+
+Markdown conversion bundles Turndown 7.2.0 and turndown-plugin-gfm 1.0.2 in
+`vendor/`, with their MIT license files. Their npm distribution integrity hashes
+were checked when vendoring.
 
 ## Pins
 

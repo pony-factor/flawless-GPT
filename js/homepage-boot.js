@@ -1,8 +1,10 @@
 (() => {
   const BOOT_ATTR = "data-ghrc-homepage-booting";
+  const COMPACT_LAYOUT_READY_ATTR = "data-ghrc-compact-layout-ready";
   const WIDGET_ID = "github-repositories-for-chatgpt";
   const LOADING_TEXT = "Loading repositories…";
-  const FAIL_OPEN_MILLISECONDS = 4000;
+  const COMPACT_HEADER_SETTING_KEY = "compactNewChatHeader";
+  const FAIL_OPEN_MILLISECONDS = 8000;
 
   if (location.pathname !== "/") return;
 
@@ -11,6 +13,7 @@
 
   root.setAttribute(BOOT_ATTR, "true");
 
+  let compactHeaderEnabled = null;
   let revealed = false;
   let observer = null;
   let failOpenTimer = null;
@@ -26,19 +29,28 @@
     });
   }
 
+  function repositoriesReady() {
+    const widget = document.getElementById(WIDGET_ID);
+    if (!widget) return false;
+
+    return ![...widget.querySelectorAll(".ghrc-state")]
+      .some((element) => element.textContent.trim() === LOADING_TEXT);
+  }
+
   function revealWhenReady() {
     if (location.pathname !== "/") {
       reveal();
       return;
     }
 
-    const widget = document.getElementById(WIDGET_ID);
-    if (!widget) return;
+    if (compactHeaderEnabled === null) return;
+    if (
+      compactHeaderEnabled
+      && !root.hasAttribute(COMPACT_LAYOUT_READY_ATTR)
+    ) return;
+    if (!repositoriesReady()) return;
 
-    const isLoading = [...widget.querySelectorAll(".ghrc-state")]
-      .some((element) => element.textContent.trim() === LOADING_TEXT);
-
-    if (!isLoading) reveal();
+    reveal();
   }
 
   observer = new MutationObserver(revealWhenReady);
@@ -46,6 +58,8 @@
     childList: true,
     subtree: true,
     characterData: true,
+    attributes: true,
+    attributeFilter: [COMPACT_LAYOUT_READY_ATTR],
   });
 
   failOpenTimer = window.setTimeout(reveal, FAIL_OPEN_MILLISECONDS);
@@ -54,5 +68,14 @@
   });
   window.addEventListener("popstate", revealWhenReady);
   window.addEventListener("pageshow", revealWhenReady, { once: true });
-  revealWhenReady();
+
+  chrome.storage.local.get({ [COMPACT_HEADER_SETTING_KEY]: false })
+    .then((settings) => {
+      compactHeaderEnabled = Boolean(settings[COMPACT_HEADER_SETTING_KEY]);
+      revealWhenReady();
+    })
+    .catch(() => {
+      compactHeaderEnabled = false;
+      revealWhenReady();
+    });
 })();

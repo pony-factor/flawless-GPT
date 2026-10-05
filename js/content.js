@@ -1,4 +1,6 @@
 (() => {
+  const context = globalThis.__ghrcExtensionContext;
+  if (!context?.active()) return;
   const WIDGET_ID = "github-repositories-for-chatgpt";
   const NEW_CHAT_ATTR = "data-ghrc-new-chat";
   const HIDE_DICTATION_ATTR = "data-ghrc-hide-dictation";
@@ -7,6 +9,7 @@
   const HIDDEN_WELCOME_CLASS = "ghrc-hidden-welcome";
   const USAGE_STORAGE_KEY = "repositoryUsage";
   const PINNED_STORAGE_KEY = "pinnedRepositories";
+  const HIDDEN_OWNERS_KEY = "hiddenOwners";
   const OWNER_GROUPS_PER_PAGE_KEY = "ownerGroupsPerPage";
   const SHOW_REPOSITORY_SEARCH_KEY = "showRepositorySearch";
   const SHOW_REPOSITORY_TOTAL_KEY = "showRepositoryTotal";
@@ -50,21 +53,19 @@
     return icon;
   }
 
-  function isNewChatPage() {
-    if (!document.querySelector("#prompt-textarea")) return false;
-
-    const hasConversation = document.querySelector(
-      '[data-message-author-role="user"], [data-message-author-role="assistant"]',
-    );
-    return !hasConversation;
-  }
-
   function isDashboardPage() {
     return location.pathname === "/";
   }
 
+  function isNewChatPage() {
+    return isDashboardPage()
+      && Boolean(document.querySelector(
+        '#prompt-textarea, [data-composer-markdown][contenteditable="true"]',
+      ));
+  }
+
   function findComposer() {
-    const prompt = document.querySelector("#prompt-textarea");
+    const prompt = document.querySelector('#prompt-textarea, [data-composer-markdown][contenteditable="true"]');
     if (!prompt) return null;
 
     return prompt.closest("form") || prompt.closest('[data-type="unified-composer"]');
@@ -78,13 +79,17 @@
   }
 
   function updateWelcomeHeading(composer) {
-    document.querySelectorAll(`.${HIDDEN_WELCOME_CLASS}`).forEach((element) => {
-      element.classList.remove(HIDDEN_WELCOME_CLASS);
-    });
     if (
       !document.documentElement.hasAttribute(COMPACT_HEADER_ATTR)
-      || !document.documentElement.hasAttribute(COMPOSER_READY_ATTR)
-    ) return;
+    ) {
+      document.querySelectorAll(`.${HIDDEN_WELCOME_CLASS}`).forEach((element) => {
+        element.classList.remove(HIDDEN_WELCOME_CLASS);
+      });
+      return;
+    }
+
+    const hiddenHeading = document.querySelector(`.${HIDDEN_WELCOME_CLASS}`);
+    if (hiddenHeading?.isConnected && !hiddenHeading.contains(composer)) return;
 
     const main = composer.closest("main") || document.querySelector("main");
     if (!main) return;
@@ -126,13 +131,19 @@
   }
 
   function applyPageAdjustments(composer) {
-    document.documentElement.setAttribute(NEW_CHAT_ATTR, "true");
+    if (!document.documentElement.hasAttribute(NEW_CHAT_ATTR)) {
+      document.documentElement.setAttribute(NEW_CHAT_ATTR, "true");
+    }
     updateWelcomeHeading(composer);
   }
 
   function updateWidgetLayout(widget, composer) {
     const content = composer.closest("main");
-    const parent = widget.parentElement;
+    let parent = widget.parentElement;
+    // display: contents wrappers have no box; offsets use the nearest layout box.
+    while (parent && getComputedStyle(parent).display === "contents") {
+      parent = parent.parentElement;
+    }
     if (!content || !parent) return;
 
     const contentBounds = content.getBoundingClientRect();
@@ -142,6 +153,7 @@
     const availableWidth = Math.max(0, Math.floor(contentBounds.width - 40));
 
     widget.style.setProperty("--ghrc-available-width", `${availableWidth}px`);
+    widget.toggleAttribute("data-ghrc-stacked", availableWidth <= 840);
     widget.style.setProperty(
       "--ghrc-center-offset",
       `${Math.round(contentCenter - parentCenter)}px`,
@@ -159,6 +171,7 @@
       hideDictationButton: false,
       compactNewChatHeader: false,
     });
+    if (!context.active()) return;
     document.documentElement.toggleAttribute(
       HIDE_DICTATION_ATTR,
       Boolean(preferences.hideDictationButton),
@@ -199,6 +212,18 @@
       });
   }
 
+  function normalizedHiddenOwners(owners) {
+    const seen = new Set();
+    return (Array.isArray(owners) ? owners : [])
+      .map((owner) => typeof owner === "string" ? owner.trim() : "")
+      .filter((owner) => {
+        const key = owner.toLowerCase();
+        if (!owner || seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+  }
+
   function normalizedOwnerGroupsPerPage(value) {
     const parsed = Number.parseInt(value, 10);
     if (!Number.isFinite(parsed)) return DEFAULT_OWNER_GROUPS_PER_PAGE;
@@ -225,16 +250,27 @@
     });
   }
 
-  function groupRepositories(repositories, ownerOrder, usage, pinnedRepositories) {
+  function groupRepositories(
+    repositories,
+    ownerOrder,
+    usage,
+    pinnedRepositories,
+    hiddenOwners = [],
+  ) {
     const groups = new Map();
     const seenRepositories = new Set();
+    const hiddenOwnerKeys = new Set(
+      normalizedHiddenOwners(hiddenOwners).map((owner) => owner.toLowerCase()),
+    );
 
     for (const repository of repositories) {
+      const ownerKey = repository.owner.login.toLowerCase();
+      if (hiddenOwnerKeys.has(ownerKey)) continue;
+
       const repositoryKey = repository.fullName.toLowerCase();
       if (seenRepositories.has(repositoryKey)) continue;
       seenRepositories.add(repositoryKey);
 
-      const ownerKey = repository.owner.login.toLowerCase();
       if (!groups.has(ownerKey)) {
         groups.set(ownerKey, {
           owner: repository.owner,
@@ -301,9 +337,17 @@
     return repositories.slice(0, Math.max(REPOSITORIES_PER_COLUMN, pinnedCount));
   }
 
+  function ownerRepositoriesUrl(owner) {
+    const login = encodeURIComponent(owner.login);
+    return owner.type === "Organization"
+      ? `https://github.com/orgs/${login}/repositories`
+      : `https://github.com/${login}?tab=repositories`;
+  }
+
   function createRepositoryItem(repository, includeOwner, pinnedRepositories) {
     const item = document.createElement("div");
     item.className = "ghrc-repository";
+    item.dataset.ownerRepositoriesUrl = ownerRepositoriesUrl(repository.owner);
     const isPinned = normalizedPins(pinnedRepositories)
       .some((fullName) => fullName.toLowerCase() === repository.fullName.toLowerCase());
     item.dataset.pinned = String(isPinned);
@@ -312,7 +356,7 @@
     link.className = "ghrc-repository-link";
     link.href = repository.url;
     link.addEventListener("click", () => {
-      void recordRepositoryUse(repository.fullName);
+      void context.run(() => recordRepositoryUse(repository.fullName));
     });
 
     const titleRow = document.createElement("span");
@@ -346,6 +390,8 @@
       pin.disabled = true;
       try {
         await toggleRepositoryPin(repository.fullName);
+      } catch (error) {
+        context.handleError(error);
       } finally {
         pin.disabled = false;
       }
@@ -363,6 +409,7 @@
 
     const header = document.createElement("header");
     header.className = "ghrc-owner-header";
+    header.dataset.ownerRepositoriesUrl = ownerRepositoriesUrl(group.owner);
 
     const avatar = document.createElement("img");
     avatar.className = "ghrc-owner-avatar";
@@ -417,9 +464,9 @@
     container.hidden = false;
   }
 
-  function requestOptionsPage() {
+  function requestOptionsPage(connectGithub = false) {
     try {
-      chrome.runtime.sendMessage({ type: "open-options" }, () => {
+      chrome.runtime.sendMessage({ type: "open-options", connectGithub }, () => {
         // Consume lastError so a stale/missing worker does not surface as an unchecked error.
         void chrome.runtime.lastError;
       });
@@ -505,17 +552,6 @@
       searchArea.append(searchLabel, results);
       widget.append(searchArea);
     }
-  }
-
-  function createSettingsButton(mode) {
-    const settings = document.createElement("button");
-    settings.type = "button";
-    settings.className = "ghrc-settings";
-    settings.textContent = mode === "authenticated" ? "Settings" : "Connect GitHub";
-    settings.addEventListener("click", () => {
-      requestOptionsPage();
-    });
-    return settings;
   }
 
   function normalizeWootenLinkText(value) {
@@ -691,19 +727,6 @@
 
     let visibleEntries = [];
     let activeIndex = -1;
-    const positionResults = () => {
-      form.classList.remove("ghrc-results-above");
-      const formBounds = form.getBoundingClientRect();
-      const resultsBounds = results.getBoundingClientRect();
-      const viewportHeight = window.visualViewport?.height || window.innerHeight;
-      const spaceBelow = viewportHeight - formBounds.bottom - 8;
-      const spaceAbove = formBounds.top - 8;
-      const opensPastViewport = resultsBounds.bottom > viewportHeight - 8;
-      form.classList.toggle(
-        "ghrc-results-above",
-        opensPastViewport && spaceAbove > spaceBelow,
-      );
-    };
     const setActiveEntry = (index) => {
       activeIndex = index;
       [...results.querySelectorAll('[role="option"]')].forEach((option, optionIndex) => {
@@ -759,14 +782,13 @@
           option.append(key, href);
           option.addEventListener("pointermove", () => setActiveEntry(index));
           option.addEventListener("click", () => {
-            void openEntry(entry);
+            void context.run(() => openEntry(entry));
           });
           results.append(option);
         });
       }
       results.hidden = false;
       input.setAttribute("aria-expanded", "true");
-      positionResults();
     };
 
     input.addEventListener("input", () => {
@@ -790,7 +812,7 @@
         setActiveEntry(nextIndex);
       } else if (event.key === "Enter" && activeIndex >= 0) {
         event.preventDefault();
-        void openEntry(visibleEntries[activeIndex]);
+        void context.run(() => openEntry(visibleEntries[activeIndex]));
       }
     });
     form.addEventListener("focusout", () => {
@@ -824,12 +846,11 @@
     return form;
   }
 
-  function createDashboardFooter(mode, pagination = null, showWootenLinkSearch = false) {
+  function createDashboardFooter(pagination = null, showWootenLinkSearch = false) {
     const footer = document.createElement("footer");
     footer.className = "ghrc-dashboard-footer";
     if (showWootenLinkSearch) footer.append(createWootenLinkSearch());
     if (pagination) footer.append(pagination);
-    footer.append(createSettingsButton(mode));
     return footer;
   }
 
@@ -840,20 +861,22 @@
 
     const previous = document.createElement("button");
     previous.type = "button";
-    previous.textContent = "Previous";
-
-    const status = document.createElement("span");
-    status.setAttribute("aria-live", "polite");
+    previous.setAttribute("aria-label", "Previous page");
+    previous.textContent = "←";
 
     const next = document.createElement("button");
     next.type = "button";
-    next.textContent = "Next";
+    next.setAttribute("aria-label", "Next page");
+    next.textContent = "→";
 
     let pageIndex = 0;
     const update = () => {
       previous.disabled = pageIndex === 0;
       next.disabled = pageIndex === pageCount - 1;
-      status.textContent = `Page ${pageIndex + 1} of ${pageCount}`;
+      pagination.setAttribute(
+        "aria-label",
+        `GitHub account pages, page ${pageIndex + 1} of ${pageCount}`,
+      );
       onPageChange(pageIndex);
     };
 
@@ -869,7 +892,7 @@
       update();
     });
 
-    pagination.append(previous, status, next);
+    pagination.append(previous, next);
     update();
     return pagination;
   }
@@ -879,6 +902,7 @@
     payload,
     usage,
     pinnedRepositories,
+    hiddenOwners,
     ownerGroupsPerPage,
     showRepositorySearch,
     showRepositoryTotal,
@@ -904,6 +928,7 @@
       payload.ownerOrder,
       usage,
       pinnedRepositories,
+      hiddenOwners,
     );
     const columns = document.createElement("div");
     columns.className = "ghrc-columns";
@@ -917,7 +942,7 @@
       columns.append(empty);
       widget.append(
         columns,
-        createDashboardFooter(payload.mode, null, showWootenLinkSearch),
+        createDashboardFooter(null, showWootenLinkSearch),
       );
       return;
     }
@@ -940,7 +965,7 @@
     } else {
       renderPage(0);
     }
-    widget.append(createDashboardFooter(payload.mode, pagination, showWootenLinkSearch));
+    widget.append(createDashboardFooter(pagination, showWootenLinkSearch));
   }
 
   function renderError(widget, message) {
@@ -962,14 +987,19 @@
     widget.append(state);
   }
 
+  function requestRepositories() {
+    repositoryRequest ||= chrome.runtime.sendMessage({ type: "load-repositories" });
+    return repositoryRequest;
+  }
+
   async function loadRepositories(widget) {
     try {
-      repositoryRequest ||= chrome.runtime.sendMessage({ type: "load-repositories" });
       const [payload, stored] = await Promise.all([
-        repositoryRequest,
+        requestRepositories(),
         chrome.storage.local.get({
           [USAGE_STORAGE_KEY]: {},
           [PINNED_STORAGE_KEY]: [],
+          [HIDDEN_OWNERS_KEY]: [],
           [OWNER_GROUPS_PER_PAGE_KEY]: DEFAULT_OWNER_GROUPS_PER_PAGE,
           [SHOW_REPOSITORY_SEARCH_KEY]: true,
           [SHOW_REPOSITORY_TOTAL_KEY]: true,
@@ -977,6 +1007,7 @@
         }),
       ]);
 
+      if (!context.active()) return;
       if (!payload.ok) {
         throw new Error(payload.error);
       }
@@ -987,6 +1018,7 @@
           payload,
           stored[USAGE_STORAGE_KEY],
           stored[PINNED_STORAGE_KEY],
+          stored[HIDDEN_OWNERS_KEY],
           stored[OWNER_GROUPS_PER_PAGE_KEY],
           Boolean(stored[SHOW_REPOSITORY_SEARCH_KEY]),
           Boolean(stored[SHOW_REPOSITORY_TOTAL_KEY]),
@@ -994,6 +1026,10 @@
         );
       }
     } catch (error) {
+      if (/extension context invalidated/i.test(error?.message || "") || !context.active()) {
+        context.handleError(error);
+        return;
+      }
       repositoryRequest = null;
       if (widget.isConnected) {
         renderError(widget, error.message);
@@ -1015,13 +1051,15 @@
   }
 
   function mountWidget() {
+    if (!context.active()) return;
     const existingWidget = document.getElementById(WIDGET_ID);
 
     if (!isNewChatPage()) {
       existingWidget?.remove();
       layoutObserver?.disconnect();
       observedLayoutContainer = null;
-      clearPageAdjustments();
+      // Keep the early homepage layout while React is still adding the composer.
+      if (!isDashboardPage()) clearPageAdjustments();
       return;
     }
 
@@ -1050,6 +1088,7 @@
   }
 
   function scheduleMount() {
+    if (!context.active()) return;
     if (mountScheduled) return;
     mountScheduled = true;
 
@@ -1070,18 +1109,29 @@
   });
 
   window.addEventListener("resize", scheduleMount);
+  window.addEventListener("ghrc:route-change", scheduleMount);
+  window.addEventListener("popstate", scheduleMount);
+
+  chrome.runtime.onMessage.addListener((message) => {
+    if (message?.type !== "repository-cache-updated") return false;
+    repositoryRequest = null;
+    const widget = document.getElementById(WIDGET_ID);
+    if (widget?.isConnected) void loadRepositories(widget);
+    return false;
+  });
 
   chrome.storage.onChanged.addListener((changes, areaName) => {
     if (areaName !== "local") return;
 
     if (changes.hideDictationButton || changes.compactNewChatHeader) {
-      void loadDisplayPreferences();
+      void context.run(loadDisplayPreferences);
     }
 
     if (
       changes.githubToken
       || changes.githubTokens
       || changes.ownerOrder
+      || changes.hiddenOwners
       || changes.ownerGroupsPerPage
       || changes.showRepositorySearch
       || changes.showRepositoryTotal
@@ -1098,9 +1148,24 @@
     }
   });
 
-  void loadDisplayPreferences();
+  // Warm repository data as soon as the content script starts. On a cache hit this
+  // resolves while ChatGPT is still building the page, so the dashboard can paint
+  // with data on its first mount instead of visibly arriving afterward.
+  void requestRepositories().catch(error => {
+    repositoryRequest = null;
+    if (/extension context invalidated/i.test(error?.message || "") || !context.active()) context.handleError(error);
+  });
+
+  void context.run(loadDisplayPreferences);
   scheduleMount();
   const observer = new MutationObserver(scheduleMount);
+  context.onStop(() => {
+    observer.disconnect();
+    layoutObserver?.disconnect();
+    window.removeEventListener("resize", scheduleMount);
+    window.removeEventListener("ghrc:route-change", scheduleMount);
+    window.removeEventListener("popstate", scheduleMount);
+  });
   observer.observe(document.documentElement, {
     childList: true,
     subtree: true,

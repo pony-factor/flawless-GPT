@@ -1,0 +1,39 @@
+#ghrc-clipboard-send-button {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 9999px;
+  color: inherit;
+  cursor: pointer;
+  display: inline-flex;
+  flex: 0 0 auto;
+  height: 32px;
+  justify-content: center;
+  margin: 0 2px 0 0;
+  padding: 0;
+  width: 32px;
+}
+
+#ghrc-clipboard-send-button:hover:not(:disabled) {
+  background: color-mix(in srgb, currentColor 10%, transparent);
+}
+
+#ghrc-clipboard-send-button:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+
+#ghrc-clipboard-send-button:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
+#ghrc-clipboard-send-button svg {
+  fill: none;
+  height: 18px;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+  width: 18px;
+}

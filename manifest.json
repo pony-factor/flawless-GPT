@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
-  "name": "GitHub Repositories for ChatGPT",
-  "version": "1.6.0",
+  "name": "Flawless ChatGPT",
+  "version": "1.7.3",
   "description": "Adds a personalized GitHub repository dashboard and optional ChatGPT interface tweaks.",
   "icons": {
     "16": "icons/icon-16.png",
@@ -11,17 +11,25 @@
   },
   "permissions": [
     "storage",
-    "clipboardRead"
+    "identity",
+    "clipboardRead",
+    "nativeMessaging"
   ],
   "host_permissions": [
     "https://api.github.com/*",
-    "https://avatars.githubusercontent.com/*"
+    "https://avatars.githubusercontent.com/*",
+    "https://github.com/*",
+    "http://127.0.0.1/*"
+  ],
+  "optional_host_permissions": [
+    "http://*/*",
+    "https://*/*"
   ],
   "background": {
     "service_worker": "js/background.js"
   },
   "action": {
-    "default_title": "GitHub Repositories for ChatGPT",
+    "default_title": "Flawless ChatGPT",
     "default_popup": "popup.html",
     "default_icon": {
       "16": "icons/icon-16.png",
@@ -29,23 +37,67 @@
     }
   },
   "options_page": "options.html",
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
+  },
   "content_scripts": [
     {
       "matches": [
         "https://chatgpt.com/*"
       ],
+      "js": [
+        "js/clipboard-utm-sanitizer.js",
+        "js/chatgpt-route-events.js",
+        "js/sidebar-tab-state.js",
+        "js/deep-research-usage.js",
+        "js/chatgpt-personalization-api.js"
+      ],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": [
+        "https://chatgpt.com/*"
+      ],
       "css": [
-        "css/homepage-boot.css",
-        "css/work-mode.css"
+        "css/work-mode.css",
+        "css/external-links.css",
+        "css/compact-header.css",
+        "css/chat-display.css",
+        "css/styles.css",
+        "css/hide-dictation.css",
+        "css/owner-grid.css",
+        "css/private-repository-lock.css",
+        "css/inline-toolbar-search.css",
+        "css/repository-fast-ui.css"
       ],
       "js": [
+        "js/extension-context.js",
+        "js/web-commit-guidance-sync.js",
+        "js/compact-header.js",
+        "js/2048-keyboard.js",
         "js/collapse-sidebar.js",
+        "js/dashboard-visibility.js",
         "js/disable-work-mode.js",
+        "js/chat-display.js",
+        "js/hide-share-label.js",
+        "js/composer-placeholder.js",
         "js/force-high-thinking.js",
-        "js/homepage-boot.js",
         "js/autofocus-composer.js",
+        "js/preserve-scroll-on-send.js",
         "js/hide-background-completion-notifications.js",
-        "js/external-links.js"
+        "js/external-links.js",
+        "js/research-report-host.js",
+        "js/research-import-dialog.js",
+        "js/research-launcher.js",
+        "js/hide-cookie-preferences.js",
+        "js/chatgpt-disclaimer.js",
+        "js/block-voice-prompts.js",
+        "js/clipboard-utm-preference.js",
+        "js/avatar-cache-ui.js",
+        "js/repository-fast-ui.js",
+        "js/owner-grid.js",
+        "js/content.js"
       ],
       "run_at": "document_start"
     },
@@ -54,35 +106,54 @@
         "https://chatgpt.com/*"
       ],
       "css": [
-        "css/styles.css",
-        "css/hide-dictation.css",
-        "css/owner-grid.css",
-        "css/private-repository-lock.css",
-        "css/compact-header.css",
-        "css/inline-toolbar-search.css",
+        "css/2048.css",
+        "css/youtube-search.css",
+        "css/wooten-link-zipp-placeholder.css",
         "css/spellcheck-launcher.css",
-        "css/repository-fast-ui.css"
+        "css/clipboard-send.css",
+        "css/top-hat-send-button.css",
+        "css/message-queue.css",
+        "css/highlighted-pages.css",
+        "css/deep-research-tracker.css"
       ],
       "js": [
-        "js/avatar-cache-ui.js",
-        "js/repository-fast-ui.js",
-        "js/content.js",
-        "js/owner-grid.js",
-        "js/compact-header.js",
-        "js/spellcheck-launcher.js"
+        "js/youtube-search.js",
+        "js/wooten-link-zipp-placeholder.js",
+        "js/spellcheck-launcher.js",
+        "js/2048.js",
+        "js/clipboard-send.js",
+        "js/message-queue.js",
+        "js/highlighted-pages.js",
+        "js/deep-research-tracker.js"
       ],
-      "run_at": "document_idle"
+      "run_at": "document_start"
+    },
+    {
+      "matches": [
+        "https://*.web-sandbox.oaiusercontent.com/*"
+      ],
+      "js": [
+        "vendor/turndown.js",
+        "vendor/turndown-plugin-gfm.js",
+        "js/research-import-dialog.js",
+        "js/research-publisher.js"
+      ],
+      "all_frames": true,
+      "match_about_blank": true,
+      "match_origin_as_fallback": true,
+      "run_at": "document_start"
     }
   ],
   "web_accessible_resources": [
     {
       "resources": [
         "artwork/spellcheck-only.png",
-        "artwork/calligraphy-initials.png"
+        "artwork/calligraphy-initials.png",
+        "artwork/research-telescope.png"
       ],
       "matches": [
         "https://chatgpt.com/*"
       ]
     }
   ]
-}\n
+}

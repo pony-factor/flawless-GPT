@@ -1,8 +1,23 @@
 (() => {
+  const context = globalThis.__ghrcExtensionContext;
+  if (!context?.active()) return;
   const WIDGET_ID = "github-repositories-for-chatgpt";
   const PINNED_STORAGE_KEY = "pinnedRepositories";
   const LOADING_TEXT = "Loading repositories…";
   let searchCategorizationScheduled = false;
+
+  function preloadRepositories() {
+    try {
+      chrome.runtime.sendMessage({ type: "preload-repositories" }, () => {
+        // Consume lastError so an extension reload does not surface a console error.
+        void chrome.runtime.lastError;
+      });
+    } catch {
+      // A document_start script from before an extension reload can lose its worker.
+    }
+  }
+
+  preloadRepositories();
 
   function normalizedPins(pinnedRepositories) {
     const seen = new Set();
@@ -33,7 +48,9 @@
   }
 
   async function unpinRepository(fullName) {
+    if (!context.active()) return;
     const stored = await chrome.storage.local.get({ [PINNED_STORAGE_KEY]: [] });
+    if (!context.active()) return;
     const pins = normalizedPins(stored[PINNED_STORAGE_KEY]);
     const key = fullName.toLowerCase();
     await chrome.storage.local.set({
@@ -71,6 +88,8 @@
       try {
         await unpinRepository(fullName);
         item.remove();
+      } catch (error) {
+        context.handleError(error);
       } finally {
         pin.disabled = false;
       }
@@ -87,7 +106,9 @@
     if (!loading) return;
 
     widget.dataset.ghrcWarmPins = "loading";
+    if (!context.active()) return;
     const stored = await chrome.storage.local.get({ [PINNED_STORAGE_KEY]: [] });
+    if (!context.active()) return;
     const pins = normalizedPins(stored[PINNED_STORAGE_KEY]);
     if (!pins.length || !widget.isConnected || !loading.isConnected) return;
 
@@ -124,7 +145,17 @@
 
     const heading = document.createElement("div");
     heading.className = "ghrc-search-category-heading";
-    heading.textContent = owner;
+    const repositoriesUrl = rows[0]?.dataset.ownerRepositoriesUrl;
+    if (repositoriesUrl) {
+      const link = document.createElement("a");
+      link.className = "ghrc-owner-profile-link";
+      link.href = repositoriesUrl;
+      link.textContent = owner;
+      link.setAttribute("aria-label", `Open ${owner} repositories on GitHub`);
+      heading.append(link);
+    } else {
+      heading.textContent = owner;
+    }
 
     const list = document.createElement("div");
     list.className = "ghrc-search-category-list";
@@ -162,12 +193,14 @@
   }
 
   function updateFastUi() {
+    if (!context.active()) return;
     const widget = document.getElementById(WIDGET_ID);
-    if (widget) void showWarmPins(widget);
+    if (widget) void context.run(() => showWarmPins(widget));
     scheduleSearchCategorization();
   }
 
   const observer = new MutationObserver(updateFastUi);
+  context.onStop(() => observer.disconnect());
   observer.observe(document.documentElement, { childList: true, subtree: true });
   updateFastUi();
 })();
