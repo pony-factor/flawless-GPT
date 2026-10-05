@@ -25,6 +25,9 @@ const showSpellcheckGptLauncherInput = document.getElementById("show-spellcheck-
 const show2048LauncherInput = document.getElementById("show-2048-launcher");
 const showDeepResearchTrackerInput = document.getElementById("show-deep-research-tracker");
 const stripUtmTrackingInput = document.getElementById("strip-utm-tracking");
+const stripCopiedBoldInput = document.getElementById("strip-copied-bold");
+const normalizeCopiedQuotesInput = document.getElementById("normalize-copied-quotes");
+const underscoreCopiedItalicsInput = document.getElementById("underscore-copied-italics");
 const openExternalLinksInNewTabsInput = document.getElementById("open-external-links-in-new-tabs");
 const openExternalLinksInSplitViewInput = document.getElementById("open-external-links-in-split-view");
 const skipExternalSiteWarningInput = document.getElementById("skip-external-site-warning");
@@ -319,6 +322,9 @@ async function loadSettings() {
     show2048Launcher: false,
     showDeepResearchTracker: true,
     stripUtmTracking: true,
+    stripCopiedBold: true,
+    normalizeCopiedQuotes: true,
+    underscoreCopiedItalics: true,
     skipExternalSiteWarning: true,
     openExternalLinksInNewTabs: true,
     openExternalLinksInSplitView: false,
@@ -358,7 +364,10 @@ async function loadSettings() {
   showSpellcheckGptLauncherInput.checked = Boolean(settings.showSpellcheckGptLauncher);
   show2048LauncherInput.checked = Boolean(settings.show2048Launcher);
   showDeepResearchTrackerInput.checked = settings.showDeepResearchTracker !== false;
-  stripUtmTrackingInput.checked = Boolean(settings.stripUtmTracking);
+  stripUtmTrackingInput.checked = settings.stripUtmTracking !== false;
+  stripCopiedBoldInput.checked = settings.stripCopiedBold !== false;
+  normalizeCopiedQuotesInput.checked = settings.normalizeCopiedQuotes !== false;
+  underscoreCopiedItalicsInput.checked = settings.underscoreCopiedItalics !== false;
   openExternalLinksInNewTabsInput.checked = settings.openExternalLinksInNewTabs !== false;
   openExternalLinksInSplitViewInput.checked = Boolean(settings.openExternalLinksInSplitView);
   skipExternalSiteWarningInput.checked = Boolean(settings.skipExternalSiteWarning);
@@ -446,6 +455,9 @@ async function saveSettings() {
       show2048Launcher: show2048LauncherInput.checked,
       showDeepResearchTracker: showDeepResearchTrackerInput.checked,
       stripUtmTracking: stripUtmTrackingInput.checked,
+      stripCopiedBold: stripCopiedBoldInput.checked,
+      normalizeCopiedQuotes: normalizeCopiedQuotesInput.checked,
+      underscoreCopiedItalics: underscoreCopiedItalicsInput.checked,
       skipExternalSiteWarning: skipExternalSiteWarningInput.checked,
       openExternalLinksInNewTabs: openExternalLinksInNewTabsInput.checked,
       openExternalLinksInSplitView: openExternalLinksInSplitViewInput.checked,
