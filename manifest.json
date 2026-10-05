@@ -89,6 +89,7 @@
         "js/autofocus-composer.js",
         "js/preserve-scroll-on-send.js",
         "js/hide-background-completion-notifications.js",
+        "js/hide-usage-card.js",
         "js/external-links.js",
         "js/research-report-host.js",
         "js/research-import-dialog.js",

@@ -32,6 +32,7 @@ const openExternalLinksInNewTabsInput = document.getElementById("open-external-l
 const openExternalLinksInSplitViewInput = document.getElementById("open-external-links-in-split-view");
 const skipExternalSiteWarningInput = document.getElementById("skip-external-site-warning");
 const dismissHistoryRateLimitModalInput = document.getElementById("dismiss-history-rate-limit-modal");
+const hideUsageCardInput = document.getElementById("hide-usage-card");
 const hideHomeSuggestionsInput = document.getElementById("hide-home-suggestions");
 const hideModelControlsInput = document.getElementById("hide-model-controls");
 const hideConversationFeedbackPromptInput = document.getElementById("hide-conversation-feedback-prompt");
@@ -330,6 +331,7 @@ async function loadSettings() {
     openExternalLinksInNewTabs: true,
     openExternalLinksInSplitView: false,
     dismissHistoryRateLimitModal: true,
+    hideUsageCard: true,
     hideCookiePreferences: false,
     showChatgptDisclaimer: false,
     hideHomeSuggestions: true,
@@ -374,6 +376,7 @@ async function loadSettings() {
   openExternalLinksInSplitViewInput.checked = Boolean(settings.openExternalLinksInSplitView);
   skipExternalSiteWarningInput.checked = Boolean(settings.skipExternalSiteWarning);
   dismissHistoryRateLimitModalInput.checked = Boolean(settings.dismissHistoryRateLimitModal);
+  hideUsageCardInput.checked = settings.hideUsageCard !== false;
   hideHomeSuggestionsInput.checked = settings.hideHomeSuggestions !== false;
   hideModelControlsInput.checked = settings.hideModelControls !== false;
   hideConversationFeedbackPromptInput.checked = settings.hideConversationFeedbackPrompt !== false;
@@ -465,6 +468,7 @@ async function saveSettings() {
       openExternalLinksInNewTabs: openExternalLinksInNewTabsInput.checked,
       openExternalLinksInSplitView: openExternalLinksInSplitViewInput.checked,
       dismissHistoryRateLimitModal: dismissHistoryRateLimitModalInput.checked,
+      hideUsageCard: hideUsageCardInput.checked,
       hideCookiePreferences: hideCookiePreferencesInput.checked,
       showChatgptDisclaimer: !hideChatgptDisclaimerInput.checked,
       hideHomeSuggestions: hideHomeSuggestionsInput.checked,
