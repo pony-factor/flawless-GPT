@@ -11,7 +11,17 @@ async function fixture({labels=['Show sidebar','Hide sidebar'], enabled=true, ex
   const page = await browser.newPage();
   page.errors=[];
   page.on('pageerror', error => page.errors.push(error.message));
-  await page.setContent(`<style>body{margin:0}aside{position:fixed;top:0;left:0;height:100vh;width:260px}button{width:44px;height:44px}aside[data-expanded=false]{width:52px}</style>${duplicate?'<button style="display:none" aria-label="Hide sidebar">Hidden toggle</button>':''}<aside data-expanded="${expanded}"><button id="toggle" aria-label="${labels[expanded?1:0]}">Toggle</button></aside>`);
+  await page.setContent(`<style>
+    body{margin:0}
+    aside{position:fixed;top:0;left:0;height:100vh;width:260px}
+    button{width:44px;height:44px}
+    aside[data-expanded=false]{width:52px}
+    .rail-item{position:absolute;left:4px;width:44px;height:44px}
+    #library{top:96px}
+    #preset-one{top:160px}
+    #preset-two{top:204px}
+    #preset-three{top:248px}
+  </style>${duplicate?'<button style="display:none" aria-label="Hide sidebar">Hidden toggle</button>':''}<aside data-expanded="${expanded}"><button id="toggle" aria-label="${labels[expanded?1:0]}">Toggle</button><a id="library" class="rail-item" aria-label="Library" href="/library"></a><a id="preset-one" class="rail-item" aria-label="Preset one" href="/g/g-one"></a><a id="preset-two" class="rail-item" aria-label="Preset two" href="/g/g-two"></a><a id="preset-three" class="rail-item" aria-label="Preset three" href="/gpts/g-three"></a></aside>`);
   await page.evaluate(({labels,enabled,delay}) => {
     window.clicks=0;
     window.listeners=[];
@@ -66,6 +76,25 @@ test('disabled hover setting leaves the collapsed sidebar alone',async()=>{
   await page.mouse.move(12,250);
   await page.waitForTimeout(150);
   assert.equal(await page.evaluate(()=>clicks),0);
+  await page.close();
+});
+test('collapsed reveal only uses the band below Library through preset icons',async()=>{
+  const page=await fixture();
+
+  await page.mouse.move(12,80);
+  await page.waitForTimeout(500);
+  assert.equal(await page.locator('aside').getAttribute('data-expanded'),'false');
+
+  await page.mouse.move(12,145);
+  await page.waitForFunction(()=>document.querySelector('aside').dataset.expanded==='true');
+  await page.mouse.move(500,145);
+  await page.waitForFunction(()=>document.querySelector('aside').dataset.expanded==='false');
+
+  await page.mouse.move(12,310);
+  await page.waitForTimeout(500);
+  assert.equal(await page.locator('aside').getAttribute('data-expanded'),'false');
+  assert.equal(await page.evaluate(()=>clicks),2);
+  assert.deepEqual(page.errors,[]);
   await page.close();
 });
 test('synthetic research-menu pointer events cannot reveal the sidebar',async()=>{

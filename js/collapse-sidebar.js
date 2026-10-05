@@ -68,6 +68,72 @@
     revealDeadline = 0;
   }
 
+  function visibleBounds(element) {
+    if (!(element instanceof Element) || !element.getClientRects().length) return null;
+    const style = getComputedStyle(element);
+    if (style.display === "none" || style.visibility === "hidden"
+      || style.visibility === "collapse" || element.closest('[inert], [aria-hidden="true"]')) return null;
+    const bounds = element.getBoundingClientRect();
+    if (bounds.width <= 0 || bounds.height <= 0) return null;
+    return bounds;
+  }
+
+  function pathnameFor(element) {
+    const href = element instanceof HTMLAnchorElement ? element.href : element.closest?.("a[href]")?.href;
+    if (!href) return "";
+    try {
+      return new URL(href, location.href).pathname.replace(/\/+$/, "") || "/";
+    } catch {
+      return "";
+    }
+  }
+
+  function libraryControl() {
+    const candidates = document.querySelectorAll('a[href], button, [role="button"]');
+    for (const candidate of candidates) {
+      const bounds = visibleBounds(candidate);
+      if (!bounds || bounds.left > EDGE_HOTSPOT_WIDTH + 24) continue;
+      const label = [
+        candidate.getAttribute("aria-label"),
+        candidate.getAttribute("title"),
+        candidate.textContent,
+      ].filter(Boolean).join(" ").trim().toLowerCase();
+      const pathname = pathnameFor(candidate);
+      if (pathname === "/library" || label === "library") return { element: candidate, bounds };
+    }
+    return null;
+  }
+
+  function presetIconBounds() {
+    const library = libraryControl();
+    if (!library) return null;
+
+    const scope = library.element.closest(
+      'aside, nav, [data-testid*="sidebar"], [data-testid*="navigation"]',
+    ) || document;
+    const presetBounds = Array.from(scope.querySelectorAll("a[href]"))
+      .map((link) => ({ link, bounds: visibleBounds(link), pathname: pathnameFor(link) }))
+      .filter(({ bounds, pathname }) => (
+        bounds
+        && bounds.left <= EDGE_HOTSPOT_WIDTH + 24
+        && bounds.top >= library.bounds.bottom
+        && (/^\/g\/[^/]+/.test(pathname) || /^\/gpts\/[^/]+/.test(pathname))
+      ))
+      .map(({ bounds }) => bounds);
+
+    if (!presetBounds.length) return null;
+    return {
+      top: library.bounds.bottom,
+      bottom: Math.max(...presetBounds.map(bounds => bounds.bottom)),
+    };
+  }
+
+  function pointerInRevealHotspot() {
+    if (!pointer.inside || pointer.x > EDGE_HOTSPOT_WIDTH) return false;
+    const band = presetIconBounds();
+    return Boolean(band && pointer.y >= band.top && pointer.y <= band.bottom);
+  }
+
   function scheduleReveal() {
     if (revealFrame !== null) return;
     const revealAt = Date.now() + REVEAL_DELAY_MS;
@@ -76,7 +142,7 @@
     const attemptReveal = () => {
       revealFrame = null;
 
-      if (!context.active() || !hoverRevealEnabled || !pointer.inside || pointer.x > EDGE_HOTSPOT_WIDTH) {
+      if (!context.active() || !hoverRevealEnabled || !pointerInRevealHotspot()) {
         revealDeadline = 0;
         return;
       }
@@ -193,18 +259,18 @@
   function reconcileHoverState() {
     if (!context.active() || !hoverRevealEnabled) return;
 
-    const overEdge = pointer.inside && pointer.x <= EDGE_HOTSPOT_WIDTH;
+    const overRevealHotspot = pointerInRevealHotspot();
     const toggle = sidebarToggleState();
 
     if (!toggle) {
-      if (overEdge) scheduleReveal();
+      if (overRevealHotspot) scheduleReveal();
       else clearRevealRetry();
       return;
     }
 
     if (toggle.state === "collapsed") {
       clearCollapseTimer();
-      if (overEdge) scheduleReveal();
+      if (overRevealHotspot) scheduleReveal();
       else clearRevealRetry();
       return;
     }
