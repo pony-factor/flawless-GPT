@@ -19,6 +19,10 @@ html[data-ghrc-hide-conversation-feedback-prompt] [data-ghrc-conversation-feedba
   display: none !important;
 }
 
+html[data-ghrc-hide-chat-timestamps] [data-ghrc-chat-timestamp] {
+  display: none !important;
+}
+
 #prompt-textarea [data-ghrc-placeholder-text]::before,
 [data-composer-markdown][contenteditable="true"] [data-ghrc-placeholder-text]::before,
 #prompt-textarea[data-ghrc-placeholder-text]::before,

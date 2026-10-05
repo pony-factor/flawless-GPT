@@ -4,6 +4,7 @@
   if (!context?.active()) return;
   const MODEL_MARKER = "data-ghrc-model-control";
   const FEEDBACK_MARKER = "data-ghrc-conversation-feedback-prompt";
+  const TIMESTAMP_MARKER = "data-ghrc-chat-timestamp";
   const TAIL_MARKER = "data-ghrc-conversation-tail-space";
   const TURN_QUERY = '[data-testid^="conversation-turn-"], [data-message-author-role]';
   const FEEDBACK_TEXT = "Is this conversation helpful so far?";
@@ -28,6 +29,27 @@
     }
   }
 
+  function markChatTimestamps() {
+    const exactTime = /^(?:[01]?\d|2[0-3]):[0-5]\d(?:\s?[AP]M)?$/i;
+    const dateLabel = /^(?:\d{1,2}\s+[A-Z][a-z]{2}\s+\d{4}|[A-Z][a-z]+\s+\d{1,2},\s+\d{4})$/;
+    for (const turn of document.querySelectorAll(TURN_QUERY)) {
+      for (const element of turn.querySelectorAll(
+        'time, [datetime], [data-testid*="timestamp" i], [data-testid*="message-time" i], [aria-label*="sent at" i]',
+      )) {
+        element.setAttribute(TIMESTAMP_MARKER, "");
+      }
+
+      for (const element of turn.querySelectorAll("span, div")) {
+        if (element.children.length) continue;
+        const text = element.textContent?.trim() || "";
+        if (!exactTime.test(text) && !dateLabel.test(text)) continue;
+        const classes = typeof element.className === "string" ? element.className : "";
+        if (!/(?:text-xs|text-sm|tertiary|secondary|timestamp|time)/i.test(classes)) continue;
+        element.setAttribute(TIMESTAMP_MARKER, "");
+      }
+    }
+  }
+
   function markConversationTail() {
     const turns = [...document.querySelectorAll(TURN_QUERY)];
     const lastTurn = turns.at(-1) ?? null;
@@ -41,6 +63,7 @@
     if (!context.active()) return;
     scheduled = false;
     markConversationFeedbackPrompt();
+    markChatTimestamps();
     markConversationTail();
     for (const control of document.querySelectorAll(CONTROL_QUERY)) {
       const label = [control.getAttribute("aria-label"), control.getAttribute("title"), control.textContent]
@@ -64,10 +87,11 @@
     document.documentElement?.toggleAttribute("data-ghrc-show-home-suggestions", !settings.hideHomeSuggestions);
     document.documentElement?.toggleAttribute("data-ghrc-show-model-controls", !settings.hideModelControls);
     document.documentElement?.toggleAttribute("data-ghrc-hide-conversation-feedback-prompt", settings.hideConversationFeedbackPrompt);
+    document.documentElement?.toggleAttribute("data-ghrc-hide-chat-timestamps", settings.hideChatTimestamps);
     scheduleScan();
   }
 
-  let settings = { hideHomeSuggestions: true, hideModelControls: true, hideConversationFeedbackPrompt: true };
+  let settings = { hideHomeSuggestions: true, hideModelControls: true, hideConversationFeedbackPrompt: true, hideChatTimestamps: false };
   document.documentElement?.setAttribute("data-ghrc-hide-conversation-feedback-prompt", "");
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== "local") return;
@@ -89,6 +113,7 @@
       hideHomeSuggestions: stored.hideHomeSuggestions !== false,
       hideModelControls: stored.hideModelControls !== false,
       hideConversationFeedbackPrompt: stored.hideConversationFeedbackPrompt !== false,
+      hideChatTimestamps: Boolean(stored.hideChatTimestamps),
     };
     apply(settings);
   });

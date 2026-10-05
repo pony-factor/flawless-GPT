@@ -35,6 +35,7 @@ const dismissHistoryRateLimitModalInput = document.getElementById("dismiss-histo
 const hideHomeSuggestionsInput = document.getElementById("hide-home-suggestions");
 const hideModelControlsInput = document.getElementById("hide-model-controls");
 const hideConversationFeedbackPromptInput = document.getElementById("hide-conversation-feedback-prompt");
+const hideChatTimestampsInput = document.getElementById("hide-chat-timestamps");
 const composerPlaceholderInput = document.getElementById("composer-placeholder");
 const hideChatgptDisclaimerInput = document.getElementById("hide-chatgpt-disclaimer");
 const hideCookiePreferencesInput = document.getElementById("hide-cookie-preferences");
@@ -334,6 +335,7 @@ async function loadSettings() {
     hideHomeSuggestions: true,
     hideModelControls: true,
     hideConversationFeedbackPrompt: true,
+    hideChatTimestamps: false,
     composerPlaceholder: "",
   });
   const storedOwnerOrder = normalizedOwnerOrder(settings.ownerOrder);
@@ -375,6 +377,7 @@ async function loadSettings() {
   hideHomeSuggestionsInput.checked = settings.hideHomeSuggestions !== false;
   hideModelControlsInput.checked = settings.hideModelControls !== false;
   hideConversationFeedbackPromptInput.checked = settings.hideConversationFeedbackPrompt !== false;
+  hideChatTimestampsInput.checked = Boolean(settings.hideChatTimestamps);
   composerPlaceholderInput.value = typeof settings.composerPlaceholder === "string" ? settings.composerPlaceholder : "";
   hideChatgptDisclaimerInput.checked = !Boolean(settings.showChatgptDisclaimer);
   hideCookiePreferencesInput.checked = Boolean(settings.hideCookiePreferences);
@@ -467,6 +470,7 @@ async function saveSettings() {
       hideHomeSuggestions: hideHomeSuggestionsInput.checked,
       hideModelControls: hideModelControlsInput.checked,
       hideConversationFeedbackPrompt: hideConversationFeedbackPromptInput.checked,
+      hideChatTimestamps: hideChatTimestampsInput.checked,
       composerPlaceholder: composerPlaceholderInput.value.trim(),
     });
     ownerListDirty = false;

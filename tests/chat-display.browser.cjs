@@ -25,6 +25,7 @@ async function fixture({ stored = {}, maximize = false, slider = false, unresolv
     <form><textarea id="prompt-textarea">Partial draft</textarea><span style="display:contents"><button type="button" id="model" aria-label="Select ChatGPT model" aria-haspopup="menu" aria-expanded="false" aria-controls="model-menu" data-selected-reasoning-effort="standard"><span aria-hidden="true">Thinking effort</span><span id="level">Standard</span></button></span><button type="button" id="send">Send</button></form>
     <div><section class="group/home-suggestions"><div class="group/home-suggestion-list-item"><button>Create an image or sticker</button></div><div class="group/home-suggestion-list-item"><button>Write or edit</button></div><div class="group/home-suggestion-list-item"><button>Search the web</button></div></section></div>
     <article><p>Search the web</p><button id="ordinary">Write or edit</button></article>
+    <div id="conversation-turn" data-testid="conversation-turn-1"><div class="text-xs text-token-text-tertiary">15:37</div><time datetime="2026-10-05T15:37:00-04:00">05 Oct 2026</time><p>Message body keeps 15:37 as content.</p></div>
     <div id="conversation-feedback"><span>Is this conversation helpful so far?</span><button type="button">Helpful</button><button type="button">Not helpful</button><button type="button">Close</button></div></div></main>` }));
   await p.goto('https://display.test/');
   await p.evaluate(({ stored, slider, unresolved, delayed, delayStorage }) => {
@@ -114,6 +115,22 @@ test('suggestions and model controls default hidden without hiding messages or t
   assert.equal(await p.locator('#prompt-textarea').inputValue(), 'Partial draft');
   await p.evaluate(() => document.querySelector('[class~="group/home-suggestions"]').insertAdjacentHTML('beforeend', '<div class="group/home-suggestion-list-item">New suggestion</div>'));
   assert.equal(await p.getByText('New suggestion').isVisible(), false);
+  assert.deepEqual(p.errors, []);
+  await p.close();
+});
+
+test('in-chat timestamps are hidden only when the setting is enabled', async () => {
+  const p = await fixture({ stored: { hideChatTimestamps: true } });
+  await p.waitForFunction(() => document.documentElement.hasAttribute('data-ghrc-hide-chat-timestamps'));
+  await p.waitForFunction(() => document.querySelector('#conversation-turn time')?.hasAttribute('data-ghrc-chat-timestamp'));
+  assert.equal(await p.locator('#conversation-turn time').isVisible(), false);
+  assert.equal(await p.locator('#conversation-turn .text-token-text-tertiary').isVisible(), false);
+  assert.equal(await p.getByText('Message body keeps 15:37 as content.').isVisible(), true);
+
+  await p.evaluate(() => chrome.storage.local.set({ hideChatTimestamps: false }));
+  await p.waitForFunction(() => !document.documentElement.hasAttribute('data-ghrc-hide-chat-timestamps'));
+  assert.equal(await p.locator('#conversation-turn time').isVisible(), true);
+  assert.equal(await p.locator('#conversation-turn .text-token-text-tertiary').isVisible(), true);
   assert.deepEqual(p.errors, []);
   await p.close();
 });
