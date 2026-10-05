@@ -90,3 +90,19 @@ test('import confirmation links open through the bridge inside a sandbox frame',
     assert.equal(await frame.getByRole('link').count(), 1);
   } finally { await browser.close(); }
 });
+
+
+test('filename context uses the prompt preceding the report, not an earlier or later turn', async () => {
+  const browser = await chromium.launch({ executablePath: '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser', headless: true });
+  try {
+    const page = await browser.newPage();
+    await page.setContent('<title>New chat - ChatGPT</title><div data-message-author-role="user">Old unrelated topic</div><iframe src="about:blank" width="500"></iframe><div data-message-author-role="user">DTC Bond Purchaser Tracking</div><iframe src="about:blank" width="500"></iframe><div data-message-author-role="user">Later unrelated topic</div>');
+    await page.locator('iframe').first().evaluate(frame => { frame.setAttribute('src', 'https://mcp-app-abc123.web-sandbox.oaiusercontent.com/old-report'); });
+    await page.locator('iframe').last().evaluate(frame => { frame.setAttribute('src', 'https://mcp-app-abc123.web-sandbox.oaiusercontent.com/report'); });
+    await page.evaluate(() => { window.chrome = { runtime: { onMessage: { addListener(listener) { window.contextListener = listener; } } } }; });
+    await page.addScriptTag({ content: fs.readFileSync('js/research-report-host.js', 'utf8') });
+    const context = await page.evaluate(() => new Promise(resolve => contextListener({ type: 'research-report-context', reportUrl: 'https://mcp-app-abc123.web-sandbox.oaiusercontent.com/report' }, {}, resolve)));
+    assert.equal(context.title, 'DTC Bond Purchaser Tracking');
+    assert.equal(context.prompt, 'DTC Bond Purchaser Tracking');
+  } finally { await browser.close(); }
+});

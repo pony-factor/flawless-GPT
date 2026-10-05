@@ -2,8 +2,15 @@
   chrome.runtime.onMessage.addListener((message, sender, respond) => {
     if (message?.type !== 'research-report-context') return false;
     const title = document.title.replace(/\s*[-–|]\s*ChatGPT\s*$/i, '').trim();
-    const prompt = document.querySelector('[data-message-author-role="user"]')?.textContent.trim() || '';
-    respond({ title: title && !/^(ChatGPT|New chat)$/i.test(title) ? title : prompt.slice(0, 2000) });
+    const frames = [...document.querySelectorAll('iframe')].filter(node =>
+      /^https:\/\/(connector-openai-deep-research|mcp-app-[a-f0-9]+)\.web-sandbox\.oaiusercontent\.com(?:\/|$)/.test(node.src)
+      && node.getBoundingClientRect().width > 0);
+    const frame = frames.find(node => typeof message.reportUrl === 'string'
+      && node.src.split('#')[0] === message.reportUrl.split('#')[0]) || frames.at(-1);
+    const prompts = [...document.querySelectorAll('[data-message-author-role="user"]')];
+    const preceding = frame ? prompts.filter(node => node.compareDocumentPosition(frame) & Node.DOCUMENT_POSITION_FOLLOWING) : prompts;
+    const prompt = preceding.at(-1)?.textContent.trim() || '';
+    respond({ title: title && !/^(ChatGPT|New chat)$/i.test(title) ? title : prompt.slice(0, 2000), prompt: prompt.slice(0, 2000) });
     return false;
   });
   const reports = new Map();

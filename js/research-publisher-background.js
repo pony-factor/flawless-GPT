@@ -112,8 +112,10 @@
         }
         if (publishing) {
           try {
-            const context = await chrome.tabs.sendMessage(sender.tab.id, { type: 'research-report-context' }, { frameId: 0 });
-            if (typeof context?.title === 'string' && context.title.trim()) payload.context = context.title.slice(0, 2000);
+            const context = await chrome.tabs.sendMessage(sender.tab.id, { type: 'research-report-context', reportUrl: sender.url }, { frameId: 0 });
+            const prompt = typeof context?.prompt === 'string' ? context.prompt.trim() : '';
+            const namingContext = prompt.split(/\s+/).length >= 4 ? prompt : context?.title;
+            if (typeof namingContext === 'string' && namingContext.trim()) payload.context = namingContext.slice(0, 2000);
           } catch { /* The report title remains available when the conversation frame is gone. */ }
           if (!payload.context && automaticJob?.title) payload.context = automaticJob.title;
         }
