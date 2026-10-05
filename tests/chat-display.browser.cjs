@@ -118,6 +118,31 @@ test('suggestions and model controls default hidden without hiding messages or t
   await p.close();
 });
 
+test('conversation tail space follows the newest turn', async () => {
+  const p = await fixture();
+  await p.evaluate(() => {
+    const thread = document.createElement('div');
+    thread.id = 'thread';
+    thread.innerHTML = '<article data-testid="conversation-turn-1">Earlier turn</article><article data-testid="conversation-turn-2">Current last turn</article>';
+    document.querySelector('main').append(thread);
+  });
+  await p.waitForFunction(() => document.querySelector('[data-testid="conversation-turn-2"]')?.hasAttribute('data-ghrc-conversation-tail-space'));
+  assert.equal(await p.locator('[data-testid="conversation-turn-1"]').getAttribute('data-ghrc-conversation-tail-space'), null);
+  const margin = await p.locator('[data-testid="conversation-turn-2"]').evaluate(element => getComputedStyle(element).marginBottom);
+  assert.notEqual(margin, '0px');
+
+  await p.evaluate(() => {
+    const turn = document.createElement('article');
+    turn.setAttribute('data-testid', 'conversation-turn-3');
+    turn.textContent = 'New turn fills the previous tail space';
+    document.getElementById('thread').append(turn);
+  });
+  await p.waitForFunction(() => document.querySelector('[data-testid="conversation-turn-3"]')?.hasAttribute('data-ghrc-conversation-tail-space'));
+  assert.equal(await p.locator('[data-testid="conversation-turn-2"]').getAttribute('data-ghrc-conversation-tail-space'), null);
+  assert.deepEqual(p.errors, []);
+  await p.close();
+});
+
 test('default CSS hides controls before storage resolves and later honors stored opt-outs', async () => {
   const p = await fixture({ delayStorage: true, stored: { hideHomeSuggestions: false, hideModelControls: false } });
   assert.equal(await p.locator('[class~="group/home-suggestions"]').isVisible(), false);

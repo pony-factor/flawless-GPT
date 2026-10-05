@@ -30,3 +30,11 @@ html[data-ghrc-composer-placeholder] :is(#prompt-textarea, [data-composer-markdo
 html[data-ghrc-composer-placeholder] :is(#prompt-textarea, [data-composer-markdown])[data-placeholder]::before {
   content: var(--ghrc-composer-placeholder) !important;
 }
+
+
+/* Let readers scroll the current end of a conversation above the composer.
+   The marker follows the newest turn, so future turns consume the visual gap
+   instead of leaving permanent whitespace between older messages. */
+[data-ghrc-conversation-tail-space] {
+  margin-bottom: clamp(10rem, 35vh, 28rem) !important;
+}

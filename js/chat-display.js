@@ -4,6 +4,8 @@
   if (!context?.active()) return;
   const MODEL_MARKER = "data-ghrc-model-control";
   const FEEDBACK_MARKER = "data-ghrc-conversation-feedback-prompt";
+  const TAIL_MARKER = "data-ghrc-conversation-tail-space";
+  const TURN_QUERY = '[data-testid^="conversation-turn-"], [data-message-author-role]';
   const FEEDBACK_TEXT = "Is this conversation helpful so far?";
   const CONTROL_QUERY = 'button[aria-haspopup], [role="combobox"], [data-codex-intelligence-trigger]';
   let scheduled = false;
@@ -26,10 +28,20 @@
     }
   }
 
+  function markConversationTail() {
+    const turns = [...document.querySelectorAll(TURN_QUERY)];
+    const lastTurn = turns.at(-1) ?? null;
+    for (const marked of document.querySelectorAll(`[${TAIL_MARKER}]`)) {
+      if (marked !== lastTurn) marked.removeAttribute(TAIL_MARKER);
+    }
+    if (lastTurn) lastTurn.setAttribute(TAIL_MARKER, "");
+  }
+
   function scan() {
     if (!context.active()) return;
     scheduled = false;
     markConversationFeedbackPrompt();
+    markConversationTail();
     for (const control of document.querySelectorAll(CONTROL_QUERY)) {
       const label = [control.getAttribute("aria-label"), control.getAttribute("title"), control.textContent]
         .filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
