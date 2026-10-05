@@ -15,6 +15,7 @@
       repository: typeof result.repository === 'string' ? result.repository : '',
       branch: typeof result.branch === 'string' ? result.branch : '',
       categories: Array.isArray(result.categories) ? result.categories : [],
+      contents: result.contents && typeof result.contents === "object" ? result.contents : {},
       checkedAt: Date.now(),
     };
   }
@@ -55,6 +56,10 @@
     return result;
   }
 
+  globalThis.__ghrcResearchPublisher = {
+    checkConnection: () => sendToNative({ action: 'status' }, false),
+  };
+
   chrome.runtime.onMessage.addListener((message, sender, respond) => {
     if (!['publish-research-report', 'research-publisher-status', 'open-research-link'].includes(message?.type)) return false;
     (async () => {
@@ -71,6 +76,7 @@
       const publishing = message.type === 'publish-research-report';
       let payload = { action: 'status' };
       let key;
+      let automaticJob;
       if (publishing) {
         if (!reportSender(sender)) {
           throw new Error('Publish from a completed ChatGPT research report.');
@@ -92,7 +98,31 @@
         inFlight.add(key);
       }
       try {
-        return await sendToNative(payload, publishing);
+        if (publishing && message.automationJobId !== undefined) {
+          const readiness = await chrome.tabs.sendMessage(sender.tab.id,
+            { type: 'research-launch-readiness', id: message.automationJobId }, { frameId: 0 });
+          if (!readiness?.ready) throw new Error('Research is still running.');
+          automaticJob = await globalThis.__ghrcResearchLaunch.beginImport(sender, message.automationJobId);
+          payload.category = automaticJob.category;
+        }
+        if (automaticJob) {
+          const connection = await sendToNative({ action: 'status' }, false);
+          if (connection.repository !== automaticJob.repository || connection.branch !== automaticJob.branch)
+            throw new Error('The linked repository changed during research. Use Add to repo to choose the destination again.');
+        }
+        if (publishing) {
+          try {
+            const context = await chrome.tabs.sendMessage(sender.tab.id, { type: 'research-report-context' }, { frameId: 0 });
+            if (typeof context?.title === 'string' && context.title.trim()) payload.context = context.title.slice(0, 2000);
+          } catch { /* The report title remains available when the conversation frame is gone. */ }
+          if (!payload.context && automaticJob?.title) payload.context = automaticJob.title;
+        }
+        const result = await sendToNative(payload, publishing);
+        if (automaticJob) await globalThis.__ghrcResearchLaunch.finishImport(sender.tab.id, automaticJob.id, result);
+        return result;
+      } catch (error) {
+        if (automaticJob) await globalThis.__ghrcResearchLaunch.finishImport(sender.tab.id, automaticJob.id, undefined, error.message);
+        throw error;
       } finally { if (key) inFlight.delete(key); }
     })().then(respond, (error) => respond({ ok: false, error: error.message }));
     return true;

@@ -70,13 +70,13 @@ The login service automatically derives this checkout's extension ID using Chrom
 
 To stop and remove the local service, run `launchctl bootout gui/$(id -u)/com.flawless-chatgpt.auth` and delete `~/Library/LaunchAgents/com.flawless-chatgpt.auth.plist`. This retains the Keychain credential and browser session.
 
-### ChatGPT / Codex personalization
+### Web commit personalization
 
-Flawless ChatGPT can keep a browser-local copy of the Custom Instructions text you use on ChatGPT web and mirror the same managed block into `~/.codex/AGENTS.md` for the Codex VS Code extension. The "Sync from ChatGPT web" button reads only the clipboard after you click it.
+The **Personalization** tab contains one editable **Web commit guidance** field. Flawless stores a local mirror in `chrome.storage.local.webCommitGuidance` and synchronizes it with ChatGPT's account-level Custom Instructions (`about_model_message`) while a signed-in `chatgpt.com` tab is open. Editing either ChatGPT's Personalization setting or the Flawless field updates the other side; no clipboard handoff is involved.
 
-The Codex Web co-author toggle adds the managed instruction requiring `Co-authored-by: Codex Web <noreply@openai.com>` for commits created through web or GitHub tools. The optional PGP field sends the secret only to the local native bridge; the bridge imports it into GnuPG through stdin, stores only the public fingerprint in Git configuration, and clears the browser field after import.
+Synchronization uses ChatGPT's own same-origin `/backend-api/user_system_messages` request path from the ChatGPT page. The extension reads the current payload before updating only the model-instruction field so unrelated personalization fields stay intact. Authentication is obtained ephemerally from the active ChatGPT session and is never written into extension storage. On the first sync for an account, ChatGPT's current setting wins so installing or upgrading Flawless cannot silently overwrite existing web personalization. After that, `webCommitGuidanceLastSynced` lets Flawless determine which side changed; local edits made while ChatGPT is closed are pushed the next time ChatGPT opens.
 
-Use "Set up local bridge" in extension settings to install the native bridge without linking a research repository. The settings-only installer preserves an existing research-publisher repository configuration.
+Existing guidance from the older `codexCustomInstructions` / `chatgptCustomInstructions` keys is migrated into `webCommitGuidance`. If the older Codex Web co-author preference was enabled, its trailer instruction is folded into the migrated guidance rather than kept as a separate setting. Personalization never writes `~/.codex/AGENTS.md`, inspects `CODEX_HOME`, imports PGP keys, or changes global Git configuration. Commit signing remains a separate feature.
 
 ### Token storage
 

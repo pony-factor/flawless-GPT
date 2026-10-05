@@ -25,22 +25,54 @@ html[data-ghrc-link-preview] {
   padding: 12px;
 }
 
-#ghrc-link-preview a {
+#ghrc-link-preview .ghrc-preview-destination {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
   color: LinkText;
-  text-decoration: underline;
-  overflow-wrap: anywhere;
+  text-decoration: none;
 }
 
-#ghrc-link-preview button {
-  padding: 6px 12px;
-  border: 1px solid;
-  border-radius: 6px;
+#ghrc-link-preview .ghrc-preview-destination span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#ghrc-link-preview .ghrc-preview-favicon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  object-fit: contain;
+}
+
+#ghrc-link-preview .ghrc-preview-control {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  text-decoration: none;
+  font: 26px/1 system-ui, sans-serif;
   cursor: pointer;
 }
 
-#ghrc-link-preview p {
-  padding: 0 12px 12px;
-  margin: 0;
+#ghrc-link-preview .ghrc-preview-control:hover {
+  opacity: 0.65;
+}
+
+#ghrc-link-preview .ghrc-preview-control:focus-visible {
+  outline: 2px solid Highlight;
+  outline-offset: 2px;
 }
 
 #ghrc-link-preview iframe {

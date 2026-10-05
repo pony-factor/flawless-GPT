@@ -68,10 +68,27 @@ class PublisherTests(unittest.TestCase):
         self.assertEqual(updated["path"], result["path"])
         self.assertNotEqual(updated["commit"], result["commit"])
 
+    def test_readable_names_use_conversation_for_generic_headings_and_handle_collisions(self):
+        message = {**self.message, "title": "Executive Summary", "context": "DTC Bond Purchaser Tracking"}
+        first = host.handle(message, self.config, self.origin)
+        self.assertEqual(first["path"], "dtc-bond-purchaser-tracking.md")
+        second = host.handle({**message, "source": "https://chatgpt.com/c/other", "markdown": "Another report"}, self.config, self.origin)
+        self.assertNotEqual(second["path"], first["path"])
+        # Identity must survive other imports and a new clone of the remote.
+        revised = host.handle({**message, "markdown": "Revised report"}, self.config, self.origin)
+        self.assertEqual(revised["path"], first["path"])
+        self.assertTrue(host.handle({**message, "markdown": "Revised report"}, self.config, self.origin)["unchanged"])
+        self.assertEqual(host.report_url("git@github.com:example/research.git", "main", "Markets/a b.md"),
+                         "https://github.com/example/research/blob/main/Markets/a%20b.md")
+        self.assertEqual(host.report_url("https://github.com/example/research.git", "topic/branch", "report.md"),
+                         "https://github.com/example/research/blob/topic%2Fbranch/report.md")
+        self.assertIsNone(host.report_url("/tmp/local.git", "main", "report.md"))
+
     def test_rejects_foreign_origin_paths_and_invalid_content(self):
         with patch.object(host, "publish") as publish:
             for message, caller in [(self.message, "other"), ({**self.message, "repo": "/other"}, self.origin),
-                                    ({"action": "launch"}, self.origin)]:
+                                    ({"action": "launch"}, self.origin),
+                                    ({"action": "sync-codex-settings"}, self.origin)]:
                 with self.assertRaises(host.PublishError):
                     host.handle(message, self.config, caller)
             publish.assert_not_called()
@@ -98,6 +115,7 @@ class PublisherTests(unittest.TestCase):
         git(self.repo, "-c", "commit.gpgsign=false", "commit", "-m", "Category fixture")
         result = host.handle({"action": "status"}, self.config, self.origin)
         self.assertEqual(result["categories"], ["Markets", "Markets/Ownership"])
+        self.assertEqual(result["contents"]["Markets/Ownership"], ["report.md"])
 
     def test_install_links_branch_and_self_tests_bridge(self):
         manifest = installer.install("a" * 32, "brave", self.repo, self.base / "Application Support")
@@ -130,22 +148,6 @@ class PublisherTests(unittest.TestCase):
         self.assertFalse(any("--force" in call or "-f" in call for call in calls))
         self.assertEqual(git(self.remote, "rev-list", "--count", "main"), "1")
 
-
-    def test_codex_personalization_preserves_unmanaged_agents_content(self):
-        agents = self.base / "AGENTS.md"
-        agents.write_text("Keep this line.\n")
-        host.sync_codex_instructions("Use plain ASCII quotes.", True, destination=agents)
-        text = agents.read_text()
-        self.assertIn("Keep this line.", text)
-        self.assertIn("Use plain ASCII quotes.", text)
-        self.assertIn(host.CODEX_WEB_COAUTHOR, text)
-        settings = host.read_codex_settings(destination=agents)
-        self.assertEqual(settings["instructions"], "Use plain ASCII quotes.")
-        self.assertTrue(settings["webCodexCoauthor"])
-        host.sync_codex_instructions("Keep replies compact.", False, destination=agents)
-        settings = host.read_codex_settings(destination=agents)
-        self.assertEqual(settings, {"instructions": "Keep replies compact.", "webCodexCoauthor": False})
-        self.assertEqual(agents.read_text().count(host.START), 1)
 
     def test_protocol_errors_return_framed_json(self):
         for request in [b"", struct.pack("=I", host.MAX_MESSAGE + 1), struct.pack("=I", 10) + b"{}"]:

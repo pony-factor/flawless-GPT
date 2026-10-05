@@ -119,7 +119,7 @@
       || !isPlainPrimaryActivation(event)
       || !(link instanceof HTMLAnchorElement)
       || link.hasAttribute("download")
-      || link.closest("#github-repositories-for-chatgpt, #ghrc-link-preview")
+      || link.closest("#github-repositories-for-chatgpt, #ghrc-highlighted-pages, #ghrc-link-preview")
     ) return false;
 
     let url;
@@ -156,29 +156,52 @@
     panel.id = "ghrc-link-preview";
     panel.setAttribute("aria-label", "Linked website preview");
     const header = document.createElement("header");
+    const url = new URL(href);
     const destination = document.createElement("a");
+    destination.className = "ghrc-preview-destination";
     destination.href = href;
     destination.target = "_blank";
     destination.rel = "noopener noreferrer";
-    destination.textContent = new URL(href).hostname;
+    const favicon = document.createElement("img");
+    favicon.className = "ghrc-preview-favicon";
+    favicon.src = new URL("/favicon.ico", url.origin).href;
+    favicon.alt = "";
+    favicon.referrerPolicy = "no-referrer";
+    favicon.addEventListener("error", () => favicon.remove());
+    const hostname = document.createElement("span");
+    hostname.textContent = url.hostname.replace(/^www\./i, "");
+    destination.append(favicon, hostname);
     destination.title = href;
+    const open = document.createElement("a");
+    open.className = "ghrc-preview-control";
+    open.href = href;
+    open.target = "_blank";
+    open.rel = "noopener noreferrer";
+    open.title = "Open in new tab";
+    open.setAttribute("aria-label", "Open in new tab");
+    open.innerHTML = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3h7v7M21 3l-11 11M10 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-5"/></svg>';
+    for (const control of [destination, open]) {
+      control.addEventListener("click", (event) => {
+        if (!isPlainPrimaryActivation(event)) return;
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        window.open(href, "_blank", "noopener,noreferrer");
+      });
+    }
     const close = document.createElement("button");
+    close.className = "ghrc-preview-control";
     close.type = "button";
-    close.textContent = "Close";
+    close.textContent = "×";
+    close.title = "Close website preview";
     close.setAttribute("aria-label", "Close website preview");
     close.addEventListener("click", closeLinkPreview);
-    header.append(destination, close);
-    const help = document.createElement("p");
-    help.append("Preview unavailable? ");
-    const open = destination.cloneNode(false);
-    open.textContent = "Open in new tab";
-    help.append(open);
+    header.append(destination, open, close);
     const frame = document.createElement("iframe");
     frame.title = "Website preview: " + new URL(href).hostname;
     frame.setAttribute("sandbox", "allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox");
     frame.referrerPolicy = "no-referrer";
     frame.src = href;
-    panel.append(header, help, frame);
+    panel.append(header, frame);
     previewPanel = panel;
     document.body.append(panel);
     document.documentElement.setAttribute("data-ghrc-link-preview", "");

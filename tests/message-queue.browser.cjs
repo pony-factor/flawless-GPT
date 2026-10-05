@@ -189,6 +189,28 @@ async function sentCount(page, count) {
   await page.waitForFunction(n => sent.length === n, count, { timeout: 10000 });
 }
 
+for (const liveMarkup of [false, true]) test(`queue follows the latest reply after unanswered earlier messages (${liveMarkup ? 'grouped' : 'article'} turns)`, async () => {
+  const p = await fixture({ liveMarkup });
+  await p.evaluate(() => {
+    addTurn('user');
+    addTurn('user');
+    addTurn('assistant', true);
+  });
+  await enqueue(p, 'Continue after the completed reply');
+  await sentCount(p, 1);
+  await p.waitForFunction(() => !document.querySelector('.ghrc-message-queue-editor') && !read().trim());
+  await p.evaluate(() => finish());
+  await p.evaluate(() => addTurn('user'));
+  await enqueue(p, 'Wait for the newest reply');
+  await p.waitForTimeout(2000);
+  assert.equal(await p.evaluate(() => sent.length), 1);
+  await p.evaluate(() => addTurn('assistant', true));
+  await sentCount(p, 2);
+  assert.deepEqual(await p.evaluate(() => sent), ['Continue after the completed reply', 'Wait for the newest reply']);
+  assert.deepEqual(p.errors, []);
+  await p.close();
+});
+
 test('standalone queue button is opt-in and follows setting changes', async () => {
   const p = await fixture({ queueButton: false });
   assert.equal(await p.locator('#ghrc-message-queue-button').count(), 0);
@@ -713,16 +735,24 @@ test('homepage queue anchors to Start Voice instead of embedded dashboard search
 });
 
 for (const active of [false, true]) {
-  test(`clipboard button mounts empty and queues without interrupting (active=${active})`, async () => {
+  test(`clipboard button sends when idle and queues when active (active=${active})`, async () => {
     const p = await fixture({ active, voice: true, clipboard: true, liveMarkup: true });
     await p.locator('#ghrc-clipboard-send-button').waitFor();
-    await p.evaluate(() => {
+    await p.evaluate(active => {
       Object.defineProperty(navigator, 'clipboard', { value: { readText: async () => 'Clipboard prompt' } });
-    });
+      // Idle sends must work without writing an intermediate queue item.
+      if (!active) window.rejectQueueSave = true;
+    }, active);
     await p.locator('[data-composer-markdown]').fill('Keep this draft');
     await p.locator('#ghrc-clipboard-send-button').click();
-    await p.locator('.ghrc-message-queue-editor').waitFor();
-    assert.equal(await p.evaluate(() => read()), 'Keep this draft');
+    if (active) {
+      await p.locator('.ghrc-message-queue-editor').waitFor();
+      assert.equal(await p.evaluate(() => read()), 'Keep this draft');
+    } else {
+      await sentCount(p, 1);
+      assert.equal(await p.locator('.ghrc-message-queue-editor').count(), 0);
+      assert.equal(await p.evaluate(() => Object.values(storage.queuedChatMessages || {}).flat().length), 0);
+    }
     assert.equal(await p.evaluate(() => stops), 0);
     if (active) await p.evaluate(() => finish());
     await sentCount(p, 1);
@@ -733,6 +763,24 @@ for (const active of [false, true]) {
     await p.close();
   });
 }
+
+test('idle clipboard joins an existing paused queue in FIFO order', async () => {
+  const p = await fixture({ clipboard: true, stored: {
+    queuedChatMessages: { 'conversation:test': [{ id: 'first', text: 'First prompt' }] },
+    queuedChatMessagesPaused: { 'conversation:test': true },
+  } });
+  await p.locator('#ghrc-clipboard-send-button').waitFor();
+  await p.evaluate(() => {
+    Object.defineProperty(navigator, 'clipboard', { value: { readText: async () => 'Clipboard prompt' } });
+  });
+  await p.locator('#ghrc-clipboard-send-button').click();
+  await p.waitForFunction(() => document.querySelectorAll('.ghrc-message-queue-editor').length === 2);
+  assert.deepEqual(await p.locator('.ghrc-message-queue-editor').evaluateAll(elements => elements.map(e => e.value)), ['First prompt', 'Clipboard prompt']);
+  assert.deepEqual(await p.evaluate(() => sent), []);
+  assert.equal(await p.evaluate(() => stops), 0);
+  assert.deepEqual(p.errors, []);
+  await p.close();
+});
 
 test('clipboard stays immediately left of the hat without repeated button moves', async () => {
   const p = await fixture({ active: true, clipboard: true });
@@ -1302,6 +1350,157 @@ test('first response remains freely scrollable after receiving its conversation 
   await p.close();
 });
 
+test('streaming response scrolls both ways over a horizontal source carousel', async () => {
+  const p = await fixture({ preserveScroll: true });
+  await scrollFixture(p);
+  await p.locator('[data-composer-markdown]').fill('Scroll over sources');
+  await p.locator('[data-composer-markdown]').press('Enter');
+  await sentCount(p, 1);
+  await p.evaluate(() => {
+    const carousel = document.createElement('div');
+    carousel.id = 'sources';
+    carousel.style.cssText = 'height:120px;overflow-x:auto;width:280px';
+    carousel.innerHTML = '<div style="width:900px;height:100px">Sources</div>';
+    scroller.append(carousel);
+    carousel.style.position = 'sticky';
+    carousel.style.bottom = '0';
+  });
+  const bounds = await p.locator('#sources').boundingBox();
+  await p.mouse.move(bounds.x + 40, bounds.y + 40);
+  await p.mouse.wheel(0, 120);
+  await p.waitForTimeout(100);
+  assert.equal(await p.evaluate(() => scroller.scrollTop), 720);
+  await p.mouse.wheel(0, -180);
+  await p.waitForTimeout(100);
+  assert.equal(await p.evaluate(() => scroller.scrollTop), 540);
+  await p.evaluate(() => {
+    document.getElementById('turns').lastElementChild.style.height = '3200px';
+    scroller.scrollTop = scroller.scrollHeight;
+  });
+  await p.waitForTimeout(100);
+  assert.equal(await p.evaluate(() => scroller.scrollTop), 540);
+  assert.deepEqual(p.errors, []);
+  await p.close();
+});
+
+test('wheel scrolling restores a pending streaming jump before applying the user delta', async () => {
+  const p = await fixture({ preserveScroll: true });
+  await scrollFixture(p);
+  await p.locator('[data-composer-markdown]').fill('Streaming wheel race');
+  await p.locator('[data-composer-markdown]').press('Enter');
+  await sentCount(p, 1);
+  await p.waitForTimeout(100);
+  const position = await p.evaluate(() => {
+    document.getElementById('turns').lastElementChild.style.height = '3200px';
+    scroller.scrollTop = scroller.scrollHeight;
+    scroller.dispatchEvent(new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaY: 250 }));
+    return scroller.scrollTop;
+  });
+  assert.equal(position, 850);
+  await p.waitForTimeout(100);
+  assert.equal(await p.evaluate(() => scroller.scrollTop), 850);
+  assert.deepEqual(p.errors, []);
+  await p.close();
+});
+
+for (const reverse of [false, true]) for (const singleParagraph of [false, true]) {
+  test(`very large text-only streaming reply scrolls midway (${reverse ? 'reverse' : 'normal'}, ${singleParagraph ? 'one clipped paragraph' : 'many paragraphs'})`, async () => {
+    const p = await fixture({ preserveScroll: true, liveMarkup: true });
+    await scrollFixture(p, { modern: true });
+    await p.locator('[data-composer-markdown]').fill('Large text-only scroll test');
+    await p.locator('[data-composer-markdown]').press('Enter');
+    await sentCount(p, 1);
+    await p.evaluate(({ reverse, singleParagraph }) => {
+      scroller.style.width = '360px';
+      if (reverse) {
+        scroller.style.display = 'flex';
+        scroller.style.flexDirection = 'column-reverse';
+        document.getElementById('turns').style.flexShrink = '0';
+      }
+      window.reply = document.querySelector('[data-content-search-unit-key$=":assistant"]:last-child');
+      const sentence = 'A long text-only response keeps growing while the reader moves through its middle. ';
+      if (singleParagraph) {
+        reply.innerHTML = '<p></p>';
+        reply.firstChild.textContent = sentence.repeat(2000);
+      } else {
+        reply.replaceChildren(...Array.from({ length: 500 }, () => {
+          const paragraph = document.createElement('p');
+          paragraph.textContent = sentence.repeat(4);
+          return paragraph;
+        }));
+      }
+      window.streamTicks = 0;
+      window.streamTimer = setInterval(() => {
+        if (singleParagraph) reply.firstChild.firstChild.appendData(sentence.repeat(4));
+        else {
+          const paragraph = document.createElement('p');
+          paragraph.textContent = sentence.repeat(4);
+          reply.append(paragraph);
+        }
+        streamTicks++;
+        scroller.scrollTop = reverse ? 0 : scroller.scrollHeight;
+      }, 30);
+    }, { reverse, singleParagraph });
+    await p.waitForTimeout(100);
+    const bounds = await p.locator('#conversation-scroller').boundingBox();
+    await p.mouse.move(bounds.x + 100, bounds.y + 160);
+    const toMiddle = await p.evaluate(({ reverse }) => {
+      const range = scroller.scrollHeight - scroller.clientHeight;
+      return (reverse ? -range / 2 : range / 2) - scroller.scrollTop;
+    }, { reverse });
+    await p.mouse.wheel(0, toMiddle);
+    await p.waitForTimeout(100);
+    assert.ok(await p.evaluate(() => reply.textContent.length > 150000 && active));
+    assert.equal(await p.evaluate(() => scroller.querySelectorAll('img,pre').length), 0);
+    for (const delta of [240, -480, 360, -180]) {
+      const before = await p.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve({ top: reply.getBoundingClientRect().top, ticks: streamTicks })))));
+      await p.mouse.wheel(0, delta);
+      await p.waitForTimeout(150);
+      const after = await p.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve({ top: reply.getBoundingClientRect().top, ticks: streamTicks })))));
+      assert.ok(after.ticks > before.ticks, 'text continues generating during scrolling');
+      assert.ok(Math.abs(after.top - (before.top - delta)) <= 1, `wheel ${delta} moves visible text while streaming: ${JSON.stringify({ before, after })}`);
+    }
+    const held = await p.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve(reply.getBoundingClientRect().top)))));
+    await p.waitForTimeout(200);
+    assert.ok(Math.abs(await p.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve(reply.getBoundingClientRect().top))))) - held) <= 1);
+    await p.evaluate(() => clearInterval(streamTimer));
+    assert.deepEqual(p.errors, []);
+    await p.close();
+  });
+}
+
+test('nested code panes scroll themselves and hand off at their vertical edges', async () => {
+  const p = await fixture({ preserveScroll: true });
+  await scrollFixture(p);
+  await p.evaluate(() => {
+    const pane = document.createElement('pre');
+    pane.id = 'code-pane';
+    pane.style.cssText = 'height:100px;overflow:auto;position:sticky;bottom:0;margin:0';
+    pane.innerHTML = '<code style="display:block;height:600px">Long code</code>';
+    scroller.append(pane);
+    document.dispatchEvent(new Event('ghrc:before-composer-send'));
+  });
+  const bounds = await p.locator('#code-pane').boundingBox();
+  await p.mouse.move(bounds.x + 40, bounds.y + 40);
+  await p.mouse.wheel(0, 120);
+  await p.waitForTimeout(250);
+  assert.ok(await p.evaluate(() => document.getElementById('code-pane').scrollTop > 0));
+  assert.equal(await p.evaluate(() => scroller.scrollTop), 600);
+  await p.evaluate(() => {
+    const pane = document.getElementById('code-pane');
+    pane.scrollTop = pane.scrollHeight;
+  });
+  await p.mouse.wheel(0, 120);
+  await p.waitForTimeout(100);
+  assert.equal(await p.evaluate(() => scroller.scrollTop), 720);
+  await p.evaluate(() => { document.getElementById('code-pane').scrollTop = 0; });
+  await p.mouse.wheel(0, -180);
+  await p.waitForTimeout(100);
+  assert.equal(await p.evaluate(() => scroller.scrollTop), 540);
+  assert.deepEqual(p.errors, []);
+  await p.close();
+});
+
 test('keyboard scrolling updates the reading position without releasing streaming protection', async () => {
   const p = await fixture({ preserveScroll: true });
   await scrollFixture(p);
@@ -1467,6 +1666,75 @@ test('keep visible text steady when the document itself scrolls', async () => {
   await sentCount(p, 1);
   await p.waitForTimeout(100);
   assert.equal(await p.evaluate(() => anchor.getBoundingClientRect().top), await p.evaluate(() => anchorTop));
+  assert.deepEqual(p.errors, []);
+  await p.close();
+});
+
+async function enableAppMentions(page) {
+  await page.evaluate(() => {
+    window.sentApps = [];
+    editor.addEventListener('paste', event => {
+      const html = event.clipboardData.getData('text/html');
+      if (!html) return;
+      event.preventDefault();
+      document.execCommand('insertHTML', false, html);
+      editor.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    button.addEventListener('click', () => {
+      if (!window.active && !window.rejectSend) window.sentApps.push(
+        [...editor.querySelectorAll('[app-mention-path]')].map(node => node.getAttribute('app-mention-path')));
+    }, true);
+  });
+}
+
+for (const [label, connector] of [['Deep research', 'connector_openai_deep_research'], ['CourtListener', 'courtlistener']]) {
+  test(`queued ${label} preserves app identity through storage and prompt edits`, async () => {
+    let p = await fixture({ active: true });
+    await enableAppMentions(p);
+    await p.evaluate(({ label, connector }) => {
+      editor.innerHTML = '<p><span contenteditable="false"></span> Investigate this topic</p>';
+      const mention = editor.querySelector('span');
+      mention.textContent = label;
+      mention.setAttribute('app-mention-path', 'app://' + connector);
+      mention.setAttribute('app-mention-name', connector);
+      mention.setAttribute('app-mention-display-name', label);
+      mention.setAttribute('data-prompt-link-href', 'app://' + connector);
+      editor.dispatchEvent(new Event('input', { bubbles: true }));
+    }, { label, connector });
+    await p.locator('[data-composer-markdown]').press('Enter');
+    await p.locator('.ghrc-message-queue-editor').waitFor();
+    const saved = await p.evaluate(() => structuredClone(storage));
+    assert.equal(saved.queuedChatMessages['conversation:test'][0].mentions[0].attributes['app-mention-path'], 'app://' + connector);
+    await p.close();
+    p = await fixture({ active: true, stored: saved });
+    await enableAppMentions(p);
+    await p.locator('.ghrc-message-queue-editor').fill(label + ' Investigate another topic');
+    await p.evaluate(() => {
+      editor.innerHTML = '<p><span app-mention-path="app://draft-app" app-mention-name="draft-app" contenteditable="false">Draft app</span> Later draft</p>';
+      editor.dispatchEvent(new Event('input', { bubbles: true }));
+      finish();
+    });
+    await sentCount(p, 1);
+    assert.deepEqual(await p.evaluate(() => sentApps), [['app://' + connector]]);
+    await p.waitForFunction(() => editor.querySelector('[app-mention-path="app://draft-app"]'));
+    assert.equal(await p.evaluate(() => read()), 'Draft app Later draft');
+    assert.deepEqual(p.errors, []);
+    await p.close();
+  });
+}
+
+test('app restoration failure keeps the message queued and pauses instead of sending plain text', async () => {
+  const p = await fixture({ active: true });
+  await p.evaluate(() => {
+    editor.innerHTML = '<p><span app-mention-path="app://research" contenteditable="false">Research</span> Topic</p>';
+    editor.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await p.locator('[data-composer-markdown]').press('Enter');
+  await p.locator('.ghrc-message-queue-editor').waitFor();
+  await p.evaluate(() => finish());
+  await p.waitForFunction(() => storage.queuedChatMessagesPaused?.['conversation:test'] === true);
+  assert.deepEqual(await p.evaluate(() => sent), []);
+  assert.equal(await p.locator('.ghrc-message-queue-editor').count(), 1);
   assert.deepEqual(p.errors, []);
   await p.close();
 });
