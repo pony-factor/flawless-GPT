@@ -440,6 +440,27 @@ test('edit, reorder, and remove preserve FIFO while Send bypasses the queue', as
   await p.close();
 });
 
+test('queued prompt edits survive a delayed storage echo without losing focus', async () => {
+  const p = await fixture({ active: true });
+  await enqueue(p, 'Original');
+  const editor = p.locator('.ghrc-message-queue-editor');
+
+  await p.evaluate(() => { window.delayQueueSave = true; });
+  await editor.fill('First edit');
+  await p.waitForFunction(() => typeof window.resolveQueueSave === 'function');
+  await editor.fill('Second edit');
+  await p.evaluate(() => {
+    window.delayQueueSave = false;
+    window.resolveQueueSave();
+  });
+
+  await p.waitForTimeout(350);
+  assert.equal(await editor.inputValue(), 'Second edit');
+  assert.equal(await editor.evaluate(el => document.activeElement === el), true);
+  assert.equal(await p.evaluate(() => storage.queuedChatMessages['conversation:test'][0].text), 'Second edit');
+  await p.close();
+});
+
 test('queue drains while preserving a partial draft and Shift+Enter newline', async () => {
   const p = await fixture({ active: true });
   await enqueue(p, 'Queued');
