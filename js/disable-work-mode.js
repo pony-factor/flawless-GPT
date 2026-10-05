@@ -70,12 +70,16 @@
   }
 
   function pageAppearsToBeWorkMode() {
+    if ([...document.querySelectorAll(CONTROL_SELECTOR)].some((control) =>
+      isWorkControl(control) && ["aria-pressed", "aria-selected", "aria-checked"]
+        .some((attribute) => control.getAttribute(attribute) === "true")
+    )) return true;
     return [...document.querySelectorAll("[placeholder], [data-placeholder], [aria-label]")]
       .some((element) => [
         element.getAttribute("placeholder"),
         element.getAttribute("data-placeholder"),
         element.getAttribute("aria-label"),
-      ].some((label) => /^work on anything$/i.test(normalizedText(label))));
+      ].some((label) => /^work (?:on anything|with chatgpt)$/i.test(normalizedText(label))));
   }
 
   function selectChat(chatControl) {
@@ -172,6 +176,8 @@
   new MutationObserver(scheduleScan).observe(document, {
     childList: true,
     subtree: true,
+    attributes: true,
+    attributeFilter: ["aria-pressed", "aria-selected", "aria-checked", "aria-label", "placeholder", "data-placeholder"],
   });
   void chrome.storage.local.get({ [SETTING_KEY]: false }).then((settings) => {
     setEnabled(Boolean(settings[SETTING_KEY]));
