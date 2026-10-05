@@ -8,6 +8,9 @@
   const STATUS_KEY = "webCommitGuidanceSyncStatus";
   const POLL_MS = 5000;
   const REQUEST_TIMEOUT_MS = 8000;
+  const context = globalThis.__ghrcExtensionContext;
+  if (!context?.active()) return;
+  const pendingBridges = new Set();
 
   let requestCounter = 0;
   let syncRunning = false;
@@ -18,8 +21,17 @@
   function bridge(action, value = "") {
     const id = `web-commit-guidance-${Date.now()}-${++requestCounter}`;
     return new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => {
+      function cleanup() {
+        clearTimeout(timeout);
         window.removeEventListener("message", onMessage);
+        pendingBridges.delete(cancel);
+      }
+      function cancel() {
+        cleanup();
+        reject(new Error("Extension context invalidated."));
+      }
+      const timeout = setTimeout(() => {
+        cleanup();
         reject(new Error("ChatGPT personalization bridge timed out."));
       }, REQUEST_TIMEOUT_MS);
 
@@ -27,8 +39,7 @@
         const message = event.data;
         if (event.source !== window || message?.channel !== CHANNEL
             || message?.direction !== "response" || message.id !== id) return;
-        clearTimeout(timeout);
-        window.removeEventListener("message", onMessage);
+        cleanup();
         if (!message.ok) {
           reject(new Error(message.error || "ChatGPT personalization sync failed."));
           return;
@@ -39,6 +50,7 @@
         });
       }
 
+      pendingBridges.add(cancel);
       window.addEventListener("message", onMessage);
       window.postMessage({
         channel: CHANNEL,
@@ -78,7 +90,11 @@
     await setStatus("Synced to ChatGPT Personalization.", "success");
   }
 
-  async function synchronize() {
+  function synchronize() {
+    return context.run(synchronizeActive);
+  }
+
+  async function synchronizeActive() {
     if (syncRunning) {
       syncAgain = true;
       return;
@@ -86,6 +102,7 @@
     syncRunning = true;
     try {
       const remoteState = await bridge("get");
+      if (!context.active()) return;
       const stored = await chrome.storage.local.get({
         [GUIDANCE_KEY]: null,
         [LAST_SYNCED_KEY]: null,
@@ -125,6 +142,10 @@
         await pushLocal(local, remoteState.accountId);
       }
     } catch (error) {
+      if (/extension context invalidated/i.test(error?.message || "") || !context.active()) {
+        context.handleError(error);
+        return;
+      }
       await setStatus(
         `${error?.message || "ChatGPT personalization sync failed."} Local guidance is still saved.`,
         "error",
@@ -140,13 +161,14 @@
 
   function schedulePoll() {
     clearTimeout(pollTimer);
+    if (!context.active()) return;
     pollTimer = setTimeout(async () => {
       if (document.visibilityState === "visible") await synchronize();
       schedulePoll();
     }, POLL_MS);
   }
 
-  chrome.storage.onChanged.addListener((changes, areaName) => {
+  function onStorageChanged(changes, areaName) {
     if (areaName !== "local" || !changes[GUIDANCE_KEY]) return;
     const value = changes[GUIDANCE_KEY].newValue;
     if (value === suppressedLocalValue) {
@@ -154,12 +176,25 @@
       return;
     }
     void synchronize();
-  });
+  }
 
-  document.addEventListener("visibilitychange", () => {
+  function onVisibilityChanged() {
     if (document.visibilityState === "visible") void synchronize();
+  }
+  function onFocus() { void synchronize(); }
+
+  const storageChanges = chrome.storage.onChanged;
+  storageChanges.addListener(onStorageChanged);
+  document.addEventListener("visibilitychange", onVisibilityChanged);
+  window.addEventListener("focus", onFocus);
+  context.onStop(() => {
+    clearTimeout(pollTimer);
+    syncAgain = false;
+    document.removeEventListener("visibilitychange", onVisibilityChanged);
+    window.removeEventListener("focus", onFocus);
+    try { storageChanges.removeListener(onStorageChanged); } catch { /* Already invalidated. */ }
+    for (const cancel of pendingBridges) cancel();
   });
-  window.addEventListener("focus", () => void synchronize());
 
   void synchronize();
   schedulePoll();
