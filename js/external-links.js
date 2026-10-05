@@ -172,6 +172,19 @@
     hostname.textContent = url.hostname.replace(/^www\./i, "");
     destination.append(favicon, hostname);
     destination.title = href;
+    const copy = document.createElement("button");
+    copy.className = "ghrc-preview-control";
+    copy.type = "button";
+    copy.title = "Copy link";
+    copy.setAttribute("aria-label", "Copy link");
+    copy.innerHTML = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M15 9V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h3"/></svg>';
+    copy.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(href);
+      } catch {
+        // Leave the preview open if clipboard access is unavailable.
+      }
+    });
     const open = document.createElement("a");
     open.className = "ghrc-preview-control";
     open.href = href;
@@ -195,7 +208,7 @@
     close.title = "Close website preview";
     close.setAttribute("aria-label", "Close website preview");
     close.addEventListener("click", closeLinkPreview);
-    header.append(destination, open, close);
+    header.append(destination, copy, open, close);
     const frame = document.createElement("iframe");
     frame.title = "Website preview: " + new URL(href).hostname;
     frame.setAttribute("sandbox", "allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox");
