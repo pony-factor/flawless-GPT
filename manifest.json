@@ -49,7 +49,8 @@
         "js/clipboard-utm-sanitizer.js",
         "js/chatgpt-route-events.js",
         "js/sidebar-tab-state.js",
-        "js/deep-research-usage.js"
+        "js/deep-research-usage.js",
+        "js/chatgpt-personalization-api.js"
       ],
       "run_at": "document_start",
       "world": "MAIN"
@@ -72,6 +73,7 @@
       ],
       "js": [
         "js/extension-context.js",
+        "js/web-commit-guidance-sync.js",
         "js/compact-header.js",
         "js/2048-keyboard.js",
         "js/collapse-sidebar.js",

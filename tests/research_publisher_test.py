@@ -87,7 +87,8 @@ class PublisherTests(unittest.TestCase):
     def test_rejects_foreign_origin_paths_and_invalid_content(self):
         with patch.object(host, "publish") as publish:
             for message, caller in [(self.message, "other"), ({**self.message, "repo": "/other"}, self.origin),
-                                    ({"action": "launch"}, self.origin)]:
+                                    ({"action": "launch"}, self.origin),
+                                    ({"action": "sync-codex-settings"}, self.origin)]:
                 with self.assertRaises(host.PublishError):
                     host.handle(message, self.config, caller)
             publish.assert_not_called()
@@ -147,22 +148,6 @@ class PublisherTests(unittest.TestCase):
         self.assertFalse(any("--force" in call or "-f" in call for call in calls))
         self.assertEqual(git(self.remote, "rev-list", "--count", "main"), "1")
 
-
-    def test_codex_personalization_preserves_unmanaged_agents_content(self):
-        agents = self.base / "AGENTS.md"
-        agents.write_text("Keep this line.\n")
-        host.sync_codex_instructions("Use plain ASCII quotes.", True, destination=agents)
-        text = agents.read_text()
-        self.assertIn("Keep this line.", text)
-        self.assertIn("Use plain ASCII quotes.", text)
-        self.assertIn(host.CODEX_WEB_COAUTHOR, text)
-        settings = host.read_codex_settings(destination=agents)
-        self.assertEqual(settings["instructions"], "Use plain ASCII quotes.")
-        self.assertTrue(settings["webCodexCoauthor"])
-        host.sync_codex_instructions("Keep replies compact.", False, destination=agents)
-        settings = host.read_codex_settings(destination=agents)
-        self.assertEqual(settings, {"instructions": "Keep replies compact.", "webCodexCoauthor": False})
-        self.assertEqual(agents.read_text().count(host.START), 1)
 
     def test_protocol_errors_return_framed_json(self):
         for request in [b"", struct.pack("=I", host.MAX_MESSAGE + 1), struct.pack("=I", 10) + b"{}"]:
