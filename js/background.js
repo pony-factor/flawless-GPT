@@ -2,6 +2,7 @@ importScripts(
   "avatar-cache.js",
   "highlighted-pages-worker.js",
   "service-worker.js",
+  "github-link-preview.js",
   "github-app-auth.js",
   "youtube-search-worker.js",
   "research-publisher-background.js",
