@@ -10,6 +10,7 @@
   const REVEAL_DELAY_MS = 350;
   const REVEAL_RETRY_MS = 750;
   const MENU_HOVER_PADDING = 12;
+  const RAIL_CLUSTER_GAP = 32;
   let initialCollapseFinished = false;
   let hoverRevealEnabled = false;
   let collapseTimer = null;
@@ -111,20 +112,31 @@
     const scope = library.element.closest(
       'aside, nav, [data-testid*="sidebar"], [data-testid*="navigation"]',
     ) || document;
-    const presetBounds = Array.from(scope.querySelectorAll("a[href]"))
-      .map((link) => ({ link, bounds: visibleBounds(link), pathname: pathnameFor(link) }))
-      .filter(({ bounds, pathname }) => (
+    const railControls = Array.from(scope.querySelectorAll('a[href], button, [role="button"]'))
+      .filter(element => element !== library.element
+        && !element.contains(library.element)
+        && !library.element.contains(element))
+      .map(element => ({ element, bounds: visibleBounds(element) }))
+      .filter(({ bounds }) => (
         bounds
         && bounds.left <= EDGE_HOTSPOT_WIDTH + 24
+        && bounds.right <= EDGE_HOTSPOT_WIDTH + 32
         && bounds.top >= library.bounds.bottom
-        && (/^\/g\/[^/]+/.test(pathname) || /^\/gpts\/[^/]+/.test(pathname))
       ))
-      .map(({ bounds }) => bounds);
+      .sort((a, b) => a.bounds.top - b.bounds.top);
+
+    const presetBounds = [];
+    let clusterBottom = library.bounds.bottom;
+    for (const { bounds } of railControls) {
+      if (bounds.top - clusterBottom > RAIL_CLUSTER_GAP) break;
+      presetBounds.push(bounds);
+      clusterBottom = Math.max(clusterBottom, bounds.bottom);
+    }
 
     if (!presetBounds.length) return null;
     return {
       top: library.bounds.bottom,
-      bottom: Math.max(...presetBounds.map(bounds => bounds.bottom)),
+      bottom: clusterBottom,
     };
   }
 

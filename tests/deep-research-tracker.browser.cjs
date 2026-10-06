@@ -107,6 +107,33 @@ test('dashboard stays above Highlights on the right; plugin selection and settin
   } finally { await browser.close(); }
 });
 
+test('homepage only shows the remaining count in the final five days', async () => {
+  const browser = await chromium.launch({ executablePath: '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser', headless: true });
+  try {
+    const page = await browser.newPage();
+    await page.setContent('<section><form><div id="prompt-textarea" contenteditable="true"><span contenteditable="false" data-prompt-link-href="app://connector_openai_deep_research">Deep research</span></div></form><section id="github-repositories-for-chatgpt">Repositories</section></section>');
+    await page.evaluate(() => {
+      window.__ghrcExtensionContext = { active: () => true, onStop() {} };
+      const now = Date.now();
+      document.documentElement.setAttribute('data-ghrc-deep-research-usage', JSON.stringify({ remaining: 13, resetAt: now + 6 * 24 * 60 * 60_000, observedAt: now }));
+    });
+    await page.addScriptTag({ content: fs.readFileSync(path.join(__dirname, '../js/deep-research-tracker.js'), 'utf8') });
+    const dashboard = page.locator('#ghrc-deep-research-tracker');
+    const composer = page.locator('#ghrc-deep-research-tracker-composer');
+    await dashboard.waitFor();
+    await composer.waitFor();
+    assert.doesNotMatch(await dashboard.innerText(), /13 left/);
+    assert.match(await dashboard.innerText(), /resets 6d/);
+    assert.match(await composer.innerText(), /13 left/);
+
+    await page.evaluate(() => {
+      const now = Date.now();
+      document.documentElement.setAttribute('data-ghrc-deep-research-usage', JSON.stringify({ remaining: 13, resetAt: now + 5 * 24 * 60 * 60_000, observedAt: now }));
+    });
+    await page.waitForFunction(() => document.getElementById('ghrc-deep-research-tracker')?.textContent.includes('13 left'));
+  } finally { await browser.close(); }
+});
+
 test('native initialization fills the tracker automatically and clicking refreshes without submitting a prompt', async () => {
   const browser = await chromium.launch({ executablePath: '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser', headless: true });
   try {

@@ -97,6 +97,19 @@ test('collapsed reveal only uses the band below Library through preset icons',as
   assert.deepEqual(page.errors,[]);
   await page.close();
 });
+test('preset rail hover survives changed preset URL shapes',async()=>{
+  const page=await fixture();
+  await page.evaluate(()=>{
+    document.getElementById('preset-one').setAttribute('href','/preset/one');
+    document.getElementById('preset-two').setAttribute('href','/preset/two');
+    document.getElementById('preset-three').setAttribute('href','/preset/three');
+  });
+  await page.mouse.move(12,250);
+  await page.waitForFunction(()=>document.querySelector('aside').dataset.expanded==='true');
+  assert.equal(await page.evaluate(()=>clicks),1);
+  assert.deepEqual(page.errors,[]);
+  await page.close();
+});
 test('synthetic research-menu pointer events cannot reveal the sidebar',async()=>{
   const page=await fixture();
   await page.mouse.move(500,250);
