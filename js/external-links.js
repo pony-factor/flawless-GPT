@@ -17,6 +17,7 @@
   let splitViewEnabled = false;
   let previewPanel = null;
   let previewLink = null;
+  let githubSplitRequest = 0;
 
   function normalizedText(element) {
     return (element.textContent || "").replace(/\s+/g, " ").trim();
@@ -135,13 +136,17 @@
 
     event.preventDefault();
     event.stopImmediatePropagation();
-    if (splitViewEnabled) showLinkPreview(url.href, link);
+    if (splitViewEnabled) {
+      if (["github.com", "www.github.com"].includes(url.hostname)) void openGitHubSplitView(url.href, link);
+      else showLinkPreview(url.href, link);
+    }
     else if (newTabsEnabled) window.open(url.href, "_blank", "noopener,noreferrer");
     else window.location.assign(url.href);
     return true;
   }
 
   function closeLinkPreview() {
+    githubSplitRequest += 1;
     previewPanel?.remove();
     previewPanel = null;
     document.documentElement.removeAttribute("data-ghrc-link-preview");
@@ -214,9 +219,8 @@
       const content = document.createElement("div");
       content.className = "ghrc-preview-content";
       content.setAttribute("aria-live", "polite");
-      content.textContent = "Loading GitHub preview…";
       panel.append(content);
-      void loadGitHubPreview(href, content);
+      showGitHubSplitGuide(href, content);
     } else {
       const frame = document.createElement("iframe");
       frame.title = "Website preview: " + url.hostname;
@@ -231,45 +235,33 @@
     close.focus();
   }
 
-  async function loadGitHubPreview(href, content) {
+  async function openGitHubSplitView(href, link) {
+    closeLinkPreview();
+    const request = ++githubSplitRequest;
     try {
-      const result = await chrome.runtime.sendMessage({ type: "load-github-link-preview", url: href });
-      if (!content.isConnected) return;
-      if (!result?.ok) throw new Error(result?.error || "GitHub preview is unavailable.");
-      content.replaceChildren();
-      const appendText = (tag, text, parent = content) => {
-        const element = document.createElement(tag);
-        element.textContent = text;
-        parent.append(element);
-        return element;
-      };
-      appendText("p", result.subtitle).className = "ghrc-preview-meta";
-      appendText("h2", result.title);
-      if (result.details) appendText("p", result.details);
-      if (result.body) appendText("pre", result.body).className = "ghrc-preview-body";
-      for (const file of result.files || []) {
-        const section = document.createElement("details");
-        section.open = true;
-        appendText("summary", `${file.filename} (+${file.additions} −${file.deletions})`, section);
-        appendText("pre", file.patch || "Diff unavailable. Open the full page to view this file.", section);
-        content.append(section);
-      }
-      if (result.note) appendText("p", result.note);
-    } catch (error) {
-      if (!content.isConnected) return;
-      content.replaceChildren();
-      const message = document.createElement("p");
-      message.textContent = `${error.message} Use Open in new tab to view the full GitHub page.`;
-      content.append(message);
-      const retry = document.createElement("button");
-      retry.type = "button";
-      retry.textContent = "Retry preview";
-      retry.addEventListener("click", () => {
-        content.textContent = "Loading GitHub preview…";
-        void loadGitHubPreview(href, content);
-      });
-      content.append(retry);
+      const result = await chrome.runtime.sendMessage({ type: "open-github-split-view", url: href });
+      if (request !== githubSplitRequest || !splitViewEnabled) return;
+      if (result?.ok) return;
+    } catch {
+      // Older browsers cannot create a native split through the extension API.
     }
+    if (request === githubSplitRequest && splitViewEnabled) showLinkPreview(href, link);
+  }
+
+  function showGitHubSplitGuide(href, content) {
+    content.replaceChildren();
+    const title = document.createElement("h2");
+    title.textContent = "Open GitHub in split view";
+    const instructions = document.createElement("p");
+    instructions.textContent = 'Right-click the link below and choose “Open link in split view” to view the full GitHub website beside this chat.';
+    const destination = document.createElement("a");
+    destination.href = href;
+    destination.target = "_blank";
+    destination.rel = "noopener noreferrer";
+    destination.textContent = href;
+    const note = document.createElement("p");
+    note.textContent = "This browser does not support automatic split-view opening from the extension yet.";
+    content.append(title, instructions, destination, note);
   }
 
   function preserveNativeScroll(event) {

@@ -68,32 +68,27 @@ test('settings changes apply immediately and disabling split closes its frame', 
   await page.close();
 });
 
-test('GitHub preview renders API content safely without a blocked iframe', async () => {
-  const page = await fixture({ openExternalLinksInSplitView: true }, {
-    ok: true, subtitle: 'owner/repo #42', title: 'A useful PR', details: 'Merged · author',
-    body: '<img src=x onerror="window.injected=true">',
-    files: [{ filename: 'example.js', additions: 1, deletions: 0, patch: '+safe change' }],
-  });
+test('GitHub links request native split view without an embedded preview', async () => {
+  const page = await fixture({ openExternalLinksInSplitView: true }, { ok: true });
   await page.locator('#source').evaluate(link => { link.href = 'https://github.com/owner/repo/pull/42'; });
   await page.locator('#source').click();
-  await page.locator('#ghrc-link-preview h2').waitFor();
-  assert.equal(await page.locator('#ghrc-link-preview h2').textContent(), 'A useful PR');
+  assert.deepEqual(await page.evaluate(() => previewRequest), { type: 'open-github-split-view', url: 'https://github.com/owner/repo/pull/42' });
+  assert.equal(await page.locator('#ghrc-link-preview').count(), 0);
+  assert.deepEqual(await page.evaluate(() => openedLinks), []);
+  await page.close();
+});
+test('older browsers offer the actual GitHub link for native context-menu splitting', async () => {
+  const page = await fixture({ openExternalLinksInSplitView: true }, { ok: false, unavailable: true });
+  await page.locator('#source').evaluate(link => { link.href = 'https://github.com/owner/repo/pull/42'; });
+  await page.locator('#source').click();
+  await page.locator('.ghrc-preview-content h2').waitFor();
+  assert.match(await page.locator('.ghrc-preview-content').textContent(), /Open link in split view/);
   assert.equal(await page.locator('#ghrc-link-preview iframe').count(), 0);
-  assert.equal(await page.locator('#ghrc-link-preview .ghrc-preview-body img').count(), 0);
-  assert.match(await page.locator('#ghrc-link-preview details').textContent(), /safe change/);
-  assert.deepEqual(await page.evaluate(() => previewRequest), { type: 'load-github-link-preview', url: 'https://github.com/owner/repo/pull/42' });
+  assert.equal(await page.locator('.ghrc-preview-content a').getAttribute('href'), 'https://github.com/owner/repo/pull/42');
+  await page.getByRole('link', { name: 'Open in new tab' }).click();
+  assert.deepEqual(await page.evaluate(() => openedLinks), [['https://github.com/owner/repo/pull/42', '_blank', 'noopener,noreferrer']]);
   await page.keyboard.press('Escape');
   assert.equal(await page.locator('#ghrc-link-preview').count(), 0);
   assert.equal(await page.evaluate(() => document.activeElement.id), 'source');
-  await page.close();
-});
-test('unavailable GitHub preview explains the failure and keeps new-tab action', async () => {
-  const page = await fixture({ openExternalLinksInSplitView: true }, { ok: false, error: 'GitHub returned 404' });
-  await page.locator('#source').evaluate(link => { link.href = 'https://github.com/owner/repo/pull/42'; });
-  await page.locator('#source').click();
-  await page.getByRole('button', { name: 'Retry preview' }).waitFor();
-  assert.match(await page.locator('.ghrc-preview-content').textContent(), /GitHub returned 404/);
-  await page.getByRole('link', { name: 'Open in new tab' }).click();
-  assert.deepEqual(await page.evaluate(() => openedLinks), [['https://github.com/owner/repo/pull/42', '_blank', 'noopener,noreferrer']]);
   await page.close();
 });
