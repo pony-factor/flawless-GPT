@@ -29,7 +29,6 @@ const stripCopiedBoldInput = document.getElementById("strip-copied-bold");
 const normalizeCopiedQuotesInput = document.getElementById("normalize-copied-quotes");
 const underscoreCopiedItalicsInput = document.getElementById("underscore-copied-italics");
 const openExternalLinksInNewTabsInput = document.getElementById("open-external-links-in-new-tabs");
-const nativeSplitViewDomainsInput = document.getElementById("native-split-view-domains");
 const openExternalLinksInSplitViewInput = document.getElementById("open-external-links-in-split-view");
 const skipExternalSiteWarningInput = document.getElementById("skip-external-site-warning");
 const dismissHistoryRateLimitModalInput = document.getElementById("dismiss-history-rate-limit-modal");
@@ -331,7 +330,6 @@ async function loadSettings() {
     skipExternalSiteWarning: true,
     openExternalLinksInNewTabs: true,
     openExternalLinksInSplitView: false,
-    nativeSplitViewDomains: ["github.com"],
     dismissHistoryRateLimitModal: true,
     hideUsageCard: true,
     hideCookiePreferences: false,
@@ -376,7 +374,6 @@ async function loadSettings() {
   underscoreCopiedItalicsInput.checked = settings.underscoreCopiedItalics !== false;
   openExternalLinksInNewTabsInput.checked = settings.openExternalLinksInNewTabs !== false;
   openExternalLinksInSplitViewInput.checked = Boolean(settings.openExternalLinksInSplitView);
-  nativeSplitViewDomainsInput.value = (settings.nativeSplitViewDomains || ["github.com"]).join("\n");
   skipExternalSiteWarningInput.checked = Boolean(settings.skipExternalSiteWarning);
   dismissHistoryRateLimitModalInput.checked = Boolean(settings.dismissHistoryRateLimitModal);
   hideUsageCardInput.checked = settings.hideUsageCard !== false;
@@ -470,8 +467,6 @@ async function saveSettings() {
       skipExternalSiteWarning: skipExternalSiteWarningInput.checked,
       openExternalLinksInNewTabs: openExternalLinksInNewTabsInput.checked,
       openExternalLinksInSplitView: openExternalLinksInSplitViewInput.checked,
-      nativeSplitViewDomains: [...new Set(nativeSplitViewDomainsInput.value.split(/[\s,]+/)
-        .map(value => value.trim().toLowerCase()).filter(value => /^(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z0-9-]+$/.test(value)))],
       dismissHistoryRateLimitModal: dismissHistoryRateLimitModalInput.checked,
       hideUsageCard: hideUsageCardInput.checked,
       hideCookiePreferences: hideCookiePreferencesInput.checked,
@@ -505,8 +500,6 @@ form.addEventListener("submit", (event) => {
   event.preventDefault();
   void queueSettingsSave();
 });
-
-nativeSplitViewDomainsInput.addEventListener("input", () => { void queueSettingsSave(); });
 
 form.addEventListener("change", (event) => {
   if (event.target.closest(".token-row")) tokenInputsDirty = true;

@@ -1,6 +1,55 @@
 html[data-ghrc-link-preview] {
-  --ghrc-preview-width: min(45vw, 720px);
+  --ghrc-preview-width: min(48vw, 800px);
   width: calc(100% - var(--ghrc-preview-width));
+}
+
+.ghrc-link-actions {
+  display: inline-flex;
+  align-items: stretch;
+  height: 20px;
+  margin-inline: 3px 1px;
+  vertical-align: text-bottom;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, currentColor 24%, transparent);
+  border-radius: 5px;
+  color: currentColor;
+}
+
+.ghrc-link-mode,
+.ghrc-link-sidebar-button {
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  box-sizing: border-box;
+}
+
+.ghrc-link-mode {
+  display: inline-flex;
+  padding: 0 4px;
+  font: 11px/1 system-ui, sans-serif;
+  opacity: 0.65;
+}
+
+.ghrc-link-sidebar-button {
+  display: inline-flex;
+  width: 24px;
+  padding: 0;
+  border: 0;
+  border-left: 1px solid color-mix(in srgb, currentColor 18%, transparent);
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.ghrc-link-sidebar-button:hover {
+  background: color-mix(in srgb, currentColor 10%, transparent);
+}
+
+.ghrc-link-sidebar-button:focus-visible {
+  outline: 2px solid Highlight;
+  outline-offset: -2px;
 }
 
 #ghrc-link-preview {
@@ -15,6 +64,31 @@ html[data-ghrc-link-preview] {
   border-left: 1px solid color-mix(in srgb, CanvasText 20%, transparent);
   font: 14px/1.5 system-ui, sans-serif;
   color-scheme: light dark;
+}
+
+#ghrc-link-preview .ghrc-preview-resizer {
+  position: absolute;
+  inset: 0 auto 0 -5px;
+  z-index: 2;
+  width: 10px;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+#ghrc-link-preview .ghrc-preview-resizer::after {
+  content: "";
+  position: absolute;
+  inset: 0 4px;
+  background: color-mix(in srgb, CanvasText 20%, transparent);
+}
+
+#ghrc-link-preview .ghrc-preview-resizer:hover::after,
+#ghrc-link-preview .ghrc-preview-resizer:focus-visible::after {
+  background: Highlight;
+}
+
+#ghrc-link-preview .ghrc-preview-resizer:focus-visible {
+  outline: none;
 }
 
 #ghrc-link-preview header {
