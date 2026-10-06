@@ -7,7 +7,7 @@
   const SETTING_KEY = "hideUsageCard";
   const MARKER_ATTR = "data-ghrc-usage-card";
   const STYLE_ID = "ghrc-hide-usage-card-style";
-  const USAGE_RE = /\b\d+(?:\.\d+)?%\s+usage remaining\b/i;
+  const USAGE_RE = /\b\d+(?:\.\d+)?\s*%\s*usage\s+remaining\b/i;
   let enabled = true;
   let scanScheduled = false;
 
@@ -31,7 +31,7 @@
   function findUsageCard(control) {
     let candidate = control.parentElement;
     for (let depth = 0; candidate && depth < 10; depth += 1, candidate = candidate.parentElement) {
-      const text = normalizedText(candidate.textContent);
+      const text = normalizedText(candidate.innerText || candidate.textContent);
       if (text.length > 1200) continue;
       if (!USAGE_RE.test(text)) continue;
       if (!hasControl(candidate, "add credits") || !hasControl(candidate, "upgrade")) continue;
@@ -54,6 +54,7 @@
 
     ensureStyle();
     for (const control of document.querySelectorAll("button, a, [role=\"button\"]")) {
+      if (control.closest(`[${MARKER_ATTR}]`)) continue;
       if (controlLabel(control).toLowerCase() !== "add credits") continue;
       const card = findUsageCard(control);
       if (card) card.setAttribute(MARKER_ATTR, "");
