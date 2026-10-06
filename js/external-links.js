@@ -17,9 +17,6 @@
   let splitViewEnabled = false;
   let previewPanel = null;
   let previewLink = null;
-  let nativeSplitRequest = 0;
-  let nativeSplitDomains = ["github.com"];
-  let previewWatch = null;
 
   function normalizedText(element) {
     return (element.textContent || "").replace(/\s+/g, " ").trim();
@@ -136,23 +133,15 @@
       || url.origin === window.location.origin
     ) return false;
 
-    const useNative = splitViewEnabled
-      && nativeSplitDomains.some(domain => url.hostname === domain || url.hostname.endsWith("." + domain));
     event.preventDefault();
     event.stopImmediatePropagation();
-    if (useNative) void openNativeSplitView(url.href, link);
-    else if (splitViewEnabled) showLinkPreview(url.href, link);
+    if (splitViewEnabled) showLinkPreview(url.href, link);
     else if (newTabsEnabled) window.open(url.href, "_blank", "noopener,noreferrer");
     else window.location.assign(url.href);
     return true;
   }
 
   function closeLinkPreview() {
-    nativeSplitRequest += 1;
-    if (previewWatch) {
-      void chrome.runtime.sendMessage({ type: "unwatch-link-preview", previewId: previewWatch.id }).catch(() => {});
-      previewWatch = null;
-    }
     previewPanel?.remove();
     previewPanel = null;
     document.documentElement.removeAttribute("data-ghrc-link-preview");
@@ -160,7 +149,7 @@
     previewLink = null;
   }
 
-  function showLinkPreview(href, link, nativeGuide = false) {
+  function showLinkPreview(href, link) {
     closeLinkPreview();
     previewLink = link;
     const panel = document.createElement("aside");
@@ -221,30 +210,20 @@
     close.addEventListener("click", closeLinkPreview);
     header.append(destination, copy, open, close);
     panel.append(header);
-    if (nativeGuide) {
+    if (url.hostname === "github.com" || url.hostname === "www.github.com") {
       const content = document.createElement("div");
       content.className = "ghrc-preview-content";
       content.setAttribute("aria-live", "polite");
+      content.textContent = "Loading GitHub preview…";
       panel.append(content);
-      showNativeSplitGuide(href, content);
+      void loadGitHubPreview(href, content);
     } else {
       const frame = document.createElement("iframe");
       frame.title = "Website preview: " + url.hostname;
       frame.setAttribute("sandbox", "allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox");
       frame.referrerPolicy = "no-referrer";
+      frame.src = href;
       panel.append(frame);
-      const watch = { id: `${Date.now()}:${nativeSplitRequest}`, href, link, panel };
-      previewWatch = watch;
-      // Arm browser navigation monitoring before starting the cross-origin frame.
-      void (async () => {
-        try {
-          await chrome.runtime.sendMessage({ type: "watch-link-preview", url: href, previewId: watch.id });
-        } catch { /* Keep usable previews available if the worker is restarting. */ }
-        if (previewWatch === watch && panel.isConnected) frame.src = href;
-      })();
-      frame.addEventListener("error", () => {
-        if (previewWatch === watch) void openNativeSplitView(href, link);
-      });
     }
     previewPanel = panel;
     document.body.append(panel);
@@ -252,33 +231,45 @@
     close.focus();
   }
 
-  async function openNativeSplitView(href, link) {
-    closeLinkPreview();
-    const request = ++nativeSplitRequest;
+  async function loadGitHubPreview(href, content) {
     try {
-      const result = await chrome.runtime.sendMessage({ type: "open-native-split-view", url: href });
-      if (request !== nativeSplitRequest) return;
-      if (result?.ok) return;
-    } catch {
-      // Older browsers cannot create a native split through the extension API.
+      const result = await chrome.runtime.sendMessage({ type: "load-github-link-preview", url: href });
+      if (!content.isConnected) return;
+      if (!result?.ok) throw new Error(result?.error || "GitHub preview is unavailable.");
+      content.replaceChildren();
+      const appendText = (tag, text, parent = content) => {
+        const element = document.createElement(tag);
+        element.textContent = text;
+        parent.append(element);
+        return element;
+      };
+      appendText("p", result.subtitle).className = "ghrc-preview-meta";
+      appendText("h2", result.title);
+      if (result.details) appendText("p", result.details);
+      if (result.body) appendText("pre", result.body).className = "ghrc-preview-body";
+      for (const file of result.files || []) {
+        const section = document.createElement("details");
+        section.open = true;
+        appendText("summary", `${file.filename} (+${file.additions} −${file.deletions})`, section);
+        appendText("pre", file.patch || "Diff unavailable. Open the full page to view this file.", section);
+        content.append(section);
+      }
+      if (result.note) appendText("p", result.note);
+    } catch (error) {
+      if (!content.isConnected) return;
+      content.replaceChildren();
+      const message = document.createElement("p");
+      message.textContent = `${error.message} Use Open in new tab to view the full GitHub page.`;
+      content.append(message);
+      const retry = document.createElement("button");
+      retry.type = "button";
+      retry.textContent = "Retry preview";
+      retry.addEventListener("click", () => {
+        content.textContent = "Loading GitHub preview…";
+        void loadGitHubPreview(href, content);
+      });
+      content.append(retry);
     }
-    if (request === nativeSplitRequest) showLinkPreview(href, link, true);
-  }
-
-  function showNativeSplitGuide(href, content) {
-    content.replaceChildren();
-    const title = document.createElement("h2");
-    title.textContent = `Open ${new URL(href).hostname} in split view`;
-    const instructions = document.createElement("p");
-    instructions.textContent = 'Right-click the link below and choose “Open link in split view” to view the full website beside this chat.';
-    const destination = document.createElement("a");
-    destination.href = href;
-    destination.target = "_blank";
-    destination.rel = "noopener noreferrer";
-    destination.textContent = href;
-    const note = document.createElement("p");
-    note.textContent = "This browser does not support automatic split-view opening from the extension yet.";
-    content.append(title, instructions, destination, note);
   }
 
   function preserveNativeScroll(event) {
@@ -324,13 +315,11 @@
       [EXTERNAL_WARNING_SETTING_KEY]: true,
       openExternalLinksInNewTabs: true,
       openExternalLinksInSplitView: false,
-      nativeSplitViewDomains: ["github.com"],
       [HISTORY_MODAL_SETTING_KEY]: true,
       [STRIP_UTM_TRACKING_SETTING_KEY]: true,
     });
     newTabsEnabled = settings.openExternalLinksInNewTabs !== false;
     splitViewEnabled = Boolean(settings.openExternalLinksInSplitView);
-    nativeSplitDomains = normalizeSplitDomains(settings.nativeSplitViewDomains);
     externalWarningEnabled = Boolean(settings[EXTERNAL_WARNING_SETTING_KEY]);
     historyModalEnabled = Boolean(settings[HISTORY_MODAL_SETTING_KEY]);
     stripUtmTrackingEnabled = Boolean(settings[STRIP_UTM_TRACKING_SETTING_KEY]);
@@ -341,21 +330,8 @@
     }
   }
 
-  function normalizeSplitDomains(values) {
-    if (!Array.isArray(values)) return ["github.com"];
-    return [...new Set(values.map(value => String(value).trim().toLowerCase()).filter(value => /^(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z0-9-]+$/.test(value)))];
-  }
-
-  chrome.runtime.onMessage.addListener(message => {
-    if (message?.type !== "link-preview-navigation-error" || !previewWatch
-        || message.previewId !== previewWatch.id || message.url !== previewWatch.href) return;
-    const { href, link } = previewWatch;
-    void openNativeSplitView(href, link);
-  });
-
   chrome.storage.onChanged.addListener((changes, areaName) => {
     if (areaName !== "local") return;
-    if (changes.nativeSplitViewDomains) nativeSplitDomains = normalizeSplitDomains(changes.nativeSplitViewDomains.newValue);
     if (changes.openExternalLinksInNewTabs) {
       newTabsEnabled = changes.openExternalLinksInNewTabs.newValue !== false;
     }

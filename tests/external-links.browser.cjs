@@ -16,8 +16,6 @@ async function fixture(settings = {}, previewResponse = null) {
   await page.goto('https://chatgpt.com/c/example');
   await page.evaluate(({ settings, previewResponse }) => {
     window.settingsListeners = [];
-    window.runtimeListeners = [];
-    window.previewRequests = [];
     window.openedLinks = [];
     window.copiedLinks = [];
     window.open = (...args) => openedLinks.push(args);
@@ -25,7 +23,7 @@ async function fixture(settings = {}, previewResponse = null) {
       configurable: true,
       value: { writeText: async value => copiedLinks.push(value) },
     });
-    window.chrome = { runtime: { onMessage: { addListener: fn => runtimeListeners.push(fn) }, sendMessage: async message => { window.previewRequest = message; previewRequests.push(message); return previewResponse; } }, storage: { local: { get: async defaults => ({ ...defaults, ...settings }) }, onChanged: { addListener: listener => settingsListeners.push(listener) } } };
+    window.chrome = { runtime: { sendMessage: async message => { window.previewRequest = message; return previewResponse; } }, storage: { local: { get: async defaults => ({ ...defaults, ...settings }) }, onChanged: { addListener: listener => settingsListeners.push(listener) } } };
   }, { settings, previewResponse });
   await page.addStyleTag({ content: read('css/external-links.css') });
   await page.addScriptTag({ content: read('js/external-links.js') });
@@ -70,69 +68,32 @@ test('settings changes apply immediately and disabling split closes its frame', 
   await page.close();
 });
 
-test('GitHub links request native split view without an embedded preview', async () => {
-  const page = await fixture({ openExternalLinksInSplitView: true }, { ok: true });
+test('GitHub preview renders API content safely without a blocked iframe', async () => {
+  const page = await fixture({ openExternalLinksInSplitView: true }, {
+    ok: true, subtitle: 'owner/repo #42', title: 'A useful PR', details: 'Merged · author',
+    body: '<img src=x onerror="window.injected=true">',
+    files: [{ filename: 'example.js', additions: 1, deletions: 0, patch: '+safe change' }],
+  });
   await page.locator('#source').evaluate(link => { link.href = 'https://github.com/owner/repo/pull/42'; });
   await page.locator('#source').click();
-  assert.deepEqual(await page.evaluate(() => previewRequest), { type: 'open-native-split-view', url: 'https://github.com/owner/repo/pull/42' });
-  assert.equal(await page.locator('#ghrc-link-preview').count(), 0);
-  assert.deepEqual(await page.evaluate(() => openedLinks), []);
-  await page.close();
-});
-test('older browsers offer the actual GitHub link for native context-menu splitting', async () => {
-  const page = await fixture({ openExternalLinksInSplitView: true }, { ok: false, unavailable: true });
-  await page.locator('#source').evaluate(link => { link.href = 'https://github.com/owner/repo/pull/42'; });
-  await page.locator('#source').click();
-  await page.locator('.ghrc-preview-content h2').waitFor();
-  assert.match(await page.locator('.ghrc-preview-content').textContent(), /Open link in split view/);
+  await page.locator('#ghrc-link-preview h2').waitFor();
+  assert.equal(await page.locator('#ghrc-link-preview h2').textContent(), 'A useful PR');
   assert.equal(await page.locator('#ghrc-link-preview iframe').count(), 0);
-  assert.equal(await page.locator('.ghrc-preview-content a').getAttribute('href'), 'https://github.com/owner/repo/pull/42');
-  await page.getByRole('link', { name: 'Open in new tab' }).click();
-  assert.deepEqual(await page.evaluate(() => openedLinks), [['https://github.com/owner/repo/pull/42', '_blank', 'noopener,noreferrer']]);
+  assert.equal(await page.locator('#ghrc-link-preview .ghrc-preview-body img').count(), 0);
+  assert.match(await page.locator('#ghrc-link-preview details').textContent(), /safe change/);
+  assert.deepEqual(await page.evaluate(() => previewRequest), { type: 'load-github-link-preview', url: 'https://github.com/owner/repo/pull/42' });
   await page.keyboard.press('Escape');
   assert.equal(await page.locator('#ghrc-link-preview').count(), 0);
   assert.equal(await page.evaluate(() => document.activeElement.id), 'source');
   await page.close();
 });
-
-test('native split domain list is ignored when side view is disabled', async () => {
-  const page = await fixture({ openExternalLinksInSplitView: false, nativeSplitViewDomains: ['github.com'] }, { ok: true });
+test('unavailable GitHub preview explains the failure and keeps new-tab action', async () => {
+  const page = await fixture({ openExternalLinksInSplitView: true }, { ok: false, error: 'GitHub returned 404' });
   await page.locator('#source').evaluate(link => { link.href = 'https://github.com/owner/repo/pull/42'; });
   await page.locator('#source').click();
-  assert.deepEqual(await page.evaluate(() => previewRequests), []);
-  assert.equal(await page.locator('#ghrc-link-preview').count(), 0);
+  await page.getByRole('button', { name: 'Retry preview' }).waitFor();
+  assert.match(await page.locator('.ghrc-preview-content').textContent(), /GitHub returned 404/);
+  await page.getByRole('link', { name: 'Open in new tab' }).click();
   assert.deepEqual(await page.evaluate(() => openedLinks), [['https://github.com/owner/repo/pull/42', '_blank', 'noopener,noreferrer']]);
-  await page.close();
-});
-test('opt-in domain list includes subdomains but not similar unrelated domains', async () => {
-  const page = await fixture({ openExternalLinksInSplitView: true, nativeSplitViewDomains: ['example.org'] }, { ok: true });
-  await page.locator('#source').evaluate(link => { link.href = 'https://docs.example.org/article'; });
-  await page.locator('#source').click();
-  assert.equal((await page.evaluate(() => previewRequest)).type, 'open-native-split-view');
-  await page.locator('#source').evaluate(link => { link.href = 'https://notexample.org/article'; });
-  await page.locator('#source').click();
-  assert.equal((await page.evaluate(() => openedLinks))[0][0], 'https://notexample.org/article');
-  await page.close();
-});
-test('blocked embedded previews fall back to native and stale errors are ignored', async () => {
-  const page = await fixture({ openExternalLinksInSplitView: true, nativeSplitViewDomains: [] }, { ok: true });
-  await page.locator('#source').click();
-  await page.frameLocator('#ghrc-link-preview iframe').locator('h1').waitFor();
-  const watch = await page.evaluate(() => previewRequests.find(message => message.type === 'watch-link-preview'));
-  await page.evaluate(watch => runtimeListeners.forEach(fn => fn({ type: 'link-preview-navigation-error', previewId: 'old', url: watch.url })), watch);
-  assert.equal(await page.locator('#ghrc-link-preview iframe').count(), 1);
-  await page.evaluate(watch => runtimeListeners.forEach(fn => fn({ type: 'link-preview-navigation-error', previewId: watch.previewId, url: watch.url })), watch);
-  await page.waitForFunction(() => previewRequests.some(message => message.type === 'open-native-split-view'));
-  assert.equal(await page.locator('#ghrc-link-preview').count(), 0);
-  await page.close();
-});
-test('editing the opt-in list updates handling immediately and an empty list permits GitHub framing', async () => {
-  const page = await fixture({ openExternalLinksInSplitView: true }, { ok: true });
-  await page.evaluate(() => settingsListeners.forEach(fn => fn({ nativeSplitViewDomains: { newValue: [] } }, 'local')));
-  await page.locator('#source').evaluate(link => { link.href = 'https://github.com/owner/repo'; });
-  await page.route('https://github.com/**', route => route.fulfill({ contentType: 'text/html', body: '<h1>Fixture page</h1>' }));
-  await page.locator('#source').click();
-  await page.frameLocator('#ghrc-link-preview iframe').locator('h1').waitFor();
-  assert.equal((await page.evaluate(() => previewRequests))[0].type, 'watch-link-preview');
   await page.close();
 });

@@ -3,6 +3,7 @@ importScripts(
   "highlighted-pages-worker.js",
   "service-worker.js",
   "native-split-view.js",
+  "github-link-preview.js",
   "github-app-auth.js",
   "youtube-search-worker.js",
   "research-publisher-background.js",
