@@ -2,7 +2,7 @@ importScripts(
   "avatar-cache.js",
   "highlighted-pages-worker.js",
   "service-worker.js",
-  "github-split-view.js",
+  "native-split-view.js",
   "github-app-auth.js",
   "youtube-search-worker.js",
   "research-publisher-background.js",
