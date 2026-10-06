@@ -453,7 +453,6 @@
   }
 
   function updateLinkActions(link, url, actions = linkActions.get(link)) {
-    if (!actions?.isConnected && actions) return;
     const mode = actions?.querySelector(".ghrc-link-mode");
     const sidebar = actions?.querySelector(".ghrc-link-sidebar-button");
     if (!mode || !sidebar) return;
