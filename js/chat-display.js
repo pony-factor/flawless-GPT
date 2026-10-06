@@ -5,7 +5,7 @@
   const MODEL_MARKER = "data-ghrc-model-control";
   const FEEDBACK_MARKER = "data-ghrc-conversation-feedback-prompt";
   const TIMESTAMP_MARKER = "data-ghrc-chat-timestamp";
-  const TAIL_MARKER = "data-ghrc-conversation-tail-space";
+  const TAIL_SPACER = "data-ghrc-conversation-tail-spacer";
   const TURN_QUERY = '[data-testid^="conversation-turn-"], [data-message-author-role]';
   const FEEDBACK_TEXT = "Is this conversation helpful so far?";
   const CONTROL_QUERY = 'button[aria-haspopup], [role="combobox"], [data-codex-intelligence-trigger]';
@@ -50,13 +50,35 @@
     }
   }
 
-  function markConversationTail() {
-    const turns = [...document.querySelectorAll(TURN_QUERY)];
+  function conversationTurns() {
+    const explicitTurns = [...document.querySelectorAll('[data-testid^="conversation-turn-"]')];
+    if (explicitTurns.length) return explicitTurns;
+    return [...document.querySelectorAll('[data-message-author-role]')];
+  }
+
+  function placeConversationTailSpacer() {
+    const turns = conversationTurns();
     const lastTurn = turns.at(-1) ?? null;
-    for (const marked of document.querySelectorAll(`[${TAIL_MARKER}]`)) {
-      if (marked !== lastTurn) marked.removeAttribute(TAIL_MARKER);
+    const existing = [...document.querySelectorAll(`[${TAIL_SPACER}]`)];
+
+    if (!lastTurn?.parentElement) {
+      for (const spacer of existing) spacer.remove();
+      return;
     }
-    if (lastTurn) lastTurn.setAttribute(TAIL_MARKER, "");
+
+    const spacer = existing.find(candidate => candidate.parentElement === lastTurn.parentElement)
+      ?? existing[0]
+      ?? document.createElement("div");
+
+    for (const candidate of existing) {
+      if (candidate !== spacer) candidate.remove();
+    }
+
+    spacer.setAttribute(TAIL_SPACER, "");
+    spacer.setAttribute("aria-hidden", "true");
+    if (lastTurn.nextElementSibling !== spacer) {
+      lastTurn.insertAdjacentElement("afterend", spacer);
+    }
   }
 
   function scan() {
@@ -64,7 +86,7 @@
     scheduled = false;
     markConversationFeedbackPrompt();
     markChatTimestamps();
-    markConversationTail();
+    placeConversationTailSpacer();
     for (const control of document.querySelectorAll(CONTROL_QUERY)) {
       const label = [control.getAttribute("aria-label"), control.getAttribute("title"), control.textContent]
         .filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
