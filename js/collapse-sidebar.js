@@ -133,7 +133,12 @@
       clusterBottom = Math.max(clusterBottom, bounds.bottom);
     }
 
-    if (!presetBounds.length) return null;
+    // The current rail omits preset icons. Keep a small reveal band below
+    // Library so hover remains available without activating its own button.
+    if (!presetBounds.length) return {
+      top: library.bounds.bottom,
+      bottom: Math.min(window.innerHeight, library.bounds.bottom + library.bounds.height * 3),
+    };
     return {
       top: library.bounds.bottom,
       bottom: clusterBottom,

@@ -110,6 +110,22 @@ test('preset rail hover survives changed preset URL shapes',async()=>{
   assert.deepEqual(page.errors,[]);
   await page.close();
 });
+test('rail without presets still reveals below Library and keeps Library clickable',async()=>{
+  const page=await fixture();
+  await page.evaluate(()=>document.querySelectorAll('[id^="preset-"]').forEach(element=>element.remove()));
+  await page.mouse.move(12,115);
+  await page.waitForTimeout(500);
+  assert.equal(await page.locator('aside').getAttribute('data-expanded'),'false');
+  await page.mouse.move(12,170);
+  await page.waitForFunction(()=>document.querySelector('aside').dataset.expanded==='true');
+  await page.mouse.move(500,170);
+  await page.waitForFunction(()=>document.querySelector('aside').dataset.expanded==='false');
+  await page.mouse.move(12,310);
+  await page.waitForTimeout(500);
+  assert.equal(await page.evaluate(()=>clicks),2);
+  assert.deepEqual(page.errors,[]);
+  await page.close();
+});
 test('synthetic research-menu pointer events cannot reveal the sidebar',async()=>{
   const page=await fixture();
   await page.mouse.move(500,250);
