@@ -59,7 +59,9 @@
     const submit = document.createElement("button");
     submit.type = "submit";
     submit.className = "ghrc-youtube-submit";
-    submit.textContent = "Search";
+    submit.setAttribute("aria-label", "Search YouTube");
+    submit.title = "Search YouTube";
+    submit.append(youtubeLogo());
 
     form.append(label, submit);
     form.addEventListener("submit", (event) => {
