@@ -38,11 +38,12 @@
   function formatDate(value) {
     const date = asDate(value);
     if (!date || Number.isNaN(date.getTime())) return "";
-    return new Intl.DateTimeFormat("en-GB", {
-      day: "2-digit",
+    const options = {
+      day: "numeric",
       month: "short",
-      year: "numeric",
-    }).format(date).replace(/,/g, "");
+    };
+    if (date.getFullYear() !== new Date().getFullYear()) options.year = "numeric";
+    return new Intl.DateTimeFormat("en-GB", options).format(date).replace(/,/g, "");
   }
 
   function annotateLink(link) {

@@ -16,6 +16,9 @@ before(async () => {
 after(async () => { await browser?.close(); });
 
 test('sidebar conversations show their creation date before the title', async () => {
+  const currentYear = new Date().getUTCFullYear();
+  const previousYear = currentYear - 1;
+  const previousYearTimestamp = Date.UTC(previousYear, 1, 3, 12) / 1000;
   const context = await browser.newContext({ timezoneId: 'UTC' });
   const page = await context.newPage();
   const errors = [];
@@ -28,8 +31,8 @@ test('sidebar conversations show their creation date before the title', async ()
         contentType: 'application/json',
         body: JSON.stringify({
           items: [
-            { id: 'alpha', title: 'Alpha', create_time: '2026-10-05T12:00:00Z' },
-            { id: 'beta', title: 'Beta', create_time: 1770120000 },
+            { id: 'alpha', title: 'Alpha', create_time: `${currentYear}-10-05T12:00:00Z` },
+            { id: 'beta', title: 'Beta', create_time: previousYearTimestamp },
           ],
           total: 2,
           offset: 0,
@@ -53,10 +56,10 @@ test('sidebar conversations show their creation date before the title', async ()
   await page.addScriptTag({ content: read('js/sidebar-chat-dates.js') });
 
   await page.evaluate(() => fetch('/backend-api/conversations?offset=0&limit=100&order=updated'));
-  await page.waitForFunction(() => document.querySelector('a[href="/c/alpha"] > .ghrc-chat-date')?.textContent === '05 Oct 2026');
+  await page.waitForFunction(() => document.querySelector('a[href="/c/alpha"] > .ghrc-chat-date')?.textContent === '5 Oct');
 
   const alpha = page.locator('a[href="/c/alpha"]');
-  assert.equal(await alpha.locator(':scope > .ghrc-chat-date').textContent(), '05 Oct 2026');
+  assert.equal(await alpha.locator(':scope > .ghrc-chat-date').textContent(), '5 Oct');
   assert.equal(await alpha.evaluate(link => link.firstElementChild?.className), 'ghrc-chat-date');
 
   await page.evaluate(() => {
@@ -66,7 +69,7 @@ test('sidebar conversations show their creation date before the title', async ()
     document.getElementById('sidebar').append(link);
   });
   await page.waitForFunction(() => document.querySelector('a[href="/c/beta"] > .ghrc-chat-date'));
-  assert.match(await page.locator('a[href="/c/beta"] > .ghrc-chat-date').textContent(), /^\d{2} [A-Z][a-z]{2} \d{4}$/);
+  assert.equal(await page.locator('a[href="/c/beta"] > .ghrc-chat-date').textContent(), `3 Feb ${previousYear}`);
   assert.deepEqual(errors, []);
 
   await context.close();
