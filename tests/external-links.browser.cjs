@@ -45,17 +45,35 @@ test('split preview reserves space, loads the source, and restores layout and fo
   const preview = await page.locator('#ghrc-link-preview').boundingBox();
   assert.ok(main.x + main.width <= preview.x + 1);
   const controls = page.locator('#ghrc-link-preview .ghrc-preview-control');
-  assert.equal(await controls.nth(0).getAttribute('aria-label'), 'Copy link');
+  assert.equal(await controls.nth(0).getAttribute('aria-label'), 'Close website preview');
   assert.equal(await controls.nth(1).getAttribute('aria-label'), 'Open in new tab');
-  await controls.nth(0).click();
+  assert.equal(await controls.nth(2).getAttribute('aria-label'), 'Copy link');
+  await controls.nth(2).click();
   assert.deepEqual(await page.evaluate(() => copiedLinks), ['https://example.org/source?keep=1#section']);
-  assert.equal(await page.locator('#ghrc-link-preview a').last().getAttribute('href'), 'https://example.org/source?keep=1#section');
+  const destination = page.locator('#ghrc-link-preview .ghrc-preview-destination');
+  assert.equal(await destination.getAttribute('href'), 'https://example.org/source?keep=1#section');
+  assert.equal(await destination.locator('img').getAttribute('src'), 'https://example.org/favicon.ico');
+  assert.equal(await destination.locator('span').textContent(), 'example.org/source?keep=1#section');
   await page.keyboard.press('Escape');
   assert.equal(await page.locator('#ghrc-link-preview').count(), 0);
   assert.equal(await page.evaluate(() => document.activeElement.id), 'source');
   assert.equal((await page.locator('main').boundingBox()).width, 1280);
   await page.close();
 });
+test('left-side preview mode moves the panel and keeps the URL display at the trailing end', async () => {
+  const page = await fixture({ openExternalLinksInSplitView: true, openExternalLinksInSplitViewOnLeft: true });
+  await page.locator('#source').click();
+  await page.frameLocator('#ghrc-link-preview iframe').locator('h1').waitFor();
+  const main = await page.locator('main').boundingBox();
+  const preview = await page.locator('#ghrc-link-preview').boundingBox();
+  assert.ok(preview.x <= 1);
+  assert.ok(main.x >= preview.width - 1);
+  assert.equal(await page.locator('html').getAttribute('data-ghrc-link-preview'), 'left');
+  const headerChildren = await page.locator('#ghrc-link-preview header').evaluate(header => [...header.children].map(child => child.getAttribute('aria-label') || child.className));
+  assert.deepEqual(headerChildren, ['Close website preview', 'Open in new tab', 'Copy link', 'ghrc-preview-destination']);
+  await page.close();
+});
+
 test('settings changes apply immediately and disabling split closes its frame', async () => {
   const page = await fixture();
   await page.evaluate(() => settingsListeners.forEach(fn => fn({ openExternalLinksInSplitView: { newValue: true } }, 'local')));

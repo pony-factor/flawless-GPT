@@ -15,6 +15,7 @@
   let modalWasSuppressed = false;
   let newTabsEnabled = true;
   let splitViewEnabled = false;
+  let splitViewOnLeft = false;
   let previewPanel = null;
   let previewLink = null;
 
@@ -168,9 +169,10 @@
     favicon.alt = "";
     favicon.referrerPolicy = "no-referrer";
     favicon.addEventListener("error", () => favicon.remove());
-    const hostname = document.createElement("span");
-    hostname.textContent = url.hostname.replace(/^www\./i, "");
-    destination.append(favicon, hostname);
+    const urlLabel = document.createElement("span");
+    const displayHost = url.hostname.replace(/^www\./i, "");
+    urlLabel.textContent = `${displayHost}${url.pathname === "/" ? "" : url.pathname}${url.search}${url.hash}`;
+    destination.append(favicon, urlLabel);
     destination.title = href;
     const copy = document.createElement("button");
     copy.className = "ghrc-preview-control";
@@ -208,7 +210,7 @@
     close.title = "Close website preview";
     close.setAttribute("aria-label", "Close website preview");
     close.addEventListener("click", closeLinkPreview);
-    header.append(destination, copy, open, close);
+    header.append(close, open, copy, destination);
     panel.append(header);
     if (url.hostname === "github.com" || url.hostname === "www.github.com") {
       const content = document.createElement("div");
@@ -227,7 +229,7 @@
     }
     previewPanel = panel;
     document.body.append(panel);
-    document.documentElement.setAttribute("data-ghrc-link-preview", "");
+    document.documentElement.setAttribute("data-ghrc-link-preview", splitViewOnLeft ? "left" : "right");
     close.focus();
   }
 
@@ -315,11 +317,13 @@
       [EXTERNAL_WARNING_SETTING_KEY]: true,
       openExternalLinksInNewTabs: true,
       openExternalLinksInSplitView: false,
+      openExternalLinksInSplitViewOnLeft: false,
       [HISTORY_MODAL_SETTING_KEY]: true,
       [STRIP_UTM_TRACKING_SETTING_KEY]: true,
     });
     newTabsEnabled = settings.openExternalLinksInNewTabs !== false;
     splitViewEnabled = Boolean(settings.openExternalLinksInSplitView);
+    splitViewOnLeft = Boolean(settings.openExternalLinksInSplitViewOnLeft);
     externalWarningEnabled = Boolean(settings[EXTERNAL_WARNING_SETTING_KEY]);
     historyModalEnabled = Boolean(settings[HISTORY_MODAL_SETTING_KEY]);
     stripUtmTrackingEnabled = Boolean(settings[STRIP_UTM_TRACKING_SETTING_KEY]);
@@ -338,6 +342,12 @@
     if (changes.openExternalLinksInSplitView) {
       splitViewEnabled = Boolean(changes.openExternalLinksInSplitView.newValue);
       if (!splitViewEnabled) closeLinkPreview();
+    }
+    if (changes.openExternalLinksInSplitViewOnLeft) {
+      splitViewOnLeft = Boolean(changes.openExternalLinksInSplitViewOnLeft.newValue);
+      if (previewPanel) {
+        document.documentElement.setAttribute("data-ghrc-link-preview", splitViewOnLeft ? "left" : "right");
+      }
     }
     if (changes[EXTERNAL_WARNING_SETTING_KEY]) {
       externalWarningEnabled = Boolean(changes[EXTERNAL_WARNING_SETTING_KEY].newValue);
