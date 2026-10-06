@@ -118,7 +118,7 @@
 
   function openExternalLink(event, link) {
     if (
-      (!externalWarningEnabled && !newTabsEnabled && !splitViewEnabled && !nativeSplitDomains.length)
+      (!externalWarningEnabled && !newTabsEnabled && !splitViewEnabled)
       || !isPlainPrimaryActivation(event)
       || !(link instanceof HTMLAnchorElement)
       || link.hasAttribute("download")
@@ -136,8 +136,8 @@
       || url.origin === window.location.origin
     ) return false;
 
-    const useNative = nativeSplitDomains.some(domain => url.hostname === domain || url.hostname.endsWith("." + domain));
-    if (!useNative && !externalWarningEnabled && !newTabsEnabled && !splitViewEnabled) return false;
+    const useNative = splitViewEnabled
+      && nativeSplitDomains.some(domain => url.hostname === domain || url.hostname.endsWith("." + domain));
     event.preventDefault();
     event.stopImmediatePropagation();
     if (useNative) void openNativeSplitView(url.href, link);

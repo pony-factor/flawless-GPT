@@ -95,8 +95,17 @@ test('older browsers offer the actual GitHub link for native context-menu splitt
   await page.close();
 });
 
+test('native split domain list is ignored when side view is disabled', async () => {
+  const page = await fixture({ openExternalLinksInSplitView: false, nativeSplitViewDomains: ['github.com'] }, { ok: true });
+  await page.locator('#source').evaluate(link => { link.href = 'https://github.com/owner/repo/pull/42'; });
+  await page.locator('#source').click();
+  assert.deepEqual(await page.evaluate(() => previewRequests), []);
+  assert.equal(await page.locator('#ghrc-link-preview').count(), 0);
+  assert.deepEqual(await page.evaluate(() => openedLinks), [['https://github.com/owner/repo/pull/42', '_blank', 'noopener,noreferrer']]);
+  await page.close();
+});
 test('opt-in domain list includes subdomains but not similar unrelated domains', async () => {
-  const page = await fixture({ nativeSplitViewDomains: ['example.org'] }, { ok: true });
+  const page = await fixture({ openExternalLinksInSplitView: true, nativeSplitViewDomains: ['example.org'] }, { ok: true });
   await page.locator('#source').evaluate(link => { link.href = 'https://docs.example.org/article'; });
   await page.locator('#source').click();
   assert.equal((await page.evaluate(() => previewRequest)).type, 'open-native-split-view');
