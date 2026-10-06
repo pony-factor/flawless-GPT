@@ -82,3 +82,40 @@ html[data-ghrc-link-preview] {
   border: 0;
   background: white;
 }
+
+#ghrc-link-preview .ghrc-preview-content {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 16px;
+  overflow-wrap: anywhere;
+}
+
+#ghrc-link-preview .ghrc-preview-content h2 {
+  font-size: 20px;
+  line-height: 1.4;
+  margin: 8px 0 16px;
+}
+
+#ghrc-link-preview .ghrc-preview-meta {
+  opacity: 0.7;
+  margin: 0;
+}
+
+#ghrc-link-preview .ghrc-preview-content pre {
+  font: 12px/1.6 ui-monospace, monospace;
+  overflow: auto;
+  padding: 12px;
+  border: 1px solid color-mix(in srgb, CanvasText 20%, transparent);
+  border-radius: 6px;
+}
+
+#ghrc-link-preview pre.ghrc-preview-body {
+  white-space: pre-wrap;
+  font: inherit;
+}
+
+#ghrc-link-preview .ghrc-preview-content summary {
+  cursor: pointer;
+  margin-top: 16px;
+}

@@ -9,12 +9,12 @@ before(async () => {
   browser = await chromium.launch({ executablePath: '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser', headless: true });
 });
 after(async () => { await browser?.close(); });
-async function fixture(settings = {}) {
+async function fixture(settings = {}, previewResponse = null) {
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
   await page.route('https://chatgpt.com/**', route => route.fulfill({ contentType: 'text/html', body: '<style>body{margin:0}main{width:100%;height:100vh}</style><main><a id="source" href="https://example.org/source?utm_source=chatgpt&keep=1#section">Source reference</a><a id="internal" href="/c/another">Another chat</a></main>' }));
   await page.route('https://example.org/**', route => route.fulfill({ contentType: 'text/html', body: '<h1>Source content</h1>' }));
   await page.goto('https://chatgpt.com/c/example');
-  await page.evaluate(settings => {
+  await page.evaluate(({ settings, previewResponse }) => {
     window.settingsListeners = [];
     window.openedLinks = [];
     window.copiedLinks = [];
@@ -23,8 +23,8 @@ async function fixture(settings = {}) {
       configurable: true,
       value: { writeText: async value => copiedLinks.push(value) },
     });
-    window.chrome = { storage: { local: { get: async defaults => ({ ...defaults, ...settings }) }, onChanged: { addListener: listener => settingsListeners.push(listener) } } };
-  }, settings);
+    window.chrome = { runtime: { sendMessage: async message => { window.previewRequest = message; return previewResponse; } }, storage: { local: { get: async defaults => ({ ...defaults, ...settings }) }, onChanged: { addListener: listener => settingsListeners.push(listener) } } };
+  }, { settings, previewResponse });
   await page.addStyleTag({ content: read('css/external-links.css') });
   await page.addScriptTag({ content: read('js/external-links.js') });
   return page;
@@ -65,5 +65,35 @@ test('settings changes apply immediately and disabling split closes its frame', 
   assert.equal(await page.locator('#ghrc-link-preview').count(), 0);
   await page.locator('#source').click();
   assert.equal(await page.evaluate(() => openedLinks.length), 1);
+  await page.close();
+});
+
+test('GitHub preview renders API content safely without a blocked iframe', async () => {
+  const page = await fixture({ openExternalLinksInSplitView: true }, {
+    ok: true, subtitle: 'owner/repo #42', title: 'A useful PR', details: 'Merged · author',
+    body: '<img src=x onerror="window.injected=true">',
+    files: [{ filename: 'example.js', additions: 1, deletions: 0, patch: '+safe change' }],
+  });
+  await page.locator('#source').evaluate(link => { link.href = 'https://github.com/owner/repo/pull/42'; });
+  await page.locator('#source').click();
+  await page.locator('#ghrc-link-preview h2').waitFor();
+  assert.equal(await page.locator('#ghrc-link-preview h2').textContent(), 'A useful PR');
+  assert.equal(await page.locator('#ghrc-link-preview iframe').count(), 0);
+  assert.equal(await page.locator('#ghrc-link-preview .ghrc-preview-body img').count(), 0);
+  assert.match(await page.locator('#ghrc-link-preview details').textContent(), /safe change/);
+  assert.deepEqual(await page.evaluate(() => previewRequest), { type: 'load-github-link-preview', url: 'https://github.com/owner/repo/pull/42' });
+  await page.keyboard.press('Escape');
+  assert.equal(await page.locator('#ghrc-link-preview').count(), 0);
+  assert.equal(await page.evaluate(() => document.activeElement.id), 'source');
+  await page.close();
+});
+test('unavailable GitHub preview explains the failure and keeps new-tab action', async () => {
+  const page = await fixture({ openExternalLinksInSplitView: true }, { ok: false, error: 'GitHub returned 404' });
+  await page.locator('#source').evaluate(link => { link.href = 'https://github.com/owner/repo/pull/42'; });
+  await page.locator('#source').click();
+  await page.getByRole('button', { name: 'Retry preview' }).waitFor();
+  assert.match(await page.locator('.ghrc-preview-content').textContent(), /GitHub returned 404/);
+  await page.getByRole('link', { name: 'Open in new tab' }).click();
+  assert.deepEqual(await page.evaluate(() => openedLinks), [['https://github.com/owner/repo/pull/42', '_blank', 'noopener,noreferrer']]);
   await page.close();
 });

@@ -209,16 +209,67 @@
     close.setAttribute("aria-label", "Close website preview");
     close.addEventListener("click", closeLinkPreview);
     header.append(destination, copy, open, close);
-    const frame = document.createElement("iframe");
-    frame.title = "Website preview: " + new URL(href).hostname;
-    frame.setAttribute("sandbox", "allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox");
-    frame.referrerPolicy = "no-referrer";
-    frame.src = href;
-    panel.append(header, frame);
+    panel.append(header);
+    if (url.hostname === "github.com" || url.hostname === "www.github.com") {
+      const content = document.createElement("div");
+      content.className = "ghrc-preview-content";
+      content.setAttribute("aria-live", "polite");
+      content.textContent = "Loading GitHub preview…";
+      panel.append(content);
+      void loadGitHubPreview(href, content);
+    } else {
+      const frame = document.createElement("iframe");
+      frame.title = "Website preview: " + url.hostname;
+      frame.setAttribute("sandbox", "allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox");
+      frame.referrerPolicy = "no-referrer";
+      frame.src = href;
+      panel.append(frame);
+    }
     previewPanel = panel;
     document.body.append(panel);
     document.documentElement.setAttribute("data-ghrc-link-preview", "");
     close.focus();
+  }
+
+  async function loadGitHubPreview(href, content) {
+    try {
+      const result = await chrome.runtime.sendMessage({ type: "load-github-link-preview", url: href });
+      if (!content.isConnected) return;
+      if (!result?.ok) throw new Error(result?.error || "GitHub preview is unavailable.");
+      content.replaceChildren();
+      const appendText = (tag, text, parent = content) => {
+        const element = document.createElement(tag);
+        element.textContent = text;
+        parent.append(element);
+        return element;
+      };
+      appendText("p", result.subtitle).className = "ghrc-preview-meta";
+      appendText("h2", result.title);
+      if (result.details) appendText("p", result.details);
+      if (result.body) appendText("pre", result.body).className = "ghrc-preview-body";
+      for (const file of result.files || []) {
+        const section = document.createElement("details");
+        section.open = true;
+        appendText("summary", `${file.filename} (+${file.additions} −${file.deletions})`, section);
+        appendText("pre", file.patch || "Diff unavailable. Open the full page to view this file.", section);
+        content.append(section);
+      }
+      if (result.note) appendText("p", result.note);
+    } catch (error) {
+      if (!content.isConnected) return;
+      content.replaceChildren();
+      const message = document.createElement("p");
+      message.textContent = `${error.message} Use Open in new tab to view the full GitHub page.`;
+      content.append(message);
+      const retry = document.createElement("button");
+      retry.type = "button";
+      retry.textContent = "Retry preview";
+      retry.addEventListener("click", () => {
+        content.textContent = "Loading GitHub preview…";
+        void loadGitHubPreview(href, content);
+      });
+      content.append(retry);
+    }
   }
 
   function preserveNativeScroll(event) {
