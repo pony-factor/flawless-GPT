@@ -12,7 +12,7 @@ test('mounts, reads native usage, excludes messages, and cleans up on extension 
     const page = await browser.newPage();
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
-    await page.setContent('<main>Deep research: 999 full reports remaining</main><section><form><div id="prompt-textarea" contenteditable="true">Keep my draft</div><button type="button" aria-label="Add files and more">+</button></form><section id="github-repositories-for-chatgpt">Repositories</section></section>');
+    await page.setContent('<main>Deep research: 999 full reports remaining</main><section><form><div id="prompt-textarea" contenteditable="true">Keep my draft<span contenteditable="false" data-prompt-link-href="app://connector_openai_deep_research"></span></div><button type="button" aria-label="Add files and more">+</button></form><section id="github-repositories-for-chatgpt">Repositories</section></section>');
     await page.evaluate(() => {
       window.__ghrcExtensionContext = { active: () => true, onStop: cleanup => { window.cleanup = cleanup; } };
       window.submits = 0;
@@ -26,7 +26,7 @@ test('mounts, reads native usage, excludes messages, and cleans up on extension 
     });
     await page.addStyleTag({ content: fs.readFileSync(path.join(__dirname, '../css/deep-research-tracker.css'), 'utf8') });
     await page.addScriptTag({ content: fs.readFileSync(path.join(__dirname, '../js/deep-research-tracker.js'), 'utf8') });
-    const widget = page.locator('#ghrc-deep-research-tracker');
+    const widget = page.locator('#ghrc-deep-research-tracker-composer');
     await widget.waitFor();
     assert.match(await widget.innerText(), /Check allowance/);
     await widget.click();
@@ -49,7 +49,7 @@ test('dashboard stays above Highlights on the right; plugin selection and settin
     const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
-    await page.setContent('<main><section><form><div id="prompt-textarea" contenteditable="true">My draft</div></form><section id="github-repositories-for-chatgpt">Repositories</section></section></main>');
+    await page.setContent('<main><section><form><div id="prompt-textarea" contenteditable="true">My draft<span contenteditable="false" data-prompt-link-href="app://connector_openai_deep_research"></span></div></form><section id="github-repositories-for-chatgpt">Repositories</section></section></main>');
     await page.evaluate(() => {
       window.__ghrcExtensionContext = { active: () => true, onStop() {} };
       window.settings = { showDeepResearchTracker: true, highlightedPages: [{ url: 'https://example.com/', title: 'Example' }] };
@@ -107,7 +107,7 @@ test('dashboard stays above Highlights on the right; plugin selection and settin
   } finally { await browser.close(); }
 });
 
-test('homepage only shows the remaining count in the final five days', async () => {
+test('homepage only shows the Deep Research embed in the final five days', async () => {
   const browser = await chromium.launch({ executablePath: '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser', headless: true });
   try {
     const page = await browser.newPage();
@@ -120,10 +120,8 @@ test('homepage only shows the remaining count in the final five days', async () 
     await page.addScriptTag({ content: fs.readFileSync(path.join(__dirname, '../js/deep-research-tracker.js'), 'utf8') });
     const dashboard = page.locator('#ghrc-deep-research-tracker');
     const composer = page.locator('#ghrc-deep-research-tracker-composer');
-    await dashboard.waitFor();
     await composer.waitFor();
-    assert.doesNotMatch(await dashboard.innerText(), /13 left/);
-    assert.match(await dashboard.innerText(), /resets 6d/);
+    assert.equal(await dashboard.count(), 0);
     assert.match(await composer.innerText(), /13 left/);
 
     await page.evaluate(() => {
@@ -158,7 +156,8 @@ test('native initialization fills the tracker automatically and clicking refresh
     const response = await page.evaluate(async () => (await fetch('/backend-api/conversation/init', { method: 'POST', body: '{}' })).json());
     assert.equal(response.unrelated_private_field, 'must stay in page response');
     await page.waitForFunction(() => document.getElementById('ghrc-deep-research-tracker')?.textContent.includes('13 left'));
-    const widget = page.locator('#ghrc-deep-research-tracker');
+    const widget = page.locator('#ghrc-deep-research-tracker-composer');
+    assert.equal(await page.locator('#ghrc-deep-research-tracker').count(), 0);
     assert.match(await widget.innerText(), /13 left · resets \d+d/);
     const exposed = await page.evaluate(() => JSON.parse(document.documentElement.getAttribute('data-ghrc-deep-research-usage')));
     assert.deepEqual(Object.keys(exposed).sort(), ['observedAt', 'remaining', 'resetAt']);
