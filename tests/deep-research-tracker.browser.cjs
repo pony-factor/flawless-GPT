@@ -30,7 +30,7 @@ test('mounts, reads native usage, excludes messages, and cleans up on extension 
     await widget.waitFor();
     assert.match(await widget.innerText(), /Check allowance/);
     await widget.click();
-    await page.waitForFunction(() => document.getElementById('ghrc-deep-research-tracker').textContent.includes('0 left'));
+    await page.waitForFunction(() => document.getElementById('ghrc-deep-research-tracker-composer')?.textContent.includes('0 left'));
     assert.match(await widget.innerText(), /Resets on October 20/);
     assert.equal(await page.locator('#prompt-textarea').innerText(), 'Keep my draft');
     assert.equal(await page.evaluate(() => window.submits), 0);
@@ -49,7 +49,7 @@ test('dashboard stays above Highlights on the right; plugin selection and settin
     const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
-    await page.setContent('<main><section><form><div id="prompt-textarea" contenteditable="true">My draft<span contenteditable="false" data-prompt-link-href="app://connector_openai_deep_research"></span></div></form><section id="github-repositories-for-chatgpt">Repositories</section></section></main>');
+    await page.setContent('<main><section><form><div id="prompt-textarea" contenteditable="true">My draft</div></form><section id="github-repositories-for-chatgpt">Repositories</section></section></main>');
     await page.evaluate(() => {
       window.__ghrcExtensionContext = { active: () => true, onStop() {} };
       window.settings = { showDeepResearchTracker: true, highlightedPages: [{ url: 'https://example.com/', title: 'Example' }] };
@@ -146,7 +146,7 @@ test('native initialization fills the tracker automatically and clicking refresh
           unrelated_private_field: 'must stay in page response',
         }) });
       }
-      return route.fulfill({ contentType: 'text/html', body: '<section><form><div id="prompt-textarea" contenteditable="true">My draft</div></form><section id="github-repositories-for-chatgpt">Repositories</section></section>' });
+      return route.fulfill({ contentType: 'text/html', body: '<section><form><div id="prompt-textarea" contenteditable="true">My draft<span contenteditable="false" data-prompt-link-href="app://connector_openai_deep_research"></span></div></form><section id="github-repositories-for-chatgpt">Repositories</section></section>' });
     });
     await page.goto('https://research.test/');
     await page.evaluate(() => { window.__ghrcExtensionContext = { active: () => true, onStop() {} }; });
@@ -155,7 +155,7 @@ test('native initialization fills the tracker automatically and clicking refresh
     }
     const response = await page.evaluate(async () => (await fetch('/backend-api/conversation/init', { method: 'POST', body: '{}' })).json());
     assert.equal(response.unrelated_private_field, 'must stay in page response');
-    await page.waitForFunction(() => document.getElementById('ghrc-deep-research-tracker')?.textContent.includes('13 left'));
+    await page.waitForFunction(() => document.getElementById('ghrc-deep-research-tracker-composer')?.textContent.includes('13 left'));
     const widget = page.locator('#ghrc-deep-research-tracker-composer');
     assert.equal(await page.locator('#ghrc-deep-research-tracker').count(), 0);
     assert.match(await widget.innerText(), /13 left · resets \d+d/);
@@ -163,7 +163,7 @@ test('native initialization fills the tracker automatically and clicking refresh
     assert.deepEqual(Object.keys(exposed).sort(), ['observedAt', 'remaining', 'resetAt']);
     remaining = 0;
     await widget.click();
-    await page.waitForFunction(() => document.getElementById('ghrc-deep-research-tracker').textContent.includes('0 left'));
+    await page.waitForFunction(() => document.getElementById('ghrc-deep-research-tracker-composer')?.textContent.includes('0 left'));
     assert.equal(requests, 2);
     assert.equal(await page.locator('#prompt-textarea').innerText(), 'My draft');
   } finally { await browser.close(); }
