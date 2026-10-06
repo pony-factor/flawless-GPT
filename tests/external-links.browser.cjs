@@ -97,3 +97,37 @@ test('unavailable GitHub preview explains the failure and keeps new-tab action',
   assert.deepEqual(await page.evaluate(() => openedLinks), [['https://github.com/owner/repo/pull/42', '_blank', 'noopener,noreferrer']]);
   await page.close();
 });
+
+test('streaming mutations do not rescan the existing conversation container', async () => {
+  const page = await fixture();
+  await page.evaluate(() => {
+    const main = document.querySelector('main');
+    const querySelectorAll = main.querySelectorAll.bind(main);
+    window.mainLinkScans = 0;
+    main.querySelectorAll = selector => {
+      if (selector === 'a[href]') window.mainLinkScans += 1;
+      return querySelectorAll(selector);
+    };
+    for (let index = 0; index < 100; index += 1) {
+      const token = document.createElement('span');
+      token.textContent = String(index);
+      main.append(token);
+    }
+  });
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  assert.equal(await page.evaluate(() => mainLinkScans), 0);
+  await page.close();
+});
+
+test('batched mutation handling still sanitizes newly added links', async () => {
+  const page = await fixture();
+  await page.evaluate(() => {
+    const link = document.createElement('a');
+    link.id = 'dynamic-source';
+    link.href = 'https://example.org/new?utm_source=stream&keep=1#section';
+    document.querySelector('main').append(link);
+  });
+  await page.waitForFunction(() => document.getElementById('dynamic-source')?.href === 'https://example.org/new?keep=1#section');
+  assert.equal(await page.locator('#dynamic-source').getAttribute('href'), 'https://example.org/new?keep=1#section');
+  await page.close();
+});
