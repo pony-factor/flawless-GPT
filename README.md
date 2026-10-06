@@ -17,6 +17,7 @@ The dashboard:
 - strips UTM tracking parameters from links shown by ChatGPT by default;
 - can skip ChatGPT's external-site warning and dismiss its history rate-limit
   modal independently;
+- hides ChatGPT's usage remaining / credits card by default;
 - queues follow-up messages locally while ChatGPT is responding, keeps them editable and reorderable, and sends them FIFO only after the active response fully completes;
 - adds columns for any other GitHub accounts the connected tokens can access;
 - pins important repositories at the top of their user or organization column;
@@ -115,8 +116,8 @@ encryption key needed to decrypt saved tokens. Reloading the existing unpacked
 extension preserves its installed identity and persistent storage during normal
 updates.
 
-UTM tracking removal, the external-site warning bypass, and history rate-limit
-modal dismissal are separate settings enabled by default. **Hide dictation
+UTM tracking removal, the external-site warning bypass, history rate-limit
+modal dismissal, and **Hide usage remaining card** are separate settings enabled by default. **Hide dictation
 microphone**, **Compact new-chat header**, and **Disable Work mode** are disabled
 by default. UTM removal strips `utm_*` query parameters while preserving other
 query parameters and URL fragments. When Work mode is disabled, the extension
