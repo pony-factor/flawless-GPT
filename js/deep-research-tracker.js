@@ -31,6 +31,7 @@
   const COMPOSER_ID = `${ID}-composer`;
   const SETTING_KEY = 'showDeepResearchTracker';
   const USAGE_ATTRIBUTE = 'data-ghrc-deep-research-usage';
+  const DASHBOARD_COUNT_WINDOW_MS = 5 * 24 * 60 * 60_000;
   let enabled = !globalThis.chrome?.storage?.local;
   let allowance = { remaining: null, full: false, reset: '' };
   let observedAt = 0;
@@ -46,7 +47,13 @@
     } catch { serverQuota = null; }
   }
 
-  function serverText() {
+  function dashboardCountVisible() {
+    if (!serverQuota || serverQuota.resetAt === null) return false;
+    const remainingMs = serverQuota.resetAt - Date.now();
+    return remainingMs >= 0 && remainingMs <= DASHBOARD_COUNT_WINDOW_MS;
+  }
+
+  function serverText(includeCount = true) {
     if (!serverQuota) return null;
     const stale = Date.now() - serverQuota.observedAt > 10 * 60_000
       || (serverQuota.resetAt !== null && serverQuota.resetAt <= Date.now());
@@ -65,7 +72,7 @@
         reset = `resets ${value}${unit}`;
       }
     }
-    return `Deep Research · ${count} · ${reset}`;
+    return ['Deep Research', ...(includeCount ? [count] : []), reset].join(' · ');
   }
 
   function visible(element) {
@@ -139,7 +146,9 @@
       ? `${allowance.remaining} left`
       : 'Check allowance';
     const reset = fresh && allowance.reset ? allowance.reset : 'Reset unknown';
-    const text = serverText() || `Deep Research · ${count} · ${reset}`;
+    const includeCount = id !== ID || dashboardCountVisible();
+    const text = serverText(includeCount)
+      || ['Deep Research', ...(includeCount ? [count] : []), reset].join(' · ');
     const label = widget.querySelector('.ghrc-research-allowance');
     const visibleText = text.replace(/^Deep Research · /, '');
     if (label.textContent !== visibleText) label.textContent = visibleText;
