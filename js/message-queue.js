@@ -371,6 +371,47 @@
       )) || null;
   }
 
+  function generationIndicatorIsActive() {
+    const latestAssistant = [...document.querySelectorAll(
+      '[data-message-author-role="assistant"], [data-content-search-unit-key$=":assistant"], [data-testid="generated-image-gallery"]'
+    )].at(-1);
+    const root = latestAssistant?.closest('[data-testid^="conversation-turn-"], .group') || latestAssistant;
+    if (!root) return false;
+
+    const selectors = [
+      '[data-message-status="in_progress"]',
+      '[data-message-status="streaming"]',
+      '[data-state="streaming"]',
+      '[data-state="generating"]',
+      '[data-testid*="streaming" i]',
+      '[data-testid*="generating" i]',
+      '[aria-label*="generating" i]',
+      '[aria-label*="thinking" i]',
+      '[aria-busy="true"]',
+    ];
+    if (selectors.some((selector) =>
+      [...root.querySelectorAll(selector)].some(isVisible)
+    )) return true;
+
+    return [...root.querySelectorAll('[role="status"], [aria-live="polite"], [aria-live="assertive"]')]
+      .filter(isVisible)
+      .some((status) => {
+        const text = (status.textContent || "").replace(/\s+/g, "");
+        if (/^(?:\.{2,4}|…|[·•]{2,4})$/u.test(text)) return true;
+
+        const animatedDots = [...status.querySelectorAll("span, i")].filter((dot) => {
+          if (!isVisible(dot)) return false;
+          const rect = dot.getBoundingClientRect();
+          const style = getComputedStyle(dot);
+          return rect.width > 0 && rect.height > 0
+            && rect.width <= 16 && rect.height <= 16
+            && style.borderRadius !== "0px"
+            && dot.getAnimations?.().some((animation) => animation.playState === "running");
+        });
+        return animatedDots.length >= 2 && animatedDots.length <= 4;
+      });
+  }
+
   function responseIsActive(composer = findComposerInput()) {
     const form = findComposerForm(composer);
     const selectors = [
@@ -384,7 +425,7 @@
     const root = form || document;
     return selectors.some((selector) =>
       [...root.querySelectorAll(selector)].some(isVisible)
-    );
+    ) || generationIndicatorIsActive();
   }
 
   function composerText(composer = findComposerInput()) {
