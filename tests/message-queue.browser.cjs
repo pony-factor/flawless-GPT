@@ -524,6 +524,42 @@ test('queued prompt edits survive a delayed storage echo without losing focus', 
   await p.close();
 });
 
+test('queued editor keeps its node and caret through cross-tab queue updates', async () => {
+  const p = await fixture({ active: true });
+  await enqueue(p, 'Original');
+  const editor = p.locator('.ghrc-message-queue-editor').first();
+  await editor.click();
+  await editor.evaluate(el => {
+    window.originalQueueEditor = el;
+    el.setSelectionRange(3, 3);
+  });
+  for (const character of ['x', 'y', 'z']) {
+    await p.keyboard.type(character);
+    await p.evaluate(async () => {
+      // Another tab saves its pause state while this tab is typing.
+      window.otherQueuePaused = !window.otherQueuePaused;
+      await chrome.storage.local.set({ queuedChatMessagesPaused: {
+        'conversation:test': true, 'conversation:other': window.otherQueuePaused,
+      } });
+    });
+    assert.equal(await editor.evaluate(el => el === originalQueueEditor && document.activeElement === el), true);
+  }
+  assert.equal(await editor.inputValue(), 'Orixyzginal');
+  assert.equal(await editor.evaluate(el => el.selectionStart), 6);
+  await p.evaluate(async () => {
+    const items = structuredClone(storage.queuedChatMessages);
+    // A remote queue addition must also leave the existing editor connected.
+    items['conversation:test'] = [{ ...items['conversation:test'][0], text: originalQueueEditor.value },
+      { id: 'remote-item', text: 'Remote addition', createdAt: Date.now() }];
+    await chrome.storage.local.set({ queuedChatMessages: items });
+  });
+  assert.equal(await editor.evaluate(el => el === originalQueueEditor && document.activeElement === el), true);
+  assert.equal(await editor.evaluate(el => el.selectionStart), 6);
+  assert.equal(await p.locator('.ghrc-message-queue-editor').count(), 2);
+  assert.deepEqual(p.errors, []);
+  await p.close();
+});
+
 test('queue drains while preserving a partial draft and Shift+Enter newline', async () => {
   const p = await fixture({ active: true });
   await enqueue(p, 'Queued');

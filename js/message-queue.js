@@ -945,7 +945,40 @@
     const toggle = panel.querySelector(".ghrc-message-queue-toggle");
     toggle.textContent = queuePaused ? "Resume" : "Wait";
     toggle.setAttribute("aria-label", toggle.textContent);
-    list.replaceChildren(...queue.map(createItemRow));
+    // Storage updates can arrive while typing (including saves from other tabs).
+    // Keep each editor mounted so focus, selection and IME composition survive.
+    const rows = new Map([...list.children].map(row => [row.dataset.queueId, row]));
+    const ids = new Set(queue.map(item => item.id));
+    for (const [id, row] of rows) {
+      if (!ids.has(id)) row.remove();
+    }
+    queue.forEach((item, index) => {
+      const row = rows.get(item.id) || createItemRow(item, index);
+      const sending = item.id === sendingItemId;
+      if (sending) row.dataset.sending = "true";
+      else delete row.dataset.sending;
+      row.querySelector(".ghrc-message-queue-index").textContent = index === 0 ? "Next" : String(index + 1);
+      const editor = row.querySelector("textarea");
+      if (editor.value !== item.text) {
+        const { selectionStart, selectionEnd, selectionDirection } = editor;
+        editor.value = item.text;
+        editor.setSelectionRange(selectionStart, selectionEnd, selectionDirection);
+        autosizeTextarea(editor);
+      }
+      editor.disabled = sending;
+      editor.setAttribute("aria-label", `Queued message ${index + 1}`);
+      const names = item.attachments?.map(file => file.name).join(", ");
+      if (names) editor.setAttribute("aria-description", `Attachments: ${names}`);
+      else editor.removeAttribute("aria-description");
+      row.title = names ? `Attachments: ${names}` : "";
+      const [up, down] = row.querySelectorAll(".ghrc-message-queue-move-controls button");
+      up.disabled = index === 0 || sending;
+      down.disabled = index === queue.length - 1 || sending;
+      row.querySelector('[aria-label="Remove queued message"]').disabled = sending;
+      row.querySelector(".ghrc-message-queue-steer").disabled = Boolean(sendingItemId)
+        || interruptRunning || enqueueRunning || routeSyncRunning;
+      if (list.children[index] !== row) list.insertBefore(row, list.children[index] || null);
+    });
 
     const form = findComposerForm();
     if (form?.parentElement && panel.parentElement !== form.parentElement) {
@@ -1533,7 +1566,8 @@
       showQueueButton = Boolean(changes[QUEUE_BUTTON_SETTING_KEY].newValue);
       scheduleMount();
     }
-    if (changes[PAUSED_STORAGE_KEY]) {
+    if (changes[PAUSED_STORAGE_KEY]
+      && queuePaused !== Boolean(changes[PAUSED_STORAGE_KEY].newValue?.[activeKey])) {
       queuePaused = Boolean(changes[PAUSED_STORAGE_KEY].newValue?.[activeKey]);
       completionCandidateSince = null;
       renderQueue();
