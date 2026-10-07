@@ -149,6 +149,24 @@ async function fixture({ active = false, voice = false, editable = true, stored 
   return page;
 }
 
+test('generating dots keep Enter in the queue when the native Stop control is stale', async () => {
+  const p = await fixture({ active: true });
+  await p.locator('[data-composer-markdown]').fill('Queue while the dots are active');
+  await p.evaluate(() => {
+    button.dataset.testid = 'send-button';
+    button.setAttribute('aria-label', 'Send prompt');
+    const turn = document.querySelector('[data-testid^="conversation-turn-"]:last-child');
+    turn.insertAdjacentHTML('beforeend', '<div role="status"><span>•••</span></div>');
+  });
+  await p.locator('[data-composer-markdown]').press('Enter');
+  await p.locator('.ghrc-message-queue-editor').waitFor();
+  assert.equal(await p.locator('.ghrc-message-queue-editor').inputValue(), 'Queue while the dots are active');
+  assert.deepEqual(await p.evaluate(() => sent), []);
+  assert.equal(await p.evaluate(() => stops), 0);
+  assert.deepEqual(p.errors, []);
+  await p.close();
+});
+
 for (const pending of ['generation', 'image-load']) test(`image-only reply advances the queue after ${pending} finishes`, async () => {
   const p = await fixture({ active: true, liveMarkup: true });
   await p.evaluate(async pending => {
