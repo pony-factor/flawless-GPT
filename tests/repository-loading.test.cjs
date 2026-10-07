@@ -307,9 +307,9 @@ test("wide repository search results are anchored below the search field", () =>
     "utf8",
   );
   const wideRule = stylesheet.match(
-    /@container \\(min-width: 821px\\) \\{([\\s\\S]*?)\\n\\}/,
+    /@container \(min-width: 821px\) \{([\s\S]*?)\n\}/,
   )?.[1] || "";
 
-  assert.doesNotMatch(wideRule, /^\\s*bottom:\\s*0;/m);
-  assert.match(stylesheet, /\\.ghrc-search-results \\{[\\s\\S]*?top: calc\\(100% \\+ 6px\\)/);
+  assert.doesNotMatch(wideRule, /^\s*bottom:\s*0;/m);
+  assert.match(stylesheet, /\.ghrc-search-results \{[\s\S]*?top: calc\(100% \+ 6px\)/);
 });
