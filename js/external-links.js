@@ -516,12 +516,34 @@
   window.addEventListener("wheel", preserveNativeScroll, { capture: true, passive: true });
   window.addEventListener("touchmove", preserveNativeScroll, { capture: true, passive: true });
 
+  const pendingMutationNodes = new Set();
+  let mutationFlushScheduled = false;
+
   function inspectMutationNode(node) {
     if (!(node instanceof Element)) return;
     inspectDialogs(node);
-    suppressHistoryRateLimitModal();
     stripTrackingFromLinks(node);
     decorateExternalLinks(node);
+  }
+
+  function queueMutationNode(node) {
+    if (!(node instanceof Element)) return;
+
+    for (const pending of pendingMutationNodes) {
+      if (pending.contains(node)) return;
+      if (node.contains(pending)) pendingMutationNodes.delete(pending);
+    }
+    pendingMutationNodes.add(node);
+    if (mutationFlushScheduled) return;
+
+    mutationFlushScheduled = true;
+    requestAnimationFrame(() => {
+      mutationFlushScheduled = false;
+      const nodes = [...pendingMutationNodes];
+      pendingMutationNodes.clear();
+      suppressHistoryRateLimitModal();
+      for (const candidate of nodes) inspectMutationNode(candidate);
+    });
   }
 
   function watchChatGPTInterruptions() {
@@ -535,8 +557,11 @@
     decorateExternalLinks(document.documentElement);
     new MutationObserver((mutations) => {
       for (const mutation of mutations) {
-        inspectMutationNode(mutation.target);
-        for (const node of mutation.addedNodes) inspectMutationNode(node);
+        if (mutation.type === "attributes") {
+          queueMutationNode(mutation.target);
+          continue;
+        }
+        for (const node of mutation.addedNodes) queueMutationNode(node);
       }
     }).observe(document.documentElement, {
       childList: true,
@@ -624,6 +649,5 @@
   }, true);
 
   watchChatGPTInterruptions();
-  setInterval(suppressHistoryRateLimitModal, 100);
   void loadSettings();
 })();

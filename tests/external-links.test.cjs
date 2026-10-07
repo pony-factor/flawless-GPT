@@ -168,3 +168,8 @@ test('downloads and non-web URLs are left to the browser', () => {
   assert.equal(f.api.openExternalLink(f.event, new HTMLAnchorElement('mailto:hello@example.org')), false);
   assert.deepEqual(f.openedTabs, []);
 });
+
+
+test('history modal suppression is event driven instead of polled', () => {
+  assert.equal(source.includes('setInterval(suppressHistoryRateLimitModal'), false);
+});
