@@ -309,7 +309,16 @@
   }
 
   function findComposerInput() {
-    return document.querySelector('#prompt-textarea, [data-composer-markdown][contenteditable="true"]');
+    const prompt = document.querySelector("#prompt-textarea");
+    if (isVisible(prompt)) return prompt;
+
+    // Inline edits reuse ChatGPT's composer markup and can appear earlier in
+    // the conversation DOM. The persistent bottom composer is the last visible
+    // markdown editor; keeping queue hooks scoped to it prevents edit submits
+    // (including app/plugin mentions) from being intercepted or reparented.
+    const editors = [...document.querySelectorAll('[data-composer-markdown][contenteditable="true"]')]
+      .filter(isVisible);
+    return editors[editors.length - 1] || null;
   }
 
   function findComposerForm(composer = findComposerInput()) {
@@ -371,6 +380,47 @@
       )) || null;
   }
 
+  function generationIndicatorIsActive() {
+    const latestAssistant = [...document.querySelectorAll(
+      '[data-message-author-role="assistant"], [data-content-search-unit-key$=":assistant"], [data-testid="generated-image-gallery"]'
+    )].at(-1);
+    const root = latestAssistant?.closest('[data-testid^="conversation-turn-"], .group') || latestAssistant;
+    if (!root) return false;
+
+    const selectors = [
+      '[data-message-status="in_progress"]',
+      '[data-message-status="streaming"]',
+      '[data-state="streaming"]',
+      '[data-state="generating"]',
+      '[data-testid*="streaming" i]',
+      '[data-testid*="generating" i]',
+      '[aria-label*="generating" i]',
+      '[aria-label*="thinking" i]',
+      '[aria-busy="true"]',
+    ];
+    if (selectors.some((selector) =>
+      [...root.querySelectorAll(selector)].some(isVisible)
+    )) return true;
+
+    return [...root.querySelectorAll('[role="status"], [aria-live="polite"], [aria-live="assertive"]')]
+      .filter(isVisible)
+      .some((status) => {
+        const text = (status.textContent || "").replace(/\s+/g, "");
+        if (/^(?:\.{2,4}|…|[·•]{2,4})$/u.test(text)) return true;
+
+        const animatedDots = [...status.querySelectorAll("span, i")].filter((dot) => {
+          if (!isVisible(dot)) return false;
+          const rect = dot.getBoundingClientRect();
+          const style = getComputedStyle(dot);
+          return rect.width > 0 && rect.height > 0
+            && rect.width <= 16 && rect.height <= 16
+            && style.borderRadius !== "0px"
+            && dot.getAnimations?.().some((animation) => animation.playState === "running");
+        });
+        return animatedDots.length >= 2 && animatedDots.length <= 4;
+      });
+  }
+
   function responseIsActive(composer = findComposerInput()) {
     const form = findComposerForm(composer);
     const selectors = [
@@ -384,7 +434,7 @@
     const root = form || document;
     return selectors.some((selector) =>
       [...root.querySelectorAll(selector)].some(isVisible)
-    );
+    ) || generationIndicatorIsActive();
   }
 
   function composerText(composer = findComposerInput()) {

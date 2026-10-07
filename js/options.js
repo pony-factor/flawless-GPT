@@ -30,6 +30,7 @@ const normalizeCopiedQuotesInput = document.getElementById("normalize-copied-quo
 const underscoreCopiedItalicsInput = document.getElementById("underscore-copied-italics");
 const openExternalLinksInNewTabsInput = document.getElementById("open-external-links-in-new-tabs");
 const openExternalLinksInSplitViewInput = document.getElementById("open-external-links-in-split-view");
+const openExternalLinksInSplitViewOnLeftInput = document.getElementById("open-external-links-in-split-view-on-left");
 const skipExternalSiteWarningInput = document.getElementById("skip-external-site-warning");
 const dismissHistoryRateLimitModalInput = document.getElementById("dismiss-history-rate-limit-modal");
 const hideUsageCardInput = document.getElementById("hide-usage-card");
@@ -330,6 +331,7 @@ async function loadSettings() {
     skipExternalSiteWarning: true,
     openExternalLinksInNewTabs: true,
     openExternalLinksInSplitView: false,
+    openExternalLinksInSplitViewOnLeft: false,
     dismissHistoryRateLimitModal: true,
     hideUsageCard: true,
     hideCookiePreferences: false,
@@ -374,6 +376,7 @@ async function loadSettings() {
   underscoreCopiedItalicsInput.checked = settings.underscoreCopiedItalics !== false;
   openExternalLinksInNewTabsInput.checked = settings.openExternalLinksInNewTabs !== false;
   openExternalLinksInSplitViewInput.checked = Boolean(settings.openExternalLinksInSplitView);
+  openExternalLinksInSplitViewOnLeftInput.checked = Boolean(settings.openExternalLinksInSplitViewOnLeft);
   skipExternalSiteWarningInput.checked = Boolean(settings.skipExternalSiteWarning);
   dismissHistoryRateLimitModalInput.checked = Boolean(settings.dismissHistoryRateLimitModal);
   hideUsageCardInput.checked = settings.hideUsageCard !== false;
@@ -467,6 +470,7 @@ async function saveSettings() {
       skipExternalSiteWarning: skipExternalSiteWarningInput.checked,
       openExternalLinksInNewTabs: openExternalLinksInNewTabsInput.checked,
       openExternalLinksInSplitView: openExternalLinksInSplitViewInput.checked,
+      openExternalLinksInSplitViewOnLeft: openExternalLinksInSplitViewOnLeftInput.checked,
       dismissHistoryRateLimitModal: dismissHistoryRateLimitModalInput.checked,
       hideUsageCard: hideUsageCardInput.checked,
       hideCookiePreferences: hideCookiePreferencesInput.checked,
