@@ -149,6 +149,56 @@ async function fixture({ active = false, voice = false, editable = true, stored 
   return page;
 }
 
+test('queue stays inside the composer and viewport as the chat column narrows', async () => {
+  const p = await fixture({ active: true });
+  await enqueue(p, 'Keep this queued draft visible in a compact window');
+  await p.evaluate(() => {
+    const form = document.querySelector('form');
+    const host = form.parentElement;
+    host.style.width = 'min(100%, 610px)';
+    host.style.marginLeft = 'auto';
+    form.style.width = '100%';
+    const composer = form.querySelector('[data-composer-markdown]');
+    composer.style.minWidth = '0';
+    composer.style.flex = '1';
+  });
+
+  for (const width of [850, 540, 390, 320, 820]) {
+    await p.setViewportSize({ width, height: 700 });
+    await p.waitForFunction(() => {
+      const panel = document.getElementById('ghrc-message-queue');
+      if (!panel) return false;
+      const bounds = panel.getBoundingClientRect();
+      const parent = panel.parentElement.getBoundingClientRect();
+      const form = document.querySelector('form').getBoundingClientRect();
+      return bounds.left >= Math.max(14, parent.left) - 1
+        && bounds.right <= Math.min(window.innerWidth - 14, parent.right, form.right) + 1;
+    });
+    const layout = await p.evaluate(() => {
+      const panel = document.getElementById('ghrc-message-queue');
+      const bounds = panel.getBoundingClientRect();
+      const controls = panel.querySelector('.ghrc-message-queue-controls').getBoundingClientRect();
+      const editor = panel.querySelector('.ghrc-message-queue-editor').getBoundingClientRect();
+      return {
+        width: bounds.width,
+        controlsRight: controls.right,
+        panelRight: bounds.right,
+        editorRight: editor.right,
+        controlsTop: controls.top,
+        editorBottom: editor.bottom,
+      };
+    });
+    assert.ok(layout.width > 0, `panel collapsed at ${width}px`);
+    assert.ok(layout.controlsRight <= layout.panelRight + 1, `controls clipped at ${width}px`);
+    assert.ok(layout.editorRight <= layout.panelRight + 1, `editor clipped at ${width}px`);
+    if (layout.width <= 480) {
+      assert.ok(layout.controlsTop >= layout.editorBottom - 1, `controls did not wrap at ${width}px`);
+    }
+  }
+  assert.deepEqual(p.errors, []);
+  await p.close();
+});
+
 test('generating dots keep Enter in the queue when the native Stop control is stale', async () => {
   const p = await fixture({ active: true });
   await p.locator('[data-composer-markdown]').fill('Queue while the dots are active');

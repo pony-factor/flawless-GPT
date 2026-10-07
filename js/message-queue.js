@@ -920,8 +920,21 @@
     const style = getComputedStyle(textStart);
     const textLeft = textStart.getBoundingClientRect().left
       + (parseFloat(style.borderLeftWidth) || 0) + (parseFloat(style.paddingLeft) || 0);
+
+    // Align with the composer text, but never let that offset push the panel
+    // past the form, its containing column, or the viewport edge.
+    const parentRect = panel.parentElement.getBoundingClientRect();
+    const formRight = findComposerForm(composer)?.getBoundingClientRect().right ?? parentRect.right;
+    const leftBoundary = Math.max(14, parentRect.left);
+    const rightBoundary = Math.min(window.innerWidth - 14, parentRect.right, formRight);
+    const alignedLeft = Math.min(Math.max(textLeft, leftBoundary), rightBoundary);
+    const availableWidth = `${Math.max(0, Math.round((rightBoundary - alignedLeft) * 100) / 100)}px`;
+    if (panel.style.getPropertyValue("--ghrc-queue-available-width") !== availableWidth) {
+      panel.style.setProperty("--ghrc-queue-available-width", availableWidth);
+    }
+
     const currentOffset = parseFloat(panel.style.getPropertyValue("--ghrc-queue-left-offset")) || 0;
-    const offset = Math.round((currentOffset + textLeft - panel.getBoundingClientRect().left) * 100) / 100;
+    const offset = Math.round((currentOffset + alignedLeft - panel.getBoundingClientRect().left) * 100) / 100;
     const value = `${offset}px`;
     if (panel.style.getPropertyValue("--ghrc-queue-left-offset") !== value) {
       panel.style.setProperty("--ghrc-queue-left-offset", value);
