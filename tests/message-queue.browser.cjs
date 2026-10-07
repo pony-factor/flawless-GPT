@@ -667,6 +667,51 @@ for (const route of ['/', '/?temporary-chat=true']) {
   });
 }
 
+test('new-chat Enter stays native when homepage shell has incomplete turn markup', async () => {
+  const p = await fixture({ route: '/' });
+  await p.evaluate(() => {
+    document.getElementById('turns').insertAdjacentHTML(
+      'beforeend',
+      '<div data-testid="conversation-turn-loading"></div>',
+    );
+  });
+  await p.locator('[data-composer-markdown]').fill('First message');
+  await p.locator('[data-composer-markdown]').press('Enter');
+  assert.deepEqual(await p.evaluate(() => sent), ['First message']);
+  assert.equal(await p.locator('#ghrc-message-queue').count(), 0);
+  assert.equal(await p.evaluate(() => storage.queuedChatMessages), undefined);
+  assert.deepEqual(p.errors, []);
+  await p.close();
+});
+
+test('new-chat Enter stays native while repository dashboard is still loading', async () => {
+  const p = await fixture({ route: '/' });
+  await p.evaluate(() => {
+    const dashboard = document.createElement('section');
+    dashboard.id = 'github-repositories-for-chatgpt';
+    dashboard.setAttribute('aria-label', 'GitHub repositories');
+    dashboard.innerHTML = '<p class="ghrc-state">Loading repositories…</p>';
+    document.querySelector('form').after(dashboard);
+    let loadedRepositories = 0;
+    window.repositoryLoadTicker = setInterval(() => {
+      const repository = document.createElement('a');
+      repository.className = 'ghrc-repository';
+      repository.textContent = `repo-${++loadedRepositories}`;
+      dashboard.append(repository);
+    }, 10);
+  });
+  await p.waitForFunction(() => document.querySelectorAll('.ghrc-repository').length > 0);
+  await p.locator('[data-composer-markdown]').fill('First message before repositories load');
+  await p.locator('[data-composer-markdown]').press('Enter');
+  assert.deepEqual(await p.evaluate(() => sent), ['First message before repositories load']);
+  assert.equal(await p.locator('#ghrc-message-queue').count(), 0);
+  assert.equal(await p.locator('#github-repositories-for-chatgpt .ghrc-state').textContent(), 'Loading repositories…');
+  assert.equal(await p.evaluate(() => storage.queuedChatMessages), undefined);
+  await p.evaluate(() => clearInterval(repositoryLoadTicker));
+  assert.deepEqual(p.errors, []);
+  await p.close();
+});
+
 test('after the overview creates a chat, Enter queues behind its active response', async () => {
   const p = await fixture({ route: '/' });
   await p.evaluate(() => {
