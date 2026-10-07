@@ -3,6 +3,7 @@
   if (!context?.active()) return;
   const ENABLED_KEY = "showClipboardSendButton";
   const BUTTON_ID = "ghrc-clipboard-send-button";
+  const URL_BUTTON_ID = "ghrc-clipboard-open-url-button";
 
   let enabled = false;
   let mountScheduled = false;
@@ -50,6 +51,36 @@
     button.setAttribute("aria-label", message);
   }
 
+  async function openClipboardUrl(button) {
+    setButtonBusy(button, true);
+    try {
+      const text = (await readClipboardText()).trim();
+      let url;
+      try {
+        url = new URL(text);
+      } catch {
+        setButtonMessage(button, "Clipboard does not contain a valid URL");
+        return;
+      }
+
+      if (url.protocol !== "http:" && url.protocol !== "https:") {
+        setButtonMessage(button, "Clipboard URL must use http or https");
+        return;
+      }
+
+      window.location.assign(url.href);
+    } catch (error) {
+      if (["NotAllowedError", "SecurityError", "NotFoundError"].includes(error?.name)) {
+        setButtonMessage(button, "Clipboard access unavailable");
+      } else {
+        context.handleError(error);
+        setButtonMessage(button, "Clipboard URL could not be opened");
+      }
+    } finally {
+      setButtonBusy(button, false);
+    }
+  }
+
   async function sendClipboardPrompt(button) {
     if (actionRunning) return;
     actionRunning = true;
@@ -78,6 +109,22 @@
     }
   }
 
+  function createUrlButton() {
+    const button = document.createElement("button");
+    button.id = URL_BUTTON_ID;
+    button.type = "button";
+    button.title = "Open clipboard URL in this tab";
+    button.setAttribute("aria-label", "Open clipboard URL in this tab");
+    button.innerHTML = `
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M10 13a5 5 0 0 0 7.1 0l2-2a5 5 0 0 0-7.1-7l-1.1 1.1M14 11a5 5 0 0 0-7.1 0l-2 2a5 5 0 0 0 7.1 7l1.1-1.1" />
+      </svg>
+    `;
+    button.addEventListener("click", () => void openClipboardUrl(button));
+    button.addEventListener("mousedown", event => event.preventDefault());
+    return button;
+  }
+
   function createButton() {
     const button = document.createElement("button");
     button.id = BUTTON_ID;
@@ -98,31 +145,45 @@
     document.getElementById(BUTTON_ID)?.remove();
   }
 
+  function removeUrlButton() {
+    document.getElementById(URL_BUTTON_ID)?.remove();
+  }
+
   function mountButton() {
     if (!context.active()) return;
     mountScheduled = false;
-    if (!enabled) {
-      removeButton();
-      return;
-    }
 
     const composer = findComposerInput();
     const sendButton = globalThis.__ghrcMessageQueue?.findActionButton(composer);
     if (!composer || !sendButton?.parentElement) {
       removeButton();
+      removeUrlButton();
       return;
     }
 
-    let button = document.getElementById(BUTTON_ID);
-    if (!button) button = createButton();
     // Keep a stable order with the queue controls; competing "before Send"
     // observers otherwise move these buttons back and forth indefinitely.
     const hat = document.getElementById("ghrc-message-interrupt-button");
     const anchor = hat?.parentElement === sendButton.parentElement ? hat : sendButton;
-    if (button.parentElement !== anchor.parentElement || button.nextElementSibling !== anchor) {
-      anchor.before(button);
+
+    let button = document.getElementById(BUTTON_ID);
+    if (enabled) {
+      if (!button) button = createButton();
+      if (button.parentElement !== anchor.parentElement || button.nextElementSibling !== anchor) {
+        anchor.before(button);
+      }
+      setButtonBusy(button, actionRunning);
+    } else {
+      removeButton();
+      button = null;
     }
-    setButtonBusy(button, actionRunning);
+
+    let urlButton = document.getElementById(URL_BUTTON_ID);
+    if (!urlButton) urlButton = createUrlButton();
+    const urlAnchor = button?.parentElement === anchor.parentElement ? button : anchor;
+    if (urlButton.parentElement !== urlAnchor.parentElement || urlButton.nextElementSibling !== urlAnchor) {
+      urlAnchor.before(urlButton);
+    }
   }
 
   function scheduleMount() {
@@ -134,8 +195,7 @@
 
   function setEnabled(nextEnabled) {
     enabled = nextEnabled;
-    if (!enabled) removeButton();
-    else scheduleMount();
+    scheduleMount();
   }
 
   chrome.storage.onChanged.addListener((changes, areaName) => {
@@ -150,7 +210,7 @@
   });
 
   const observer = new MutationObserver(scheduleMount);
-  context.onStop(() => { observer.disconnect(); removeButton(); });
+  context.onStop(() => { observer.disconnect(); removeButton(); removeUrlButton(); });
   observer.observe(document.documentElement, {
     childList: true,
     subtree: true,
