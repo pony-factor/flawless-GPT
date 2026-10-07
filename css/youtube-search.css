@@ -33,6 +33,7 @@
   font-size: 12px;
   gap: 7px;
   flex: 1;
+  margin-right: 36px;
   min-width: 0;
 }
 
@@ -80,7 +81,7 @@
   margin: 0;
   padding: 0;
   position: absolute;
-  right: 1px;
+  right: 37px;
   top: 50%;
   transform: translateY(-50%);
   width: 28px;
