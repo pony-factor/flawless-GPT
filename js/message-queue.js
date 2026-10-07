@@ -1500,10 +1500,40 @@
         && getComputedStyle(popup).visibility !== 'hidden');
   }
 
-  function handleComposerEnter(event) {
+  function focusLowestPriorityQueuedMessage() {
+    const item = queue.at(-1);
+    if (!item) return false;
+
+    let panel = document.getElementById(PANEL_ID);
+    if (!panel) {
+      renderQueue();
+      panel = document.getElementById(PANEL_ID);
+    }
+    const row = [...(panel?.querySelectorAll(".ghrc-message-queue-item") || [])]
+      .find(candidate => candidate.dataset.queueId === item.id);
+    const editor = row?.querySelector(".ghrc-message-queue-editor");
+    if (!editor || editor.disabled) return false;
+
+    editor.focus({ preventScroll: true });
+    editor.setSelectionRange(editor.value.length, editor.value.length);
+    return true;
+  }
+
+  function handleComposerKeydown(event) {
     if (!context.active()) return;
     const composer = event.target?.closest?.('#prompt-textarea, [data-composer-markdown][contenteditable="true"]');
     if (!composer || composer !== findComposerInput()) return;
+
+    if (event.key === "ArrowUp") {
+      if (event.shiftKey || event.altKey || event.ctrlKey || event.metaKey || event.isComposing
+        || composerAutocompleteIsOpen(composer) || composerText(composer).trim() || hasComposerContext(composer)
+        || !stateLoaded || routeSyncRunning || activeKey !== conversationKey() || !queue.length) return;
+      if (!focusLowestPriorityQueuedMessage()) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      return;
+    }
+
     if (!shouldQueueComposerEnter(event)) return;
     if (composerAutocompleteIsOpen(composer)) return;
     // Until ChatGPT assigns a conversation URL, let the new-chat page own Enter.
@@ -1532,8 +1562,9 @@
     event.stopImmediatePropagation();
     if (hasMessage) void context.run(() => queueComposerEnter(composer, text, conversationKey()));
   }
-  // Capture before React's document/composer handlers can turn Enter into Stop.
-  window.addEventListener("keydown", handleComposerEnter, true);
+  // Capture before React's document/composer handlers can turn Enter into Stop
+  // or ArrowUp into editing already-sent history.
+  window.addEventListener("keydown", handleComposerKeydown, true);
 
   document.addEventListener("input", (event) => {
     if (event.target?.closest?.('#prompt-textarea, [data-composer-markdown][contenteditable="true"]')) scheduleMount();
@@ -1589,7 +1620,7 @@
   window.addEventListener("resize", scheduleMount);
   document.addEventListener("visibilitychange", reschedulePumpForVisibility);
   context.onStop(() => {
-    window.removeEventListener("keydown", handleComposerEnter, true);
+    window.removeEventListener("keydown", handleComposerKeydown, true);
     observer.disconnect();
     queueResizeObserver?.disconnect();
     window.removeEventListener("resize", scheduleMount);
