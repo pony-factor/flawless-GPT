@@ -140,3 +140,38 @@ test('stable completed report auto-imports once while busy and ordinary reports 
   assert.equal(await p.evaluate(() => calls.filter(message => message.type === 'publish-research-report').length), 1);
   await p.close();
 });
+
+
+test('a recovered popup retries automatically and restores completion without a category dialog', async () => {
+  const p = await browser.newPage();
+  await p.setContent('<section><div><button aria-label="Export">Export</button><button aria-label="Expand">Expand</button></div><article class="_reportPage_fixture"><h1>Recovered report</h1><p>Evidence</p></article></section>');
+  await p.evaluate(() => {
+    window.attempts = 0;
+    window.run = { id: 'recovered', state: 'submitted', category: '' };
+    window.chrome = { storage: { local: { get: async defaults => ({ ...defaults, researchPublisherEnabled: true }) }, onChanged: { addListener() {} } },
+      runtime: { async sendMessage(message) {
+        if (message.type === 'research-launch-job') return { ok: true, job: window.run };
+        if (message.type === 'publish-research-report') {
+          attempts++;
+          if (attempts === 1) {
+            window.run = { ...run, state: 'import-retry', retryAt: Date.now() + 1500 };
+            return { ok: false, error: 'Another report is being added.' };
+          }
+          const result = { ok: true, repository: 'research', branch: 'main', path: 'report.md', unchanged: true };
+          window.run = { ...run, state: 'complete', result };
+          return result;
+        }
+        return { ok: true };
+      } } };
+  });
+  for (const file of ['vendor/turndown.js', 'vendor/turndown-plugin-gfm.js', 'js/research-import-dialog.js', 'js/research-publisher.js'])
+    await p.addScriptTag({ content: fs.readFileSync(file, 'utf8') });
+  await p.waitForFunction(() => run.state === 'complete', { timeout: 15000 });
+  assert.equal(await p.evaluate(() => attempts), 2);
+  assert.equal(await p.getByRole('dialog').count(), 0);
+  await p.getByRole('button', { name: 'Report added to repo', exact: true }).waitFor();
+  await p.locator('.ghrc-report-status').evaluate(node => { node.textContent = ''; });
+  await p.waitForFunction(() => document.querySelector('.ghrc-report-status').textContent.includes('Already up to date'));
+  assert.equal(await p.evaluate(() => attempts), 2);
+  await p.close();
+});

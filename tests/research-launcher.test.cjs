@@ -5,6 +5,10 @@ const vm = require('node:vm');
 
 function app({ enabled = true, connected = true } = {}) {
   const session = {};
+  const local = {};
+  const tabs = new Map();
+  let now = Date.now();
+  let installed;
   const calls = [];
   const windows = [];
   let nextId = 10;
@@ -15,7 +19,10 @@ function app({ enabled = true, connected = true } = {}) {
   let ready = true;
   const chrome = {
     storage: {
-      local: { get: async defaults => ({ ...defaults, researchPublisherEnabled: enabled }), set: async () => {} },
+      local: {
+        get: async defaults => typeof defaults === 'string' ? { [defaults]: structuredClone(local[defaults]) } : ({ ...defaults, researchPublisherEnabled: enabled }),
+        set: async values => Object.assign(local, structuredClone(values)),
+      },
       session: {
         get: async key => ({ [key]: session[key] && structuredClone(session[key]) }),
         set: async values => Object.assign(session, structuredClone(values)),
@@ -26,11 +33,15 @@ function app({ enabled = true, connected = true } = {}) {
       create: async options => {
         const id = nextId++;
         windows.push(options);
+        tabs.set(id, { id, windowId: id, url: 'https://chatgpt.com/c/research' });
         return { id, tabs: [{ id }] };
       },
       remove: async () => {},
     },
+    webNavigation: { getFrame: async ({ tabId }) => ({ url: tabs.get(tabId)?.url }) },
     tabs: {
+      get: async id => { if (!tabs.has(id)) throw new Error('No tab'); const { url, ...tab } = tabs.get(id); return tab; },
+      reload: async id => calls.push(['reload', id]),
       update: async (id, options) => calls.push(['navigate', id, options]),
       create: async () => {},
       sendMessage: async () => ({ ready }),
@@ -38,6 +49,7 @@ function app({ enabled = true, connected = true } = {}) {
     },
     runtime: {
       id: 'extension',
+      onInstalled: { addListener: fn => { installed = fn; } },
       onMessage: { addListener: fn => listeners.push(fn) },
       sendNativeMessage: async (host, payload) => {
         calls.push([host, payload]);
@@ -49,7 +61,7 @@ function app({ enabled = true, connected = true } = {}) {
   };
   const load = () => {
     listeners = [];
-    const context = vm.createContext({ chrome, URL, TextEncoder, Date, crypto: { randomUUID: () => 'run-' + nextId }, console });
+    const context = vm.createContext({ chrome, URL, TextEncoder, Date: { now: () => now }, crypto: { randomUUID: () => 'run-' + nextId }, console });
     for (const file of ['js/research-publisher-background.js', 'js/research-launcher-background.js'])
       vm.runInContext(fs.readFileSync(file, 'utf8'), context);
   };
@@ -62,8 +74,8 @@ function app({ enabled = true, connected = true } = {}) {
     if (!listeners.some(listener => listener(message, sender, resolve) === true)) reject(new Error('No handler'));
   });
   const start = () => send({ type: 'start-research-launch', prompt: '# Investigate\nExact wording', title: 'Investigation', category: 'Markets', repository: 'research', branch: 'main' });
-  return { session, calls, windows, send, start, source, host, report, restart: load, close: id => removed(id),
-    changeDestination: value => { destination = value; }, failPublish: () => { failPublish = true; }, setReady: value => { ready = value; } };
+  return { session, local, tabs, calls, windows, advance: ms => { now += ms; }, update: () => installed(), send, start, source, host, report, restart: load, close: id => removed(id),
+    changeDestination: value => { destination = value; }, failPublish: (value = true) => { failPublish = value; }, setReady: value => { ready = value; } };
 }
 async function submitted(a) {
   const { job } = await a.start();
@@ -153,14 +165,14 @@ test('active research and an unrelated report tab cannot trigger import', async 
   assert.equal(a.calls.filter(x => x[1]?.action === 'publish').length, 0);
 });
 
-test('destination changes and native failures require a deliberate manual retry', async () => {
+test('destination changes stop imports while transient native failures wait for automatic retry', async () => {
   for (const changed of [false, true]) {
     const a = app();
     const job = await submitted(a);
     if (changed) a.changeDestination({ repository: 'other', branch: 'main' });
     else a.failPublish();
     assert.equal((await a.send(publish(job), a.report(job.tabId))).ok, false);
-    assert.equal(a.session['researchLaunch:' + job.tabId].state, 'import-error');
+    assert.equal(a.session['researchLaunch:' + job.tabId].state, changed ? 'import-error' : 'import-retry');
     assert.equal((await a.send(publish(job), a.report(job.tabId))).ok, false);
     assert.equal(a.calls.filter(x => x[1]?.action === 'publish').length, changed ? 0 : 1);
   }
@@ -172,4 +184,65 @@ test('closing the popup clears its handoff and reports the closure only to its s
   assert.equal((await a.send({ type: 'research-launch-status', id: job.id, tabId: job.tabId }, a.host(999))).job, null);
   a.close(job.tabId);
   assert.equal((await a.send({ type: 'research-launch-status', id: job.id, tabId: job.tabId })).job, null);
+});
+
+
+test('submitted destination survives extension session loss and refuses a reused tab', async () => {
+  const a = app();
+  const job = await submitted(a);
+  assert.equal(a.local.researchLaunchRecovery[job.tabId].category, 'Markets');
+  assert.equal(a.local.researchLaunchRecovery[job.tabId].prompt, undefined);
+  for (const key of Object.keys(a.session)) delete a.session[key];
+  a.restart();
+  assert.equal((await a.send({ type: 'research-launch-job' }, a.host(job.tabId))).job.state, 'submitted');
+  assert.equal((await a.send(publish(job), a.report(job.tabId))).ok, true);
+  delete a.session['researchLaunch:' + job.tabId];
+  a.tabs.get(job.tabId).url = 'https://chatgpt.com/c/unrelated';
+  assert.equal((await a.send({ type: 'research-launch-job' }, a.host(job.tabId))).job, null);
+  assert.equal(a.local.researchLaunchRecovery[job.tabId], undefined);
+});
+
+test('extension update refreshes known research windows and preserves completed imports', async () => {
+  const a = app();
+  const job = await submitted(a);
+  for (const key of Object.keys(a.session)) delete a.session[key];
+  a.restart();
+  a.update();
+  await new Promise(setImmediate);
+  assert.deepEqual(a.calls.filter(call => call[0] === 'reload'), [['reload', job.tabId]]);
+  assert.equal((await a.send(publish(job), a.report(job.tabId))).ok, true);
+  a.update();
+  await new Promise(setImmediate);
+  assert.equal(a.calls.filter(call => call[0] === 'reload').length, 2);
+  assert.equal(a.calls.filter(call => call[1]?.action === 'publish').length, 1);
+});
+
+test('transient failure retries automatically and then records a single successful import', async () => {
+  const a = app();
+  const job = await submitted(a);
+  a.failPublish();
+  assert.equal((await a.send(publish(job), a.report(job.tabId))).ok, false);
+  assert.equal((await a.send(publish(job), a.report(job.tabId))).ok, false);
+  a.advance(5001);
+  a.failPublish(false);
+  assert.equal((await a.send(publish(job), a.report(job.tabId))).ok, true);
+  assert.equal((await a.send(publish(job), a.report(job.tabId))).ok, false);
+  assert.equal(a.session['researchLaunch:' + job.tabId].state, 'complete');
+  assert.equal(a.calls.filter(call => call[1]?.action === 'publish').length, 2);
+});
+
+test('repeated failures stop after three attempts and interrupted workers can resume importing', async () => {
+  const a = app();
+  const job = await submitted(a);
+  a.session['researchLaunch:' + job.tabId].state = 'importing';
+  a.restart();
+  assert.equal((await a.send({ type: 'research-launch-job' }, a.host(job.tabId))).job.state, 'submitted');
+  a.failPublish();
+  for (let i = 0; i < 3; i++) {
+    assert.equal((await a.send(publish(job), a.report(job.tabId))).ok, false);
+    a.advance(31000);
+  }
+  assert.equal(a.session['researchLaunch:' + job.tabId].state, 'import-error');
+  assert.equal((await a.send(publish(job), a.report(job.tabId))).ok, false);
+  assert.equal(a.calls.filter(call => call[1]?.action === 'publish').length, 3);
 });

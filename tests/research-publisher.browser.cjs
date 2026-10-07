@@ -106,3 +106,43 @@ test('filename context uses the prompt preceding the report, not an earlier or l
     assert.equal(context.prompt, 'DTC Bond Purchaser Tracking');
   } finally { await browser.close(); }
 });
+
+
+test('root shortcut finishes immediately from a nested folder in both chooser modes', async () => {
+  const browser = await chromium.launch({ executablePath: '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser', headless: true });
+  try {
+    const page = await browser.newPage({ viewport: { width: 560, height: 520 } });
+    await page.setContent('<body></body>');
+    await page.addScriptTag({ content: fs.readFileSync('js/research-import-dialog.js', 'utf8') });
+    for (const launch of [false, true]) {
+      await page.evaluate(launch => {
+        window.chosen = undefined;
+        window.__ghrcChooseResearchCategory(document, { repository: 'Research', branch: 'main', categories: ['Markets', 'Markets/Ownership'] }, launch).then(value => { window.chosen = value; });
+      }, launch);
+      await page.getByRole('button', { name: '📁 Markets', exact: true }).click();
+      assert.equal(await page.getByRole('textbox', { name: 'Category' }).inputValue(), 'Markets');
+      await page.getByRole('button', { name: launch ? 'Start at root' : 'Import to root', exact: true }).click();
+      await page.waitForFunction(() => window.chosen === '');
+      assert.equal(await page.getByRole('dialog').count(), 0);
+    }
+  } finally { await browser.close(); }
+});
+
+test('stale report scripts explain recovery instead of exposing a missing runtime error', async () => {
+  const browser = await chromium.launch({ executablePath: '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser', headless: true });
+  try {
+    const page = await browser.newPage();
+    await page.setContent('<section><div><button aria-label="Export">Export</button><button aria-label="Expand">Expand</button></div><article class="_reportPage_fixture"><h1>Report</h1><p>Full report</p></article></section>');
+    await page.evaluate(() => {
+      window.chrome = { storage: { local: { get: async d => ({ ...d, researchPublisherEnabled: true }) }, onChanged: { addListener() {} } }, runtime: { sendMessage: async () => ({ ok: true }) } };
+    });
+    for (const file of ['vendor/turndown.js', 'vendor/turndown-plugin-gfm.js', 'js/research-import-dialog.js', 'js/research-publisher.js']) await page.addScriptTag({ content: fs.readFileSync(file, 'utf8') });
+    const button = page.getByRole('button', { name: 'Add to repo', exact: true });
+    await button.waitFor();
+    await page.evaluate(() => { delete chrome.runtime; });
+    await button.click();
+    assert.match(await page.locator('.ghrc-report-status').innerText(), /Reload this ChatGPT page/);
+    assert.equal(await button.isEnabled(), true);
+    assert.equal(await page.getByRole('dialog').count(), 0);
+  } finally { await browser.close(); }
+});
