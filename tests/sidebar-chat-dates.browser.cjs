@@ -15,10 +15,9 @@ before(async () => {
 });
 after(async () => { await browser?.close(); });
 
-test('sidebar conversations show their creation date before the title', async () => {
-  const currentYear = new Date().getUTCFullYear();
-  const previousYear = currentYear - 1;
-  const previousYearTimestamp = Date.UTC(previousYear, 1, 3, 12) / 1000;
+test('sidebar conversations show compact relative creation ages before the title', async () => {
+  const now = Date.UTC(2026, 9, 7, 12);
+  const day = 24 * 60 * 60 * 1000;
   const context = await browser.newContext({ timezoneId: 'UTC' });
   const page = await context.newPage();
   const errors = [];
@@ -31,10 +30,11 @@ test('sidebar conversations show their creation date before the title', async ()
         contentType: 'application/json',
         body: JSON.stringify({
           items: [
-            { id: 'alpha', title: 'Alpha', create_time: `${currentYear}-10-05T12:00:00Z` },
-            { id: 'beta', title: 'Beta', create_time: previousYearTimestamp },
+            { id: 'alpha', title: 'Alpha', create_time: new Date(now - (2 * day)).toISOString() },
+            { id: 'beta', title: 'Beta', create_time: new Date(now - (62 * day)).toISOString() },
+            { id: 'gamma', title: 'Gamma', create_time: new Date(now - (800 * day)).toISOString() },
           ],
-          total: 2,
+          total: 3,
           offset: 0,
           limit: 100,
         }),
@@ -47,29 +47,34 @@ test('sidebar conversations show their creation date before the title', async ()
   });
 
   await page.goto('https://chatgpt.com/');
-  await page.evaluate(() => {
+  await page.evaluate((fixedNow) => {
+    Date.now = () => fixedNow;
     window.chrome = { runtime: { id: 'fixture' }, storage: { local: {} } };
-  });
+  }, now);
   await page.addStyleTag({ content: read('css/sidebar-chat-dates.css') });
   await page.addScriptTag({ content: read('js/sidebar-chat-dates-main.js') });
   await page.addScriptTag({ content: read('js/extension-context.js') });
   await page.addScriptTag({ content: read('js/sidebar-chat-dates.js') });
 
   await page.evaluate(() => fetch('/backend-api/conversations?offset=0&limit=100&order=updated'));
-  await page.waitForFunction(() => document.querySelector('a[href="/c/alpha"] > .ghrc-chat-date')?.textContent === '5 Oct');
+  await page.waitForFunction(() => document.querySelector('a[href="/c/alpha"] > .ghrc-chat-date')?.textContent === '2d');
 
   const alpha = page.locator('a[href="/c/alpha"]');
-  assert.equal(await alpha.locator(':scope > .ghrc-chat-date').textContent(), '5 Oct');
+  assert.equal(await alpha.locator(':scope > .ghrc-chat-date').textContent(), '2d');
   assert.equal(await alpha.evaluate(link => link.firstElementChild?.className), 'ghrc-chat-date');
+  assert.equal(await alpha.locator(':scope > .ghrc-chat-date').getAttribute('title'), 'Created 5 Oct');
 
   await page.evaluate(() => {
-    const link = document.createElement('a');
-    link.href = '/c/beta';
-    link.innerHTML = '<span>Beta</span>';
-    document.getElementById('sidebar').append(link);
+    for (const [id, title] of [['beta', 'Beta'], ['gamma', 'Gamma']]) {
+      const link = document.createElement('a');
+      link.href = `/c/${id}`;
+      link.innerHTML = `<span>${title}</span>`;
+      document.getElementById('sidebar').append(link);
+    }
   });
-  await page.waitForFunction(() => document.querySelector('a[href="/c/beta"] > .ghrc-chat-date'));
-  assert.equal(await page.locator('a[href="/c/beta"] > .ghrc-chat-date').textContent(), `3 Feb ${previousYear}`);
+  await page.waitForFunction(() => document.querySelector('a[href="/c/gamma"] > .ghrc-chat-date'));
+  assert.equal(await page.locator('a[href="/c/beta"] > .ghrc-chat-date').textContent(), '2mo');
+  assert.equal(await page.locator('a[href="/c/gamma"] > .ghrc-chat-date').textContent(), '2y');
   assert.deepEqual(errors, []);
 
   await context.close();
