@@ -5,17 +5,25 @@ const path = require('node:path');
 const { chromium } = require('playwright');
 const read = file => fs.readFileSync(path.join(__dirname, '..', file), 'utf8');
 let browser;
+
 before(async () => {
   browser = await chromium.launch({ executablePath: '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser', headless: true });
 });
 after(async () => { await browser?.close(); });
-async function fixture(settings = {}, previewResponse = null) {
+
+async function fixture(settings = {}, githubResponse = null) {
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
-  await page.route('https://chatgpt.com/**', route => route.fulfill({ contentType: 'text/html', body: '<style>body{margin:0}main{width:100%;height:100vh}</style><main><a id="source" href="https://example.org/source?utm_source=chatgpt&keep=1#section">Source reference</a><a id="internal" href="/c/another">Another chat</a></main>' }));
+  await page.route('https://chatgpt.com/**', route => route.fulfill({
+    contentType: 'text/html',
+    body: '<style>body{margin:0}main{width:100%;min-height:1800px;padding-top:500px;box-sizing:border-box}</style><main><p><a id="source" href="https://example.org/source?utm_source=chatgpt&keep=1#section">Source reference</a></p><p><a id="internal" href="/c/another">Another chat</a></p></main>',
+  }));
   await page.route('https://example.org/**', route => route.fulfill({ contentType: 'text/html', body: '<h1>Source content</h1>' }));
   await page.goto('https://chatgpt.com/c/example');
-  await page.evaluate(({ settings, previewResponse }) => {
+  await page.evaluate(({ settings, githubResponse }) => {
     window.settingsListeners = [];
+    window.runtimeListeners = [];
+    window.previewRequests = [];
+    window.storageWrites = [];
     window.openedLinks = [];
     window.copiedLinks = [];
     window.open = (...args) => openedLinks.push(args);
@@ -23,77 +31,133 @@ async function fixture(settings = {}, previewResponse = null) {
       configurable: true,
       value: { writeText: async value => copiedLinks.push(value) },
     });
-    window.chrome = { runtime: { sendMessage: async message => { window.previewRequest = message; return previewResponse; } }, storage: { local: { get: async defaults => ({ ...defaults, ...settings }) }, onChanged: { addListener: listener => settingsListeners.push(listener) } } };
-  }, { settings, previewResponse });
+    window.chrome = {
+      runtime: {
+        onMessage: { addListener: fn => runtimeListeners.push(fn) },
+        sendMessage: async message => {
+          previewRequests.push(message);
+          if (message.type === 'load-github-link-preview') return githubResponse;
+          if (message.type === 'open-native-split-view') return { ok: true };
+          return { ok: true };
+        },
+      },
+      storage: {
+        local: {
+          get: async defaults => ({ ...defaults, ...settings }),
+          set: async value => { storageWrites.push(value); },
+        },
+        onChanged: { addListener: listener => settingsListeners.push(listener) },
+      },
+    };
+  }, { settings, githubResponse });
   await page.addStyleTag({ content: read('css/external-links.css') });
   await page.addScriptTag({ content: read('js/external-links.js') });
   return page;
 }
-test('default reference click opens a clean URL in a new tab and preserves chat', async () => {
+
+test('normal link click keeps the configured new-tab behavior and sidebar controls are opt-in', async () => {
   const page = await fixture();
   await page.locator('#source').click();
   assert.deepEqual(await page.evaluate(() => openedLinks), [['https://example.org/source?keep=1#section', '_blank', 'noopener,noreferrer']]);
+  assert.equal(await page.locator('.ghrc-link-actions').count(), 0);
   assert.equal(page.url(), 'https://chatgpt.com/c/example');
   await page.close();
 });
-test('split preview reserves space, loads the source, and restores layout and focus on Escape', async () => {
+
+test('sidebar mode adds a separate action while preserving the normal new-tab indicator', async () => {
   const page = await fixture({ openExternalLinksInSplitView: true });
+  const actions = page.locator('.ghrc-link-actions');
+  await actions.waitFor();
+  assert.equal(await actions.locator('.ghrc-link-mode').textContent(), '↗');
+  assert.equal(await actions.locator('.ghrc-link-mode').getAttribute('title'), 'Normal click opens in a new tab');
+  assert.equal(await actions.locator('.ghrc-link-sidebar-button').getAttribute('aria-label'), 'Open link beside chat');
+
   await page.locator('#source').click();
+  assert.equal(await page.locator('#ghrc-link-preview').count(), 0);
+  assert.equal((await page.evaluate(() => openedLinks)).length, 1);
+
+  await page.evaluate(() => window.scrollTo(0, 420));
+  const before = await page.evaluate(() => window.scrollY);
+  await actions.locator('.ghrc-link-sidebar-button').click();
   await page.frameLocator('#ghrc-link-preview iframe').locator('h1').waitFor();
-  assert.deepEqual(await page.evaluate(() => openedLinks), []);
-  const main = await page.locator('main').boundingBox();
+  const after = await page.evaluate(() => window.scrollY);
+  assert.ok(Math.abs(after - before) < 3);
+  assert.equal((await page.evaluate(() => openedLinks)).length, 1);
   const preview = await page.locator('#ghrc-link-preview').boundingBox();
-  assert.ok(main.x + main.width <= preview.x + 1);
-  const controls = page.locator('#ghrc-link-preview .ghrc-preview-control');
-  assert.equal(await controls.nth(0).getAttribute('aria-label'), 'Copy link');
-  assert.equal(await controls.nth(1).getAttribute('aria-label'), 'Open in new tab');
-  await controls.nth(0).click();
-  assert.deepEqual(await page.evaluate(() => copiedLinks), ['https://example.org/source?keep=1#section']);
-  assert.equal(await page.locator('#ghrc-link-preview a').last().getAttribute('href'), 'https://example.org/source?keep=1#section');
-  await page.keyboard.press('Escape');
-  assert.equal(await page.locator('#ghrc-link-preview').count(), 0);
-  assert.equal(await page.evaluate(() => document.activeElement.id), 'source');
-  assert.equal((await page.locator('main').boundingBox()).width, 1280);
-  await page.close();
-});
-test('settings changes apply immediately and disabling split closes its frame', async () => {
-  const page = await fixture();
-  await page.evaluate(() => settingsListeners.forEach(fn => fn({ openExternalLinksInSplitView: { newValue: true } }, 'local')));
-  await page.locator('#source').click();
-  assert.equal(await page.locator('#ghrc-link-preview').count(), 1);
-  await page.evaluate(() => settingsListeners.forEach(fn => fn({ openExternalLinksInSplitView: { newValue: false } }, 'local')));
-  assert.equal(await page.locator('#ghrc-link-preview').count(), 0);
-  await page.locator('#source').click();
-  assert.equal(await page.evaluate(() => openedLinks.length), 1);
+  assert.ok(preview.width > 576);
+  assert.ok(preview.x >= 1279 - preview.width);
   await page.close();
 });
 
-test('GitHub preview renders API content safely without a blocked iframe', async () => {
+test('current-tab mode is shown as the normal action while the sidebar remains separate', async () => {
+  const page = await fixture({ openExternalLinksInSplitView: true, openExternalLinksInNewTabs: false });
+  const mode = page.locator('.ghrc-link-mode');
+  await mode.waitFor();
+  assert.equal(await mode.textContent(), '→');
+  assert.equal(await mode.getAttribute('title'), 'Normal click opens in this tab');
+  assert.equal(await page.locator('.ghrc-link-sidebar-button').count(), 1);
+  await page.close();
+});
+
+test('GitHub sidebar restores the API change view instead of opening a generic frame', async () => {
   const page = await fixture({ openExternalLinksInSplitView: true }, {
-    ok: true, subtitle: 'owner/repo #42', title: 'A useful PR', details: 'Merged · author',
+    ok: true,
+    subtitle: 'owner/repo #42',
+    title: 'A useful PR',
+    details: 'Open · author',
     body: '<img src=x onerror="window.injected=true">',
-    files: [{ filename: 'example.js', additions: 1, deletions: 0, patch: '+safe change' }],
+    files: [{ filename: 'example.js', additions: 2, deletions: 1, patch: '+safe change' }],
   });
   await page.locator('#source').evaluate(link => { link.href = 'https://github.com/owner/repo/pull/42'; });
-  await page.locator('#source').click();
+  await page.locator('.ghrc-link-sidebar-button').click();
   await page.locator('#ghrc-link-preview h2').waitFor();
   assert.equal(await page.locator('#ghrc-link-preview h2').textContent(), 'A useful PR');
   assert.equal(await page.locator('#ghrc-link-preview iframe').count(), 0);
   assert.equal(await page.locator('#ghrc-link-preview .ghrc-preview-body img').count(), 0);
   assert.match(await page.locator('#ghrc-link-preview details').textContent(), /safe change/);
-  assert.deepEqual(await page.evaluate(() => previewRequest), { type: 'load-github-link-preview', url: 'https://github.com/owner/repo/pull/42' });
-  await page.keyboard.press('Escape');
-  assert.equal(await page.locator('#ghrc-link-preview').count(), 0);
-  assert.equal(await page.evaluate(() => document.activeElement.id), 'source');
+  assert.ok((await page.evaluate(() => previewRequests)).some(message => message.type === 'load-github-link-preview'));
   await page.close();
 });
-test('unavailable GitHub preview explains the failure and keeps new-tab action', async () => {
-  const page = await fixture({ openExternalLinksInSplitView: true }, { ok: false, error: 'GitHub returned 404' });
-  await page.locator('#source').evaluate(link => { link.href = 'https://github.com/owner/repo/pull/42'; });
-  await page.locator('#source').click();
-  await page.getByRole('button', { name: 'Retry preview' }).waitFor();
-  assert.match(await page.locator('.ghrc-preview-content').textContent(), /GitHub returned 404/);
-  await page.getByRole('link', { name: 'Open in new tab' }).click();
-  assert.deepEqual(await page.evaluate(() => openedLinks), [['https://github.com/owner/repo/pull/42', '_blank', 'noopener,noreferrer']]);
+
+test('the vertical divider resizes the sidebar and persists the allocation', async () => {
+  const page = await fixture({ openExternalLinksInSplitView: true });
+  await page.locator('.ghrc-link-sidebar-button').click();
+  await page.frameLocator('#ghrc-link-preview iframe').locator('h1').waitFor();
+  const before = (await page.locator('#ghrc-link-preview').boundingBox()).width;
+  const separator = page.getByRole('separator', { name: 'Resize website sidebar' });
+  await separator.focus();
+  await page.keyboard.press('ArrowLeft');
+  const after = (await page.locator('#ghrc-link-preview').boundingBox()).width;
+  assert.ok(after > before);
+  assert.ok((await page.evaluate(() => storageWrites)).some(write => Number.isFinite(write.linkPreviewWidth)));
+  await page.close();
+});
+
+test('blocked embedded previews can still fall back to the browser native split', async () => {
+  const page = await fixture({ openExternalLinksInSplitView: true });
+  await page.locator('.ghrc-link-sidebar-button').click();
+  await page.frameLocator('#ghrc-link-preview iframe').locator('h1').waitFor();
+  const watch = (await page.evaluate(() => previewRequests)).find(message => message.type === 'watch-link-preview');
+  assert.ok(watch);
+  await page.evaluate(watch => runtimeListeners.forEach(fn => fn({
+    type: 'link-preview-navigation-error',
+    previewId: watch.previewId,
+    url: watch.url,
+  })), watch);
+  await page.waitForFunction(() => previewRequests.some(message => message.type === 'open-native-split-view'));
+  assert.equal(await page.locator('#ghrc-link-preview').count(), 0);
+  await page.close();
+});
+
+test('sidebar setting changes add and remove link actions immediately and close an open sidebar', async () => {
+  const page = await fixture();
+  assert.equal(await page.locator('.ghrc-link-actions').count(), 0);
+  await page.evaluate(() => settingsListeners.forEach(fn => fn({ openExternalLinksInSplitView: { newValue: true } }, 'local')));
+  await page.locator('.ghrc-link-actions').waitFor();
+  await page.locator('.ghrc-link-sidebar-button').click();
+  assert.equal(await page.locator('#ghrc-link-preview').count(), 1);
+  await page.evaluate(() => settingsListeners.forEach(fn => fn({ openExternalLinksInSplitView: { newValue: false } }, 'local')));
+  assert.equal(await page.locator('#ghrc-link-preview').count(), 0);
+  assert.equal(await page.locator('.ghrc-link-actions').count(), 0);
   await page.close();
 });

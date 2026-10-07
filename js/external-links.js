@@ -17,6 +17,10 @@
   let splitViewEnabled = false;
   let previewPanel = null;
   let previewLink = null;
+  let nativeSplitRequest = 0;
+  let previewWatch = null;
+  let previewWidthPx = null;
+  const linkActions = new WeakMap();
 
   function normalizedText(element) {
     return (element.textContent || "").replace(/\s+/g, " ").trim();
@@ -113,48 +117,145 @@
       && !event.altKey;
   }
 
-  function openExternalLink(event, link) {
+  function externalUrlForLink(link) {
     if (
-      (!externalWarningEnabled && !newTabsEnabled && !splitViewEnabled)
-      || !isPlainPrimaryActivation(event)
-      || !(link instanceof HTMLAnchorElement)
+      !(link instanceof HTMLAnchorElement)
       || link.hasAttribute("download")
-      || link.closest("#github-repositories-for-chatgpt, #ghrc-highlighted-pages, #ghrc-link-preview")
-    ) return false;
+      || link.closest("#github-repositories-for-chatgpt, #ghrc-highlighted-pages, #ghrc-link-preview, .ghrc-link-actions")
+    ) return null;
 
     let url;
     try {
       url = new URL(link.href, window.location.href);
     } catch {
-      return false;
+      return null;
     }
+    if (!["http:", "https:"].includes(url.protocol) || url.origin === window.location.origin) return null;
+    return url;
+  }
+
+  function openExternalLink(event, link) {
     if (
-      !["http:", "https:"].includes(url.protocol)
-      || url.origin === window.location.origin
+      (!externalWarningEnabled && !newTabsEnabled)
+      || !isPlainPrimaryActivation(event)
     ) return false;
+
+    const url = externalUrlForLink(link);
+    if (!url) return false;
 
     event.preventDefault();
     event.stopImmediatePropagation();
-    if (splitViewEnabled) showLinkPreview(url.href, link);
-    else if (newTabsEnabled) window.open(url.href, "_blank", "noopener,noreferrer");
+    if (newTabsEnabled) window.open(url.href, "_blank", "noopener,noreferrer");
     else window.location.assign(url.href);
     return true;
   }
 
-  function closeLinkPreview() {
+  function closeLinkPreview(restoreFocus = true) {
+    nativeSplitRequest += 1;
+    if (previewWatch) {
+      void chrome.runtime.sendMessage({ type: "unwatch-link-preview", previewId: previewWatch.id }).catch(() => {});
+      previewWatch = null;
+    }
     previewPanel?.remove();
     previewPanel = null;
     document.documentElement.removeAttribute("data-ghrc-link-preview");
-    previewLink?.focus();
+    if (restoreFocus && previewLink?.isConnected) {
+      try {
+        previewLink.focus({ preventScroll: true });
+      } catch {
+        previewLink.focus();
+      }
+    }
     previewLink = null;
   }
 
-  function showLinkPreview(href, link) {
-    closeLinkPreview();
+  function preserveReadingPosition(anchor, change) {
+    const before = anchor?.isConnected ? anchor.getBoundingClientRect().top : null;
+    change();
+    if (before === null) return;
+    requestAnimationFrame(() => {
+      if (!anchor?.isConnected) return;
+      const delta = anchor.getBoundingClientRect().top - before;
+      if (Math.abs(delta) > 0.5) window.scrollBy(0, delta);
+    });
+  }
+
+  function previewWidthBounds() {
+    const min = Math.min(360, Math.max(260, window.innerWidth * 0.35));
+    const max = Math.max(min, window.innerWidth - Math.min(420, window.innerWidth * 0.35));
+    return { min, max };
+  }
+
+  function clampPreviewWidth(value) {
+    const { min, max } = previewWidthBounds();
+    return Math.min(max, Math.max(min, value));
+  }
+
+  function applyPreviewWidth() {
+    if (!Number.isFinite(previewWidthPx)) {
+      document.documentElement.style.removeProperty("--ghrc-preview-width");
+      return;
+    }
+    previewWidthPx = clampPreviewWidth(previewWidthPx);
+    document.documentElement.style.setProperty("--ghrc-preview-width", `${Math.round(previewWidthPx)}px`);
+  }
+
+  function resizePreview(width, handle) {
+    preserveReadingPosition(previewLink, () => {
+      previewWidthPx = clampPreviewWidth(width);
+      applyPreviewWidth();
+      handle?.setAttribute("aria-valuenow", String(Math.round(previewWidthPx)));
+    });
+  }
+
+  function createPreviewResizer() {
+    const handle = document.createElement("div");
+    handle.className = "ghrc-preview-resizer";
+    handle.setAttribute("role", "separator");
+    handle.setAttribute("aria-orientation", "vertical");
+    handle.setAttribute("aria-label", "Resize website sidebar");
+    handle.tabIndex = 0;
+
+    const currentWidth = () => previewPanel?.getBoundingClientRect().width
+      || (Number.isFinite(previewWidthPx) ? previewWidthPx : Math.min(window.innerWidth * 0.48, 800));
+    handle.setAttribute("aria-valuemin", String(Math.round(previewWidthBounds().min)));
+    handle.setAttribute("aria-valuemax", String(Math.round(previewWidthBounds().max)));
+    handle.setAttribute("aria-valuenow", String(Math.round(currentWidth())));
+
+    handle.addEventListener("pointerdown", (event) => {
+      if (event.button !== 0) return;
+      event.preventDefault();
+      const onMove = (moveEvent) => resizePreview(window.innerWidth - moveEvent.clientX, handle);
+      const onUp = () => {
+        window.removeEventListener("pointermove", onMove, true);
+        window.removeEventListener("pointerup", onUp, true);
+        if (Number.isFinite(previewWidthPx)) {
+          void chrome.storage.local.set({ linkPreviewWidth: Math.round(previewWidthPx) }).catch(() => {});
+        }
+      };
+      window.addEventListener("pointermove", onMove, true);
+      window.addEventListener("pointerup", onUp, true);
+    });
+
+    handle.addEventListener("keydown", (event) => {
+      if (!["ArrowLeft", "ArrowRight"].includes(event.key)) return;
+      event.preventDefault();
+      resizePreview(currentWidth() + (event.key === "ArrowLeft" ? 24 : -24), handle);
+      if (Number.isFinite(previewWidthPx)) {
+        void chrome.storage.local.set({ linkPreviewWidth: Math.round(previewWidthPx) }).catch(() => {});
+      }
+    });
+
+    return handle;
+  }
+
+  function showLinkPreview(href, link, nativeGuide = false) {
+    closeLinkPreview(false);
     previewLink = link;
     const panel = document.createElement("aside");
     panel.id = "ghrc-link-preview";
     panel.setAttribute("aria-label", "Linked website preview");
+    const resizer = createPreviewResizer();
     const header = document.createElement("header");
     const url = new URL(href);
     const destination = document.createElement("a");
@@ -209,8 +310,15 @@
     close.setAttribute("aria-label", "Close website preview");
     close.addEventListener("click", closeLinkPreview);
     header.append(destination, copy, open, close);
-    panel.append(header);
-    if (url.hostname === "github.com" || url.hostname === "www.github.com") {
+    panel.append(resizer, header);
+
+    if (nativeGuide) {
+      const content = document.createElement("div");
+      content.className = "ghrc-preview-content";
+      content.setAttribute("aria-live", "polite");
+      panel.append(content);
+      showNativeSplitGuide(href, content);
+    } else if (url.hostname === "github.com" || url.hostname === "www.github.com") {
       const content = document.createElement("div");
       content.className = "ghrc-preview-content";
       content.setAttribute("aria-live", "polite");
@@ -222,13 +330,28 @@
       frame.title = "Website preview: " + url.hostname;
       frame.setAttribute("sandbox", "allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox");
       frame.referrerPolicy = "no-referrer";
-      frame.src = href;
       panel.append(frame);
+      const watch = { id: `${Date.now()}:${nativeSplitRequest}`, href, link, panel };
+      previewWatch = watch;
+      void (async () => {
+        try {
+          await chrome.runtime.sendMessage({ type: "watch-link-preview", url: href, previewId: watch.id });
+        } catch {
+          // Keep usable embedded previews available if the worker is restarting.
+        }
+        if (previewWatch === watch && panel.isConnected) frame.src = href;
+      })();
+      frame.addEventListener("error", () => {
+        if (previewWatch === watch) void openNativeSplitView(href, link);
+      });
     }
-    previewPanel = panel;
-    document.body.append(panel);
-    document.documentElement.setAttribute("data-ghrc-link-preview", "");
-    close.focus();
+
+    preserveReadingPosition(link, () => {
+      previewPanel = panel;
+      applyPreviewWidth();
+      document.body.append(panel);
+      document.documentElement.setAttribute("data-ghrc-link-preview", "");
+    });
   }
 
   async function loadGitHubPreview(href, content) {
@@ -272,6 +395,110 @@
     }
   }
 
+  async function openNativeSplitView(href, link) {
+    closeLinkPreview(false);
+    const request = ++nativeSplitRequest;
+    try {
+      const result = await chrome.runtime.sendMessage({ type: "open-native-split-view", url: href });
+      if (request !== nativeSplitRequest) return;
+      if (result?.ok) return;
+    } catch {
+      // Older browsers cannot create a native split through the extension API.
+    }
+    if (request === nativeSplitRequest) showLinkPreview(href, link, true);
+  }
+
+  function showNativeSplitGuide(href, content) {
+    content.replaceChildren();
+    const title = document.createElement("h2");
+    title.textContent = `Open ${new URL(href).hostname} in split view`;
+    const instructions = document.createElement("p");
+    instructions.textContent = 'Right-click the link below and choose “Open link in split view” to view the full website beside this chat.';
+    const destination = document.createElement("a");
+    destination.href = href;
+    destination.target = "_blank";
+    destination.rel = "noopener noreferrer";
+    destination.textContent = href;
+    const note = document.createElement("p");
+    note.textContent = "This browser does not support automatic split-view opening from the extension yet.";
+    content.append(title, instructions, destination, note);
+  }
+
+  function createLinkActions(link, url) {
+    const actions = document.createElement("span");
+    actions.className = "ghrc-link-actions";
+    actions.setAttribute("contenteditable", "false");
+
+    const mode = document.createElement("span");
+    mode.className = "ghrc-link-mode";
+    mode.setAttribute("aria-hidden", "true");
+
+    const sidebar = document.createElement("button");
+    sidebar.className = "ghrc-link-sidebar-button";
+    sidebar.type = "button";
+    sidebar.title = "Open beside chat";
+    sidebar.setAttribute("aria-label", "Open link beside chat");
+    sidebar.innerHTML = '<svg viewBox="0 0 20 20" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="2.5" y="3" width="15" height="14" rx="2"/><path d="M11 3v14"/></svg>';
+    sidebar.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      const href = sidebar.dataset.href;
+      if (href) showLinkPreview(href, link);
+    });
+
+    actions.append(mode, sidebar);
+    linkActions.set(link, actions);
+    updateLinkActions(link, url, actions);
+    return actions;
+  }
+
+  function updateLinkActions(link, url, actions = linkActions.get(link)) {
+    const mode = actions?.querySelector(".ghrc-link-mode");
+    const sidebar = actions?.querySelector(".ghrc-link-sidebar-button");
+    if (!mode || !sidebar) return;
+    mode.textContent = newTabsEnabled ? "↗" : "→";
+    mode.title = newTabsEnabled ? "Normal click opens in a new tab" : "Normal click opens in this tab";
+    sidebar.dataset.href = url.href;
+  }
+
+  function ensureLinkActions(link) {
+    const existing = linkActions.get(link);
+    const url = externalUrlForLink(link);
+    if (!splitViewEnabled || !url) {
+      existing?.remove();
+      return;
+    }
+    if (existing?.isConnected) {
+      updateLinkActions(link, url, existing);
+      return;
+    }
+    link.after(createLinkActions(link, url));
+  }
+
+  function decorateExternalLinks(node) {
+    if (!(node instanceof Element)) return;
+    if (node.matches("a[href]")) ensureLinkActions(node);
+    node.querySelectorAll("a[href]").forEach(ensureLinkActions);
+  }
+
+  function refreshLinkActions() {
+    document.querySelectorAll(".ghrc-link-actions").forEach((actions) => {
+      if (!(actions.previousSibling instanceof HTMLAnchorElement)) actions.remove();
+    });
+    if (!splitViewEnabled) {
+      document.querySelectorAll(".ghrc-link-actions").forEach(actions => actions.remove());
+      return;
+    }
+    if (document.documentElement) decorateExternalLinks(document.documentElement);
+  }
+
+  chrome.runtime.onMessage.addListener(message => {
+    if (message?.type !== "link-preview-navigation-error" || !previewWatch
+        || message.previewId !== previewWatch.id || message.url !== previewWatch.href) return;
+    const { href, link } = previewWatch;
+    void openNativeSplitView(href, link);
+  });
+
   function preserveNativeScroll(event) {
     if (!historyModalEnabled || !modalWasSuppressed) return;
     const modal = document.getElementById(MODAL_ID);
@@ -287,6 +514,7 @@
     inspectDialogs(node);
     suppressHistoryRateLimitModal();
     stripTrackingFromLinks(node);
+    decorateExternalLinks(node);
   }
 
   function watchChatGPTInterruptions() {
@@ -297,6 +525,7 @@
     inspectDialogs(document.documentElement);
     suppressHistoryRateLimitModal();
     stripTrackingFromLinks(document.documentElement);
+    decorateExternalLinks(document.documentElement);
     new MutationObserver((mutations) => {
       for (const mutation of mutations) {
         inspectMutationNode(mutation.target);
@@ -315,11 +544,14 @@
       [EXTERNAL_WARNING_SETTING_KEY]: true,
       openExternalLinksInNewTabs: true,
       openExternalLinksInSplitView: false,
+      linkPreviewWidth: null,
       [HISTORY_MODAL_SETTING_KEY]: true,
       [STRIP_UTM_TRACKING_SETTING_KEY]: true,
     });
     newTabsEnabled = settings.openExternalLinksInNewTabs !== false;
     splitViewEnabled = Boolean(settings.openExternalLinksInSplitView);
+    previewWidthPx = Number.isFinite(settings.linkPreviewWidth) ? Number(settings.linkPreviewWidth) : null;
+    applyPreviewWidth();
     externalWarningEnabled = Boolean(settings[EXTERNAL_WARNING_SETTING_KEY]);
     historyModalEnabled = Boolean(settings[HISTORY_MODAL_SETTING_KEY]);
     stripUtmTrackingEnabled = Boolean(settings[STRIP_UTM_TRACKING_SETTING_KEY]);
@@ -327,6 +559,7 @@
       inspectDialogs(document.documentElement);
       suppressHistoryRateLimitModal();
       stripTrackingFromLinks(document.documentElement);
+      decorateExternalLinks(document.documentElement);
     }
   }
 
@@ -334,10 +567,16 @@
     if (areaName !== "local") return;
     if (changes.openExternalLinksInNewTabs) {
       newTabsEnabled = changes.openExternalLinksInNewTabs.newValue !== false;
+      refreshLinkActions();
     }
     if (changes.openExternalLinksInSplitView) {
       splitViewEnabled = Boolean(changes.openExternalLinksInSplitView.newValue);
       if (!splitViewEnabled) closeLinkPreview();
+      refreshLinkActions();
+    }
+    if (changes.linkPreviewWidth) {
+      previewWidthPx = Number.isFinite(changes.linkPreviewWidth.newValue) ? Number(changes.linkPreviewWidth.newValue) : null;
+      applyPreviewWidth();
     }
     if (changes[EXTERNAL_WARNING_SETTING_KEY]) {
       externalWarningEnabled = Boolean(changes[EXTERNAL_WARNING_SETTING_KEY].newValue);
