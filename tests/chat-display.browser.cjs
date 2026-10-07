@@ -26,6 +26,7 @@ async function fixture({ stored = {}, maximize = false, slider = false, unresolv
     <div><section class="group/home-suggestions"><div class="group/home-suggestion-list-item"><button>Create an image or sticker</button></div><div class="group/home-suggestion-list-item"><button>Write or edit</button></div><div class="group/home-suggestion-list-item"><button>Search the web</button></div></section></div>
     <article><p>Search the web</p><button id="ordinary">Write or edit</button></article>
     <div id="conversation-turn" data-testid="conversation-turn-1"><div class="text-xs text-token-text-tertiary">15:37</div><time datetime="2026-10-05T15:37:00-04:00">05 Oct 2026</time><p>Message body keeps 15:37 as content.</p></div>
+    <div id="timestamp-separator" class="text-xs text-token-text-secondary">Today 3:17 PM</div>
     <div id="conversation-feedback"><span>Is this conversation helpful so far?</span><button type="button">Helpful</button><button type="button">Not helpful</button><button type="button">Close</button></div></div></main>` }));
   await p.goto('https://display.test/');
   await p.evaluate(({ stored, slider, unresolved, delayed, delayStorage }) => {
@@ -123,14 +124,17 @@ test('in-chat timestamps are hidden only when the setting is enabled', async () 
   const p = await fixture({ stored: { hideChatTimestamps: true } });
   await p.waitForFunction(() => document.documentElement.hasAttribute('data-ghrc-hide-chat-timestamps'));
   await p.waitForFunction(() => document.querySelector('#conversation-turn time')?.hasAttribute('data-ghrc-chat-timestamp'));
+  await p.waitForFunction(() => document.querySelector('#timestamp-separator')?.hasAttribute('data-ghrc-chat-timestamp'));
   assert.equal(await p.locator('#conversation-turn time').isVisible(), false);
   assert.equal(await p.locator('#conversation-turn .text-token-text-tertiary').isVisible(), false);
+  assert.equal(await p.locator('#timestamp-separator').isVisible(), false);
   assert.equal(await p.getByText('Message body keeps 15:37 as content.').isVisible(), true);
 
   await p.evaluate(() => chrome.storage.local.set({ hideChatTimestamps: false }));
   await p.waitForFunction(() => !document.documentElement.hasAttribute('data-ghrc-hide-chat-timestamps'));
   assert.equal(await p.locator('#conversation-turn time').isVisible(), true);
   assert.equal(await p.locator('#conversation-turn .text-token-text-tertiary').isVisible(), true);
+  assert.equal(await p.locator('#timestamp-separator').isVisible(), true);
   assert.deepEqual(p.errors, []);
   await p.close();
 });
