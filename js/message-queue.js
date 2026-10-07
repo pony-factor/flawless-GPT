@@ -309,7 +309,16 @@
   }
 
   function findComposerInput() {
-    return document.querySelector('#prompt-textarea, [data-composer-markdown][contenteditable="true"]');
+    const prompt = document.querySelector("#prompt-textarea");
+    if (isVisible(prompt)) return prompt;
+
+    // Inline edits reuse ChatGPT's composer markup and can appear earlier in
+    // the conversation DOM. The persistent bottom composer is the last visible
+    // markdown editor; keeping queue hooks scoped to it prevents edit submits
+    // (including app/plugin mentions) from being intercepted or reparented.
+    const editors = [...document.querySelectorAll('[data-composer-markdown][contenteditable="true"]')]
+      .filter(isVisible);
+    return editors[editors.length - 1] || null;
   }
 
   function findComposerForm(composer = findComposerInput()) {

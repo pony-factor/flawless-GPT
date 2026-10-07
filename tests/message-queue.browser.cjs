@@ -222,6 +222,41 @@ test('standalone queue button is opt-in and follows setting changes', async () =
   await p.close();
 });
 
+test('inline message edits with app mentions stay outside the queue composer', async () => {
+  const p = await fixture({ active: true });
+  await p.evaluate(() => {
+    const editForm = document.createElement('form');
+    editForm.id = 'inline-edit-form';
+    editForm.innerHTML = `
+      <div id="inline-edit" data-composer-markdown contenteditable="true" role="textbox">
+        <p>Edited with <span app-mention-name="Plugin" app-mention-display-name="Plugin" app-mention-path="app://plugin" contenteditable="false">Plugin</span></p>
+      </div>
+      <button id="inline-edit-send" type="submit" aria-label="Send edit">Send edit</button>
+    `;
+    document.getElementById('turns').prepend(editForm);
+    window.inlineEditSubmits = 0;
+    editForm.addEventListener('submit', event => {
+      event.preventDefault();
+      window.inlineEditSubmits++;
+    });
+    editForm.querySelector('#inline-edit').addEventListener('keydown', event => {
+      if (event.key === 'Enter' && !event.defaultPrevented) {
+        event.preventDefault();
+        editForm.requestSubmit();
+      }
+    });
+  });
+
+  await p.waitForFunction(() => document.getElementById('ghrc-message-queue-button')?.closest('form') !== document.getElementById('inline-edit-form'));
+  await p.locator('#inline-edit').press('Enter');
+
+  assert.equal(await p.evaluate(() => window.inlineEditSubmits), 1);
+  assert.equal(await p.locator('.ghrc-message-queue-editor').count(), 0);
+  assert.equal(await p.evaluate(() => document.getElementById('ghrc-message-queue-button')?.closest('form')?.id || ''), '');
+  assert.deepEqual(p.errors, []);
+  await p.close();
+});
+
 for (const menuMarkup of [
   '<div data-mention-list-scroll-area><button type="button" data-list-navigation-item="true">Deep research</button></div>',
   '<div id="plugin-options" role="listbox"><div id="plugin-option" role="option">Deep research</div></div>',
