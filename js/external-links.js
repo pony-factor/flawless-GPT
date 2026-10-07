@@ -15,6 +15,7 @@
   let modalWasSuppressed = false;
   let newTabsEnabled = true;
   let splitViewEnabled = false;
+  let splitViewOnLeft = false;
   let previewPanel = null;
   let previewLink = null;
   let nativeSplitRequest = 0;
@@ -225,7 +226,10 @@
     handle.addEventListener("pointerdown", (event) => {
       if (event.button !== 0) return;
       event.preventDefault();
-      const onMove = (moveEvent) => resizePreview(window.innerWidth - moveEvent.clientX, handle);
+      const onMove = (moveEvent) => resizePreview(
+        splitViewOnLeft ? moveEvent.clientX : window.innerWidth - moveEvent.clientX,
+        handle,
+      );
       const onUp = () => {
         window.removeEventListener("pointermove", onMove, true);
         window.removeEventListener("pointerup", onUp, true);
@@ -240,7 +244,9 @@
     handle.addEventListener("keydown", (event) => {
       if (!["ArrowLeft", "ArrowRight"].includes(event.key)) return;
       event.preventDefault();
-      resizePreview(currentWidth() + (event.key === "ArrowLeft" ? 24 : -24), handle);
+      const direction = event.key === "ArrowLeft" ? -1 : 1;
+      const delta = splitViewOnLeft ? direction * 24 : -direction * 24;
+      resizePreview(currentWidth() + delta, handle);
       if (Number.isFinite(previewWidthPx)) {
         void chrome.storage.local.set({ linkPreviewWidth: Math.round(previewWidthPx) }).catch(() => {});
       }
@@ -269,9 +275,10 @@
     favicon.alt = "";
     favicon.referrerPolicy = "no-referrer";
     favicon.addEventListener("error", () => favicon.remove());
-    const hostname = document.createElement("span");
-    hostname.textContent = url.hostname.replace(/^www\./i, "");
-    destination.append(favicon, hostname);
+    const urlLabel = document.createElement("span");
+    const displayHost = url.hostname.replace(/^www\./i, "");
+    urlLabel.textContent = `${displayHost}${url.pathname === "/" ? "" : url.pathname}${url.search}${url.hash}`;
+    destination.append(favicon, urlLabel);
     destination.title = href;
     const copy = document.createElement("button");
     copy.className = "ghrc-preview-control";
@@ -309,7 +316,7 @@
     close.title = "Close website preview";
     close.setAttribute("aria-label", "Close website preview");
     close.addEventListener("click", closeLinkPreview);
-    header.append(destination, copy, open, close);
+    header.append(close, open, copy, destination);
     panel.append(resizer, header);
 
     if (nativeGuide) {
@@ -350,7 +357,7 @@
       previewPanel = panel;
       applyPreviewWidth();
       document.body.append(panel);
-      document.documentElement.setAttribute("data-ghrc-link-preview", "");
+      document.documentElement.setAttribute("data-ghrc-link-preview", splitViewOnLeft ? "left" : "right");
     });
   }
 
@@ -544,12 +551,14 @@
       [EXTERNAL_WARNING_SETTING_KEY]: true,
       openExternalLinksInNewTabs: true,
       openExternalLinksInSplitView: false,
+      openExternalLinksInSplitViewOnLeft: false,
       linkPreviewWidth: null,
       [HISTORY_MODAL_SETTING_KEY]: true,
       [STRIP_UTM_TRACKING_SETTING_KEY]: true,
     });
     newTabsEnabled = settings.openExternalLinksInNewTabs !== false;
     splitViewEnabled = Boolean(settings.openExternalLinksInSplitView);
+    splitViewOnLeft = Boolean(settings.openExternalLinksInSplitViewOnLeft);
     previewWidthPx = Number.isFinite(settings.linkPreviewWidth) ? Number(settings.linkPreviewWidth) : null;
     applyPreviewWidth();
     externalWarningEnabled = Boolean(settings[EXTERNAL_WARNING_SETTING_KEY]);
@@ -573,6 +582,12 @@
       splitViewEnabled = Boolean(changes.openExternalLinksInSplitView.newValue);
       if (!splitViewEnabled) closeLinkPreview();
       refreshLinkActions();
+    }
+    if (changes.openExternalLinksInSplitViewOnLeft) {
+      splitViewOnLeft = Boolean(changes.openExternalLinksInSplitViewOnLeft.newValue);
+      if (previewPanel) {
+        document.documentElement.setAttribute("data-ghrc-link-preview", splitViewOnLeft ? "left" : "right");
+      }
     }
     if (changes.linkPreviewWidth) {
       previewWidthPx = Number.isFinite(changes.linkPreviewWidth.newValue) ? Number(changes.linkPreviewWidth.newValue) : null;

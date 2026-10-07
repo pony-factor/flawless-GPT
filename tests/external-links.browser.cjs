@@ -86,6 +86,37 @@ test('sidebar mode adds a separate action while preserving the normal new-tab in
   const preview = await page.locator('#ghrc-link-preview').boundingBox();
   assert.ok(preview.width > 576);
   assert.ok(preview.x >= 1279 - preview.width);
+  assert.equal(await page.locator('html').getAttribute('data-ghrc-link-preview'), 'right');
+  await page.close();
+});
+
+test('left-side preview moves the panel, keeps controls ordered, and resizes from its right edge', async () => {
+  const page = await fixture({ openExternalLinksInSplitView: true, openExternalLinksInSplitViewOnLeft: true });
+  const actions = page.locator('.ghrc-link-actions');
+  await actions.waitFor();
+  await actions.locator('.ghrc-link-sidebar-button').click();
+  await page.frameLocator('#ghrc-link-preview iframe').locator('h1').waitFor();
+
+  const preview = await page.locator('#ghrc-link-preview').boundingBox();
+  assert.ok(preview.x <= 1);
+  assert.equal(await page.locator('html').getAttribute('data-ghrc-link-preview'), 'left');
+
+  const headerChildren = await page.locator('#ghrc-link-preview header').evaluate(
+    header => [...header.children].map(child => child.getAttribute('aria-label') || child.className),
+  );
+  assert.deepEqual(headerChildren, ['Close website preview', 'Open in new tab', 'Copy link', 'ghrc-preview-destination']);
+
+  const destination = page.locator('#ghrc-link-preview .ghrc-preview-destination');
+  assert.equal(await destination.getAttribute('href'), 'https://example.org/source?keep=1#section');
+  assert.equal(await destination.locator('img').getAttribute('src'), 'https://example.org/favicon.ico');
+  assert.equal(await destination.locator('span').textContent(), 'example.org/source?keep=1#section');
+
+  const before = (await page.locator('#ghrc-link-preview').boundingBox()).width;
+  const separator = page.getByRole('separator', { name: 'Resize website sidebar' });
+  await separator.focus();
+  await page.keyboard.press('ArrowRight');
+  const after = (await page.locator('#ghrc-link-preview').boundingBox()).width;
+  assert.ok(after > before);
   await page.close();
 });
 
