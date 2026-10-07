@@ -667,6 +667,23 @@ for (const route of ['/', '/?temporary-chat=true']) {
   });
 }
 
+test('new-chat Enter stays native when homepage shell has incomplete turn markup', async () => {
+  const p = await fixture({ route: '/' });
+  await p.evaluate(() => {
+    document.getElementById('turns').insertAdjacentHTML(
+      'beforeend',
+      '<div data-testid="conversation-turn-loading"></div>',
+    );
+  });
+  await p.locator('[data-composer-markdown]').fill('First message');
+  await p.locator('[data-composer-markdown]').press('Enter');
+  assert.deepEqual(await p.evaluate(() => sent), ['First message']);
+  assert.equal(await p.locator('#ghrc-message-queue').count(), 0);
+  assert.equal(await p.evaluate(() => storage.queuedChatMessages), undefined);
+  assert.deepEqual(p.errors, []);
+  await p.close();
+});
+
 test('after the overview creates a chat, Enter queues behind its active response', async () => {
   const p = await fixture({ route: '/' });
   await p.evaluate(() => {

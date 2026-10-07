@@ -1494,6 +1494,10 @@
     if (!composer || composer !== findComposerInput()) return;
     if (!shouldQueueComposerEnter(event)) return;
     if (composerAutocompleteIsOpen(composer)) return;
+    // Until ChatGPT assigns a conversation URL, let the new-chat page own Enter.
+    // Homepage shell markup can look like an incomplete conversation and must not
+    // turn the first prompt into a queued message.
+    if (!conversationIdFromPath()) return;
     const text = normalizedText(composerText(composer));
     if (event.repeat || sendingItemId || pendingEnterTexts.has(text) || enqueueRunning || interruptRunning) {
       event.preventDefault();
@@ -1501,10 +1505,9 @@
       return;
     }
     const snapshot = lifecycleSnapshot();
-    const overviewReady = location.pathname === "/" && !stateLoaded;
     const composerState = composerContext(composer);
     const hasMessage = Boolean(text.trim() || composerState.files.length || composerState.quote || composerState.selections.length);
-    if (hasMessage && !nativeSubmissionPending(composer) && (stateLoaded || overviewReady)
+    if (hasMessage && !nativeSubmissionPending(composer) && stateLoaded
       && activeKey === conversationKey() && !queue.length && !enterPending && !routeSyncRunning
       && queueCanAdvance(snapshot, COMPLETE_SETTLE_MS)) {
       // Mark the gap before ChatGPT paints Stop or the next user turn.
