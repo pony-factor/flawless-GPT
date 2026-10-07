@@ -1070,11 +1070,11 @@
       interruptButton?.remove();
       interruptButton = null;
     }
-    // Keep the same order as clipboard-send: queue, URL, clipboard, hat, Send.
-    // Ignoring the URL control makes both observers move buttons every frame.
+    // Keep the same order as clipboard-send: queue, clipboard, URL, hat, Send.
+    // Ignoring either clipboard control makes both observers move buttons every frame.
     const nextButton = [
-      document.getElementById("ghrc-clipboard-open-url-button"),
       document.getElementById("ghrc-clipboard-send-button"),
+      document.getElementById("ghrc-clipboard-open-url-button"),
       interruptButton,
     ].find(candidate => candidate?.parentElement === actionButton.parentElement) || actionButton;
     if (button && (button.parentElement !== actionButton.parentElement || button.nextElementSibling !== nextButton)) {

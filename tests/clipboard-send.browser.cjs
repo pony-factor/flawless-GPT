@@ -11,7 +11,7 @@ test('clipboard URL button only appears on the New Chat route', async () => {
     await page.route('https://chatgpt.com/**', route => route.fulfill({
       status: 200,
       contentType: 'text/html',
-      body: '<main><textarea id="prompt-textarea"></textarea><button id="send">Send</button></main>',
+      body: '<main><textarea id="prompt-textarea"></textarea><button id="ghrc-message-interrupt-button">Dashie</button><button id="send">Send</button></main>',
     }));
     await page.goto('https://chatgpt.com/');
 
@@ -28,7 +28,7 @@ test('clipboard URL button only appears on the New Chat route', async () => {
       };
       window.chrome = {
         storage: {
-          local: { get: async defaults => defaults },
+          local: { get: async defaults => ({ ...defaults, showClipboardSendButton: true }) },
           onChanged: { addListener: () => {} },
         },
       };
@@ -38,12 +38,25 @@ test('clipboard URL button only appears on the New Chat route', async () => {
 
     await page.waitForSelector('#ghrc-clipboard-open-url-button');
     assert.equal(await page.locator('#ghrc-clipboard-open-url-button').count(), 1);
+    assert.deepEqual(
+      await page.locator('main > button').evaluateAll(buttons => buttons.map(button => button.id)),
+      [
+        'ghrc-clipboard-send-button',
+        'ghrc-clipboard-open-url-button',
+        'ghrc-message-interrupt-button',
+        'send',
+      ],
+    );
 
     await page.evaluate(() => {
       history.pushState({}, '', '/c/example');
       window.dispatchEvent(new Event('ghrc:route-change'));
     });
     await page.waitForFunction(() => !document.querySelector('#ghrc-clipboard-open-url-button'));
+    assert.deepEqual(
+      await page.locator('main > button').evaluateAll(buttons => buttons.map(button => button.id)),
+      ['ghrc-clipboard-send-button', 'ghrc-message-interrupt-button', 'send'],
+    );
 
     await page.evaluate(() => {
       history.pushState({}, '', '/');
@@ -51,6 +64,15 @@ test('clipboard URL button only appears on the New Chat route', async () => {
     });
     await page.waitForSelector('#ghrc-clipboard-open-url-button');
     assert.equal(await page.locator('#ghrc-clipboard-open-url-button').count(), 1);
+    assert.deepEqual(
+      await page.locator('main > button').evaluateAll(buttons => buttons.map(button => button.id)),
+      [
+        'ghrc-clipboard-send-button',
+        'ghrc-clipboard-open-url-button',
+        'ghrc-message-interrupt-button',
+        'send',
+      ],
+    );
   } finally {
     await browser.close();
   }
