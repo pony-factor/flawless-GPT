@@ -2,7 +2,7 @@ importScripts("token-vault.js");
 
 const DEFAULT_OWNER_ORDER = [];
 const REPOSITORIES_PER_PAGE = 100;
-const REPOSITORY_CACHE_KEY = "repositoryPayloadCacheV1";
+const REPOSITORY_CACHE_KEY = "repositoryPayloadCacheV2";
 const REPOSITORY_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 const WOOTEN_LINK_TAB_ID_KEY = "wootenLinkSearchTabId";
 const ownerProfileCache = new Map();
@@ -125,6 +125,75 @@ async function loadAccessibleRepositories(token, { allPages = true } = {}) {
   }
 
   return repositories;
+}
+
+function repositoryNameFromApiUrl(repositoryUrl) {
+  try {
+    const url = new URL(repositoryUrl);
+    const parts = url.pathname.split("/").filter(Boolean);
+    if (
+      url.origin !== "https://api.github.com"
+      || parts.length !== 3
+      || parts[0] !== "repos"
+    ) {
+      return "";
+    }
+    return `${parts[1]}/${parts[2]}`;
+  } catch {
+    return "";
+  }
+}
+
+async function loadInteractedRepositories(
+  token,
+  knownRepositories = [],
+  { allPages = true } = {},
+) {
+  const viewer = await fetchGitHub("https://api.github.com/user", token);
+  if (!viewer?.login) return [];
+
+  const knownNames = new Set(
+    knownRepositories
+      .map((repository) => repository.full_name?.toLowerCase())
+      .filter(Boolean),
+  );
+  const repositoryUrls = new Map();
+  const pageLimit = allPages ? 10 : 1;
+
+  for (let page = 1; page <= pageLimit; page += 1) {
+    const url = new URL("https://api.github.com/search/issues");
+    url.searchParams.set("q", `involves:${viewer.login}`);
+    url.searchParams.set("sort", "updated");
+    url.searchParams.set("order", "desc");
+    url.searchParams.set("page", String(page));
+    url.searchParams.set("per_page", String(REPOSITORIES_PER_PAGE));
+
+    const payload = await fetchGitHub(url.toString(), token);
+    const items = Array.isArray(payload.items) ? payload.items : [];
+
+    for (const item of items) {
+      const fullName = repositoryNameFromApiUrl(item.repository_url);
+      const key = fullName.toLowerCase();
+      if (!fullName || knownNames.has(key) || repositoryUrls.has(key)) continue;
+      repositoryUrls.set(key, item.repository_url);
+    }
+
+    const searchableTotal = Math.min(Number(payload.total_count) || 0, 1000);
+    if (
+      !allPages
+      || items.length < REPOSITORIES_PER_PAGE
+      || page * REPOSITORIES_PER_PAGE >= searchableTotal
+    ) {
+      break;
+    }
+  }
+
+  const results = await Promise.allSettled(
+    [...repositoryUrls.values()].map((url) => fetchGitHub(url, token)),
+  );
+  return results
+    .filter((result) => result.status === "fulfilled" && result.value?.full_name)
+    .map((result) => result.value);
 }
 
 async function loadPublicOwnerRepositories(owner, token, { allPages = true } = {}) {
@@ -288,6 +357,7 @@ async function repositoryPayload(state = null, { complete = true } = {}) {
   const resolvedState = state || await loadRepositoryState();
   const { ownerOrder, tokens } = resolvedState;
   let repositories;
+  let searchRepositories;
 
   if (tokens.length) {
     const authenticatedRepositories = await Promise.all(
@@ -302,7 +372,8 @@ async function repositoryPayload(state = null, { complete = true } = {}) {
     repositories = uniqueRepositories(authenticatedRepositories.flat());
 
     // A cold first paint only needs the first authenticated page. Additional
-    // configured owners are folded in by the complete background refresh.
+    // configured owners and interaction history are folded in by the complete
+    // background refresh.
     if (complete) {
       const accessibleOwners = new Set(
         repositories.map((repository) => repository.owner.login.toLowerCase()),
@@ -314,8 +385,30 @@ async function repositoryPayload(state = null, { complete = true } = {}) {
       repositories.push(...priorityRepositories);
       repositories = uniqueRepositories(repositories);
     }
+
+    searchRepositories = repositories;
+    if (complete) {
+      const interactedRepositories = await Promise.all(
+        tokens.map(async ({ label, token }, index) => {
+          try {
+            return await loadInteractedRepositories(token, repositories);
+          } catch (error) {
+            console.warn(
+              `${label || `Token ${index + 1}`}: could not load interacted repositories:`,
+              error,
+            );
+            return [];
+          }
+        }),
+      );
+      searchRepositories = uniqueRepositories([
+        ...repositories,
+        ...interactedRepositories.flat(),
+      ]);
+    }
   } else {
     repositories = await loadPublicRepositories(ownerOrder, "", { allPages: complete });
+    searchRepositories = repositories;
   }
 
   const ownerProfiles = complete
@@ -325,14 +418,21 @@ async function repositoryPayload(state = null, { complete = true } = {}) {
   const resolvedOwnerState = complete
     ? await persistResolvedOwnerOrder(ownerOrder, resolvedOrder)
     : { ownerOrder, stateChanged: false };
+  const normalizedRepositories = repositories.map((repository) => (
+    normalizeRepository(repository, ownerProfiles)
+  ));
+  const normalizedSearchRepositories = searchRepositories === repositories
+    ? normalizedRepositories
+    : searchRepositories.map((repository) => (
+      normalizeRepository(repository, ownerProfiles)
+    ));
 
   return {
     payload: {
       mode: tokens.length ? "authenticated" : "public",
       ownerOrder: resolvedOwnerState.ownerOrder,
-      repositories: repositories.map((repository) => (
-        normalizeRepository(repository, ownerProfiles)
-      )),
+      repositories: normalizedRepositories,
+      searchRepositories: normalizedSearchRepositories,
     },
     stateChanged: resolvedOwnerState.stateChanged,
   };
