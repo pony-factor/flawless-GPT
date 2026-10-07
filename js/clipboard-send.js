@@ -173,28 +173,27 @@
     const hat = document.getElementById("ghrc-message-interrupt-button");
     const anchor = hat?.parentElement === sendButton.parentElement ? hat : sendButton;
 
+    let urlButton = document.getElementById(URL_BUTTON_ID);
+    if (isNewChatPage()) {
+      if (!urlButton) urlButton = createUrlButton();
+      if (urlButton.parentElement !== anchor.parentElement || urlButton.nextElementSibling !== anchor) {
+        anchor.before(urlButton);
+      }
+    } else {
+      removeUrlButton();
+      urlButton = null;
+    }
+
     let button = document.getElementById(BUTTON_ID);
     if (enabled) {
       if (!button) button = createButton();
-      if (button.parentElement !== anchor.parentElement || button.nextElementSibling !== anchor) {
-        anchor.before(button);
+      const buttonAnchor = urlButton?.parentElement === anchor.parentElement ? urlButton : anchor;
+      if (button.parentElement !== buttonAnchor.parentElement || button.nextElementSibling !== buttonAnchor) {
+        buttonAnchor.before(button);
       }
       setButtonBusy(button, actionRunning);
     } else {
       removeButton();
-      button = null;
-    }
-
-    if (!isNewChatPage()) {
-      removeUrlButton();
-      return;
-    }
-
-    let urlButton = document.getElementById(URL_BUTTON_ID);
-    if (!urlButton) urlButton = createUrlButton();
-    const urlAnchor = button?.parentElement === anchor.parentElement ? button : anchor;
-    if (urlButton.parentElement !== urlAnchor.parentElement || urlButton.nextElementSibling !== urlAnchor) {
-      urlAnchor.before(urlButton);
     }
   }
 
