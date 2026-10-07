@@ -435,25 +435,43 @@
     return column;
   }
 
+  function normalizeRepositorySearchText(value) {
+    return String(value || "")
+      .toLowerCase()
+      .replace(/[-_.\\/]+/g, " ")
+      .replace(/\\s+/g, " ")
+      .trim();
+  }
+
+  function repositoryMatchesSearch(repository, query) {
+    const terms = normalizeRepositorySearchText(query).split(" ").filter(Boolean);
+    if (!terms.length) return false;
+    const searchable = normalizeRepositorySearchText([
+      repository.fullName,
+      repository.name,
+      repository.owner?.login,
+      repository.owner?.displayName,
+      repository.description,
+      repository.language,
+    ].join(" "));
+    return terms.every((term) => searchable.includes(term));
+  }
+
   function renderSearchResults(container, repositories, query, pinnedRepositories) {
     container.replaceChildren();
-    const normalizedQuery = query.trim().toLowerCase();
-
-    if (!normalizedQuery) {
+    if (!normalizeRepositorySearchText(query)) {
       container.hidden = true;
       return;
     }
 
-    const matches = repositories.filter((repository) => [
-      repository.fullName,
-      repository.description,
-      repository.language,
-    ].some((value) => value.toLowerCase().includes(normalizedQuery)));
+    const matches = repositories.filter((repository) => (
+      repositoryMatchesSearch(repository, query)
+    ));
 
     if (!matches.length) {
       const empty = document.createElement("p");
       empty.className = "ghrc-search-empty";
-      empty.textContent = "No accessible repositories match this search.";
+      empty.textContent = "No repositories you have interacted with match this search.";
       container.append(empty);
     } else {
       for (const repository of matches) {
@@ -478,6 +496,7 @@
   function createToolbar(
     widget,
     repositories,
+    searchRepositories,
     mode,
     pinnedRepositories,
     showRepositorySearch,
@@ -527,7 +546,7 @@
       const search = document.createElement("input");
       search.type = "search";
       search.placeholder = "Find a repository…";
-      search.setAttribute("aria-label", "Find an accessible GitHub repository");
+      search.setAttribute("aria-label", "Find a GitHub repository you have interacted with");
       search.autocomplete = "off";
       search.spellcheck = false;
       searchLabel.append(search);
@@ -540,12 +559,12 @@
       results.className = "ghrc-search-results";
       results.hidden = true;
       search.addEventListener("input", () => {
-        renderSearchResults(results, repositories, search.value, pinnedRepositories);
+        renderSearchResults(results, searchRepositories, search.value, pinnedRepositories);
       });
       search.addEventListener("keydown", (event) => {
         if (event.key === "Escape") {
           search.value = "";
-          renderSearchResults(results, repositories, "", pinnedRepositories);
+          renderSearchResults(results, searchRepositories, "", pinnedRepositories);
           search.blur();
         }
       });
@@ -914,9 +933,15 @@
       usage,
       pinnedRepositories,
     );
+    const rankedSearchRepositories = rankRepositories(
+      payload.searchRepositories || payload.repositories,
+      usage,
+      pinnedRepositories,
+    );
     createToolbar(
       widget,
       rankedRepositories,
+      rankedSearchRepositories,
       payload.mode,
       pinnedRepositories,
       showRepositorySearch,
