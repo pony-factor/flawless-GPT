@@ -485,6 +485,32 @@ test('Stop queue preserves messages across reload; Resume sends them', async () 
   await p.close(); await restored.close();
 });
 
+test('ArrowUp from an empty composer edits the lowest-priority queued message', async () => {
+  const p = await fixture({ active: true });
+  await enqueue(p, 'First priority');
+  await enqueue(p, 'Lowest priority');
+
+  const composer = p.locator('[data-composer-markdown]');
+  await composer.focus();
+  await composer.press('ArrowUp');
+
+  const queued = p.locator('.ghrc-message-queue-editor');
+  assert.equal(await queued.nth(1).evaluate(el => document.activeElement === el), true);
+  await p.keyboard.type(' updated');
+  assert.deepEqual(await queued.evaluateAll(editors => editors.map(editor => editor.value)), [
+    'First priority',
+    'Lowest priority updated',
+  ]);
+
+  await composer.fill('Draft stays in the composer');
+  await composer.press('ArrowUp');
+  assert.equal(await composer.evaluate(el => document.activeElement === el), true);
+  assert.equal(await composer.innerText(), 'Draft stays in the composer');
+  assert.equal(await queued.nth(1).inputValue(), 'Lowest priority updated');
+  assert.deepEqual(p.errors, []);
+  await p.close();
+});
+
 test('edit, reorder, and remove preserve FIFO while Send bypasses the queue', async () => {
   const p = await fixture({ active: true });
   await enqueue(p, 'First'); await enqueue(p, 'Second'); await enqueue(p, 'Remove');
