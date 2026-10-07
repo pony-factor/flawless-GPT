@@ -36,9 +36,13 @@ html[data-ghrc-composer-placeholder] :is(#prompt-textarea, [data-composer-markdo
 }
 
 
-/* Let readers scroll the current end of a conversation above the composer.
-   The marker follows the newest turn, so future turns consume the visual gap
-   instead of leaving permanent whitespace between older messages. */
-[data-ghrc-conversation-tail-space] {
-  margin-bottom: clamp(10rem, 35vh, 28rem) !important;
+/* Give the thread real scrollable content after the newest turn.
+   A sibling spacer survives layouts where a child margin is collapsed,
+   clipped, or applied inside ChatGPT's turn wrapper. */
+[data-ghrc-conversation-tail-spacer] {
+  display: block !important;
+  flex: 0 0 clamp(10rem, 35vh, 28rem) !important;
+  height: clamp(10rem, 35vh, 28rem) !important;
+  min-height: clamp(10rem, 35vh, 28rem) !important;
+  pointer-events: none !important;
 }
