@@ -47,7 +47,7 @@
     } catch { serverQuota = null; }
   }
 
-  function dashboardCountVisible() {
+  function dashboardVisible() {
     if (!serverQuota || serverQuota.resetAt === null) return false;
     const remainingMs = serverQuota.resetAt - Date.now();
     return remainingMs >= 0 && remainingMs <= DASHBOARD_COUNT_WINDOW_MS;
@@ -146,7 +146,7 @@
       ? `${allowance.remaining} left`
       : 'Check allowance';
     const reset = fresh && allowance.reset ? allowance.reset : 'Reset unknown';
-    const includeCount = id !== ID || dashboardCountVisible();
+    const includeCount = id !== ID || dashboardVisible();
     const text = serverText(includeCount)
       || ['Deep Research', ...(includeCount ? [count] : []), reset].join(' · ');
     const label = widget.querySelector('.ghrc-research-allowance');
@@ -165,7 +165,7 @@
     readServerQuota();
     readAllowance();
     const repositories = document.getElementById('github-repositories-for-chatgpt');
-    if (enabled && repositories && visible(repositories)) {
+    if (enabled && repositories && visible(repositories) && dashboardVisible()) {
       let row = document.getElementById(DASHBOARD_ID);
       if (!row) {
         row = document.createElement('div');
