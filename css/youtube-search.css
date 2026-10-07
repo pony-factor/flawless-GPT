@@ -22,6 +22,7 @@
   flex: 1 1 0;
   max-width: 280px;
   min-width: 0;
+  position: relative;
   width: 100%;
 }
 
@@ -49,7 +50,7 @@
   color: var(--ghrc-fg);
   font: 12px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   min-width: 0;
-  padding: 5px 8px;
+  padding: 5px 34px 5px 8px;
   width: 100%;
 }
 
@@ -74,12 +75,15 @@
   border-radius: 0;
   cursor: pointer;
   display: inline-flex;
-  flex: 0 0 30px;
-  height: 30px;
+  height: 28px;
   justify-content: center;
   margin: 0;
   padding: 0;
-  width: 30px;
+  position: absolute;
+  right: 1px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 28px;
 }
 
 #github-repositories-for-chatgpt .ghrc-youtube-submit > .ghrc-youtube-logo {
