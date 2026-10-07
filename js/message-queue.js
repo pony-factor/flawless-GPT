@@ -1032,9 +1032,13 @@
       interruptButton?.remove();
       interruptButton = null;
     }
-    const clipboardButton = document.getElementById("ghrc-clipboard-send-button");
-    const nextButton = clipboardButton?.parentElement === actionButton.parentElement
-      ? clipboardButton : (interruptButton || actionButton);
+    // Keep the same order as clipboard-send: queue, URL, clipboard, hat, Send.
+    // Ignoring the URL control makes both observers move buttons every frame.
+    const nextButton = [
+      document.getElementById("ghrc-clipboard-open-url-button"),
+      document.getElementById("ghrc-clipboard-send-button"),
+      interruptButton,
+    ].find(candidate => candidate?.parentElement === actionButton.parentElement) || actionButton;
     if (button && (button.parentElement !== actionButton.parentElement || button.nextElementSibling !== nextButton)) {
       nextButton.before(button);
     }
@@ -1182,6 +1186,7 @@
   globalThis.__ghrcMessageQueue = {
     enqueueText: text => context.run(() => enqueueText(text)),
     sendClipboardText: text => context.run(() => sendClipboardText(text)),
+    findComposerInput,
     findActionButton,
   };
 

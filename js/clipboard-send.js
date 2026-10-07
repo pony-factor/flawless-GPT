@@ -10,7 +10,9 @@
   let actionRunning = false;
 
   function findComposerInput() {
-    return document.querySelector('#prompt-textarea, [data-composer-markdown][contenteditable="true"]');
+    // Use the same bottom composer as the queue. Inline message editors reuse
+    // the markdown markup and must not receive or compete for these controls.
+    return globalThis.__ghrcMessageQueue?.findComposerInput() || null;
   }
 
   function setButtonBusy(button, busy) {

@@ -240,8 +240,9 @@ test('standalone queue button is opt-in and follows setting changes', async () =
   await p.close();
 });
 
-test('inline message edits with app mentions stay outside the queue composer', async () => {
-  const p = await fixture({ active: true });
+test('inline message edits with app mentions stay outside the queue and clipboard composer', async () => {
+  const p = await fixture({ active: true, clipboard: true });
+  await p.locator('#ghrc-clipboard-send-button').waitFor();
   await p.evaluate(() => {
     const editForm = document.createElement('form');
     editForm.id = 'inline-edit-form';
@@ -266,6 +267,15 @@ test('inline message edits with app mentions stay outside the queue composer', a
   });
 
   await p.waitForFunction(() => document.getElementById('ghrc-message-queue-button')?.closest('form') !== document.getElementById('inline-edit-form'));
+  await p.waitForTimeout(200);
+  assert.equal(await p.locator('#inline-edit-form [id^="ghrc-"]').count(), 0);
+  await p.evaluate(() => {
+    window.editMoves = 0;
+    new MutationObserver(records => { window.editMoves += records.length; })
+      .observe(document.body, { childList: true, subtree: true });
+  });
+  await p.waitForTimeout(400);
+  assert.equal(await p.evaluate(() => editMoves), 0);
   await p.locator('#inline-edit').press('Enter');
 
   assert.equal(await p.evaluate(() => window.inlineEditSubmits), 1);
@@ -860,7 +870,8 @@ test('clipboard stays immediately left of the hat without repeated button moves'
   const p = await fixture({ active: true, clipboard: true });
   await p.locator('[data-composer-markdown]').fill('Keep draft');
   await p.waitForFunction(() => document.getElementById('ghrc-clipboard-send-button')?.nextElementSibling?.id === 'ghrc-message-interrupt-button');
-  assert.equal(await p.locator('#ghrc-message-queue-button').evaluate(e => e.nextElementSibling.id), 'ghrc-clipboard-send-button');
+  assert.equal(await p.locator('#ghrc-message-queue-button').evaluate(e => e.nextElementSibling.id), 'ghrc-clipboard-open-url-button');
+  assert.equal(await p.locator('#ghrc-clipboard-open-url-button').evaluate(e => e.nextElementSibling.id), 'ghrc-clipboard-send-button');
   await p.evaluate(() => {
     window.buttonMoves = 0;
     new MutationObserver(rs => { window.buttonMoves += rs.length; }).observe(document.querySelector('form'), { childList: true, subtree: true });
@@ -869,6 +880,24 @@ test('clipboard stays immediately left of the hat without repeated button moves'
   assert.equal(await p.evaluate(() => buttonMoves), 0);
   await p.evaluate(() => { window.active = false; update(); });
   await p.waitForFunction(() => document.getElementById('ghrc-clipboard-send-button')?.nextElementSibling?.id === 'composer-submit-button');
+  await p.close();
+});
+
+test('URL and queue controls settle when clipboard sending is disabled', async () => {
+  const p = await fixture();
+  await p.addScriptTag({ content: clipboardSource });
+  await p.locator('[data-composer-markdown]').fill('Keep draft');
+  await p.waitForFunction(() => document.getElementById('ghrc-message-queue-button')?.nextElementSibling?.id === 'ghrc-clipboard-open-url-button');
+  assert.equal(await p.locator('#ghrc-clipboard-send-button').count(), 0);
+  assert.equal(await p.locator('#ghrc-clipboard-open-url-button').evaluate(e => e.nextElementSibling.id), 'composer-submit-button');
+  await p.evaluate(() => {
+    window.buttonMoves = 0;
+    new MutationObserver(records => { window.buttonMoves += records.length; })
+      .observe(document.querySelector('form'), { childList: true, subtree: true });
+  });
+  await p.waitForTimeout(400);
+  assert.equal(await p.evaluate(() => buttonMoves), 0);
+  assert.deepEqual(p.errors, []);
   await p.close();
 });
 
