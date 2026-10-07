@@ -84,9 +84,9 @@ function fixture({ nestedPicker = true, clipboard = 'clipboard text', draft = ''
 
   vm.createContext(context);
   const prefix = source.slice(0, source.indexOf('  chrome.storage.onChanged'));
-  vm.runInContext(prefix + \`
+  vm.runInContext(prefix + `
     globalThis.api = { launchSpellcheck, activateSpellcheckPlugin, pasteIntoComposer, submitWhenReady };
-  })();\`, context);
+  })();`, context);
 
   return { context, composer, send, picker, plugins, plugin, api: context.api, get pluginSelected() { return pluginSelected; } };
 }

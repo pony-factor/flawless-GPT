@@ -279,7 +279,7 @@
 
   function removeLauncher() {
     document.getElementById(LAUNCHER_ID)?.remove();
-    document.querySelectorAll(\`[\${HOST_ATTR}]\`).forEach((host) => {
+    document.querySelectorAll(`[${HOST_ATTR}]`).forEach((host) => {
       host.removeAttribute(HOST_ATTR);
     });
   }
@@ -288,8 +288,8 @@
     const button = document.createElement("button");
     button.id = LAUNCHER_ID;
     button.type = "button";
-    button.title = \`Run \${PLUGIN_NAME}\`;
-    button.setAttribute("aria-label", \`Run \${PLUGIN_NAME} plugin\`);
+    button.title = `Run ${PLUGIN_NAME}`;
+    button.setAttribute("aria-label", `Run ${PLUGIN_NAME} plugin`);
 
     const image = document.createElement("img");
     image.src = chrome.runtime.getURL(ICON_PATH);
