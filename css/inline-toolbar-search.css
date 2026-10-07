@@ -14,7 +14,6 @@
 
 @container (min-width: 821px) {
   #github-repositories-for-chatgpt .ghrc-search-area {
-    bottom: 0;
     pointer-events: none;
   }
 
