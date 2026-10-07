@@ -7,8 +7,8 @@
   const LEGACY_ICON_KEY = "spellcheckGptCanonicalIcon";
   const PLUGIN_NAME = "Spellcheck Only";
   const ICON_PATH = "artwork/spellcheck-only.png";
-  const PICKER_RETRY_MS = 100;
-  const PICKER_TIMEOUT_MS = 5_000;
+  const MENTION_RETRY_MS = 100;
+  const MENTION_TIMEOUT_MS = 5_000;
   const SUBMIT_RETRY_MS = 100;
   const SUBMIT_TIMEOUT_MS = 5_000;
 
@@ -38,87 +38,58 @@
     return [
       node?.getAttribute?.("aria-label"),
       node?.getAttribute?.("title"),
+      node?.getAttribute?.("app-mention-display-name"),
+      node?.getAttribute?.("app-mention-name"),
       node?.textContent,
     ].filter(Boolean).map((value) => value.replace(/\s+/g, " ").trim()).filter(Boolean);
   }
 
-  function actionText(node) {
-    return actionLabels(node).join(" ");
+  function pluginLabelMatches(node) {
+    const wanted = PLUGIN_NAME.toLowerCase();
+    return actionLabels(node).some((label) => {
+      const normalized = label.toLowerCase();
+      return normalized === wanted || normalized.startsWith(`${wanted} `);
+    });
   }
 
-  function findVisibleAction(labels, { exact = false, root = document } = {}) {
-    const wanted = labels.map((label) => label.toLowerCase());
-    const candidates = root.querySelectorAll([
-      "button",
-      '[role="button"]',
-      '[role="menuitem"]',
-      '[role="option"]',
-      '[role="menuitemcheckbox"]',
-      '[role="menuitemradio"]',
-    ].join(", "));
-
-    return [...candidates].find((candidate) => {
-      if (!isVisible(candidate)) return false;
-      const candidateLabels = actionLabels(candidate).map((label) => label.toLowerCase());
-      const combined = candidateLabels.join(" ");
-      return wanted.some((needle) => exact
-        ? candidateLabels.includes(needle)
-        : combined.includes(needle));
-    }) || null;
+  function findPluginMention(composer) {
+    return [...(composer?.querySelectorAll?.("[app-mention-path]") || [])].find((node) => (
+      /^app:\/\//.test(node.getAttribute?.("app-mention-path") || "")
+      && pluginLabelMatches(node)
+    )) || null;
   }
 
-  function findComposerMenuButton(composer) {
-    const selectors = [
-      'button[aria-label*="add" i]',
-      'button[aria-label*="attach" i]',
-      'button[aria-label*="tools" i]',
-      'button[aria-label*="more" i]',
-      'button[title*="add" i]',
-      'button[title*="attach" i]',
-      'button[title*="tools" i]',
-      'button[title*="more" i]',
-    ];
-    for (let container = composer.parentElement; container; container = container.parentElement) {
-      for (const selector of selectors) {
-        const button = [...container.querySelectorAll(selector)].find((candidate) => {
-          if (!isVisible(candidate)) return false;
-          const label = actionText(candidate);
-          return !/send|stop|voice|microphone/i.test(label);
-        });
-        if (button) return button;
-      }
-      if (container.matches("main, body")) break;
+  function findPluginSuggestion() {
+    const surfaces = [...document.querySelectorAll([
+      "[data-mention-list-scroll-area]",
+      '[role="listbox"]',
+    ].join(", "))].filter((surface) => isVisible(surface) && !surface.closest?.("[inert]"));
+
+    for (const surface of surfaces) {
+      const actions = surface.querySelectorAll([
+        "button",
+        '[role="option"]',
+        '[role="menuitem"]',
+        '[data-list-navigation-item="true"]',
+      ].join(", "));
+      const match = [...actions].find((candidate) => isVisible(candidate) && pluginLabelMatches(candidate));
+      if (match) return match;
     }
     return null;
   }
 
-  async function waitForAction(labels, options = {}) {
-    const deadline = Date.now() + (options.timeout ?? PICKER_TIMEOUT_MS);
+  function pause(ms = MENTION_RETRY_MS) {
+    return new Promise((resolve) => window.setTimeout(resolve, ms));
+  }
+
+  async function waitUntil(test, timeout = MENTION_TIMEOUT_MS) {
+    const deadline = Date.now() + timeout;
     while (Date.now() < deadline && isHomePage()) {
-      const action = findVisibleAction(labels, options);
-      if (action) return action;
-      await new Promise((resolve) => window.setTimeout(resolve, PICKER_RETRY_MS));
+      const value = test();
+      if (value) return value;
+      await pause();
     }
     return null;
-  }
-
-  async function activateSpellcheckPlugin(composer) {
-    const pickerButton = findComposerMenuButton(composer);
-    if (!pickerButton) return false;
-    pickerButton.click();
-
-    let pluginAction = await waitForAction([PLUGIN_NAME], { exact: true, timeout: 800 });
-    if (!pluginAction) {
-      const pluginsAction = await waitForAction(["Plugins", "Apps"], { exact: true });
-      if (!pluginsAction) return false;
-      pluginsAction.click();
-      pluginAction = await waitForAction([PLUGIN_NAME], { exact: true });
-    }
-    if (!pluginAction) return false;
-
-    pluginAction.click();
-    await new Promise((resolve) => window.setTimeout(resolve, PICKER_RETRY_MS));
-    return isHomePage();
   }
 
   function replaceTextControlValue(control, text) {
@@ -155,23 +126,17 @@
     return composer.innerText || composer.textContent || "";
   }
 
-  function matchesClipboard(composer, text) {
-    const normalize = (value) => value.replace(/\r\n/g, "\n").replace(/\n+$/, "");
-    return normalize(composerText(composer)) === normalize(text);
+  function normalizeComposerText(value) {
+    return value.replace(/\r\n/g, "\n").replace(/\n+$/, "");
   }
 
-  async function waitForClipboard(composer, text) {
-    for (let attempt = 0; attempt < 40; attempt += 1) {
-      await new Promise((resolve) => window.setTimeout(resolve, 50));
-      if (!isHomePage() || !composer.isConnected || findComposerInput() !== composer) return false;
-      if (matchesClipboard(composer, text)) return true;
-    }
-    return false;
+  function spellcheckDraftMatches(composer, text) {
+    const prompt = normalizeComposerText(text);
+    const draft = normalizeComposerText(composerText(composer));
+    return Boolean(findPluginMention(composer) && prompt && draft.endsWith(prompt));
   }
 
-  async function pasteIntoComposer(composer, text) {
-    if (!text.trim()) return false;
-    if (matchesClipboard(composer, text)) return true;
+  async function replaceComposerText(composer, text) {
     composer.focus({ preventScroll: true });
 
     if (composer instanceof HTMLTextAreaElement || composer instanceof HTMLInputElement) {
@@ -185,27 +150,46 @@
     range.selectNodeContents(composer);
     selection.removeAllRanges();
     selection.addRange(range);
-    await new Promise((resolve) => window.setTimeout(resolve, 50));
-
-    try {
-      const clipboardData = new DataTransfer();
-      clipboardData.setData("text/plain", text);
-      const unhandled = composer.dispatchEvent(new ClipboardEvent("paste", {
-        bubbles: true,
-        cancelable: true,
-        clipboardData,
-      }));
-      if (!unhandled) return waitForClipboard(composer, text);
-      await new Promise((resolve) => window.setTimeout(resolve, 50));
-      if (matchesClipboard(composer, text)) return true;
-      if (composerText(composer).trim()) return false;
-    } catch {
-      // Fall through when synthetic clipboard data is unsupported.
-    }
-
     document.execCommand("insertText", false, text);
-    await new Promise((resolve) => window.setTimeout(resolve, 50));
-    return matchesClipboard(composer, text);
+    await pause(50);
+    return normalizeComposerText(composerText(composer)) === normalizeComposerText(text);
+  }
+
+  async function activateSpellcheckPlugin(composer) {
+    // Use ChatGPT's app-mention service instead of opening the composer's + menu.
+    if (!await replaceComposerText(composer, "@")) return false;
+
+    composer.focus({ preventScroll: true });
+    const selection = window.getSelection();
+    if (!selection) return false;
+    const range = document.createRange();
+    range.selectNodeContents(composer);
+    range.collapse(false);
+    selection.removeAllRanges();
+    selection.addRange(range);
+    document.execCommand("insertText", false, PLUGIN_NAME);
+
+    const pluginAction = await waitUntil(findPluginSuggestion);
+    if (!pluginAction) return false;
+    pluginAction.click();
+
+    return Boolean(await waitUntil(() => findPluginMention(composer)));
+  }
+
+  async function appendSpellcheckText(composer, text) {
+    if (!text.trim() || !findPluginMention(composer)) return false;
+    composer.focus({ preventScroll: true });
+
+    const selection = window.getSelection();
+    if (!selection) return false;
+    const range = document.createRange();
+    range.selectNodeContents(composer);
+    range.collapse(false);
+    selection.removeAllRanges();
+    selection.addRange(range);
+    document.execCommand("insertText", false, `\n${text}`);
+    await pause(50);
+    return spellcheckDraftMatches(composer, text);
   }
 
   function findSendButton(composer) {
@@ -231,7 +215,7 @@
       || !isHomePage()
       || !composer.isConnected
       || findComposerInput() !== composer
-      || !matchesClipboard(composer, text)
+      || !spellcheckDraftMatches(composer, text)
     ) return;
 
     const sendButton = findSendButton(composer);
@@ -263,10 +247,10 @@
       const composer = findComposerInput();
       if (!composer) return;
       if (!await activateSpellcheckPlugin(composer)) {
-        console.warn("Spellcheck Only plugin could not be selected from the composer.");
+        console.warn("Spellcheck Only plugin could not be resolved through the app mention service.");
         return;
       }
-      if (!await pasteIntoComposer(composer, text)) return;
+      if (!await appendSpellcheckText(composer, text)) return;
 
       const deadline = Date.now() + SUBMIT_TIMEOUT_MS;
       window.setTimeout(() => submitWhenReady(composer, text, deadline), SUBMIT_RETRY_MS);

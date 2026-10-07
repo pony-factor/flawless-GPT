@@ -6,10 +6,12 @@ const path = require('node:path');
 
 const source = fs.readFileSync(path.join(__dirname, '../js/spellcheck-launcher.js'), 'utf8');
 
-function fixture({ nestedPicker = true, clipboard = 'clipboard text', draft = '' } = {}) {
+function fixture({ clipboard = 'clipboard text', draft = '', suggestionAvailable = true } = {}) {
   let now = 0;
-  let menuStage = 0;
+  let suggestionOpen = false;
   let pluginSelected = false;
+  let pluginSuggestionClicks = 0;
+  let pickerLookups = 0;
 
   const makeAction = (text, onClick = () => {}) => ({
     textContent: text,
@@ -22,15 +24,39 @@ function fixture({ nestedPicker = true, clipboard = 'clipboard text', draft = ''
 
   const send = makeAction('Send', () => { send.clicks++; });
   send.clicks = 0;
-  const picker = makeAction('Add files and more', () => { menuStage = 1; });
-  const plugins = makeAction('Plugins', () => { menuStage = 2; });
-  const plugin = makeAction('Spellcheck Only', () => { pluginSelected = true; menuStage = 0; });
+
+  const mention = {
+    textContent: 'Spellcheck Only',
+    isConnected: true,
+    getClientRects: () => [{}],
+    getAttribute(name) {
+      return ({
+        'app-mention-name': 'spellcheck-only',
+        'app-mention-display-name': 'Spellcheck Only',
+        'app-mention-path': 'app://plugin/spellcheck-only',
+      })[name] ?? null;
+    },
+  };
+
+  const plugin = makeAction('Spellcheck Only', () => {
+    pluginSuggestionClicks++;
+    pluginSelected = true;
+    suggestionOpen = false;
+    composer.innerText = 'Spellcheck Only';
+  });
+
+  const suggestionSurface = {
+    isConnected: true,
+    getClientRects: () => [{}],
+    closest: () => null,
+    querySelectorAll() { return suggestionAvailable ? [plugin] : []; },
+  };
 
   const container = {
     parentElement: null,
     matches: () => false,
     querySelectorAll(selector) {
-      if (/aria-label\*="add"|aria-label\*="attach"|aria-label\*="tools"|aria-label\*="more"|title\*="add"|title\*="attach"|title\*="tools"|title\*="more"/.test(selector)) return [picker];
+      if (/aria-label\*="add"|aria-label\*="attach"|aria-label\*="tools"|aria-label\*="more"/.test(selector)) pickerLookups++;
       if (/send-button|aria-label\^="Send"|composer-submit-button/.test(selector)) return [send];
       return [];
     },
@@ -44,15 +70,12 @@ function fixture({ nestedPicker = true, clipboard = 'clipboard text', draft = ''
     isConnected: true,
     focus() {},
     closest() { return null; },
-    dispatchEvent(event) {
-      if (event.type === 'paste') {
-        this.innerText = event.clipboardData.text;
-        return false;
-      }
-      return true;
+    querySelectorAll(selector) {
+      return selector === '[app-mention-path]' && pluginSelected ? [mention] : [];
     },
   };
 
+  const selection = { removeAllRanges() {}, addRange() {} };
   const context = {
     __ghrcExtensionContext: { active: () => true },
     chrome: { runtime: { getURL: (x) => x }, storage: { local: {} } },
@@ -63,21 +86,39 @@ function fixture({ nestedPicker = true, clipboard = 'clipboard text', draft = ''
     HTMLInputElement: class {},
     InputEvent: class { constructor(type, options) { this.type = type; Object.assign(this, options); } },
     KeyboardEvent: class { constructor(type, options) { this.type = type; Object.assign(this, options); } },
-    DataTransfer: class { setData(type, text) { this.text = text; } },
-    ClipboardEvent: class { constructor(type, options) { this.type = type; Object.assign(this, options); } },
     window: {
-      getSelection: () => ({ removeAllRanges() {}, addRange() {} }),
+      getSelection: () => selection,
       setTimeout(fn, delay) { now += delay; queueMicrotask(fn); },
     },
     document: {
       querySelector() { return composer; },
-      querySelectorAll() {
-        if (menuStage === 1) return nestedPicker ? [plugins] : [plugin];
-        if (menuStage === 2) return [plugin];
+      querySelectorAll(selector) {
+        if (/data-mention-list-scroll-area|role="listbox"/.test(selector)) {
+          return suggestionOpen ? [suggestionSurface] : [];
+        }
         return [];
       },
-      createRange: () => ({ selectNodeContents() {} }),
-      execCommand(command, ui, text) { composer.innerText = text; return true; },
+      createRange: () => ({ selectNodeContents() {}, collapse() {} }),
+      execCommand(command, ui, text) {
+        if (command !== 'insertText') return false;
+        if (text === '@') {
+          composer.innerText = '@';
+          pluginSelected = false;
+          suggestionOpen = true;
+          return true;
+        }
+        if (composer.innerText === '@' && text === 'Spellcheck Only') {
+          composer.innerText = '@Spellcheck Only';
+          suggestionOpen = true;
+          return true;
+        }
+        if (pluginSelected && text.startsWith('\n')) {
+          composer.innerText += text;
+          return true;
+        }
+        composer.innerText = text;
+        return true;
+      },
     },
     console: { warn() {} },
   };
@@ -85,49 +126,58 @@ function fixture({ nestedPicker = true, clipboard = 'clipboard text', draft = ''
   vm.createContext(context);
   const prefix = source.slice(0, source.indexOf('  chrome.storage.onChanged'));
   vm.runInContext(prefix + `
-    globalThis.api = { launchSpellcheck, activateSpellcheckPlugin, pasteIntoComposer, submitWhenReady };
+    globalThis.api = { launchSpellcheck, activateSpellcheckPlugin, appendSpellcheckText, submitWhenReady };
   })();`, context);
 
-  return { context, composer, send, picker, plugins, plugin, api: context.api, get pluginSelected() { return pluginSelected; } };
+  return {
+    context, composer, send, api: context.api,
+    get pluginSelected() { return pluginSelected; },
+    get pluginSuggestionClicks() { return pluginSuggestionClicks; },
+    get pickerLookups() { return pickerLookups; },
+  };
 }
 
-test('selects Spellcheck Only through Plugins and sends clipboard text on the homepage', async () => {
+test('resolves Spellcheck Only through the app mention service and sends clipboard text', async () => {
   const f = fixture();
   await f.api.launchSpellcheck();
   await new Promise((resolve) => setImmediate(resolve));
   assert.equal(f.pluginSelected, true);
-  assert.equal(f.composer.innerText, 'clipboard text');
-  assert.equal(f.send.clicks, 1);
-  assert.equal(f.context.location.pathname, '/');
-});
-
-test('supports Spellcheck Only directly in the first composer menu', async () => {
-  const f = fixture({ nestedPicker: false });
-  await f.api.launchSpellcheck();
-  await new Promise((resolve) => setImmediate(resolve));
-  assert.equal(f.pluginSelected, true);
+  assert.equal(f.pluginSuggestionClicks, 1);
+  assert.equal(f.pickerLookups, 0);
+  assert.equal(f.composer.innerText, 'Spellcheck Only\nclipboard text');
   assert.equal(f.send.clicks, 1);
 });
 
-test('replaces an existing homepage draft with the clipboard text after plugin selection', async () => {
+test('replaces an existing homepage draft before resolving the plugin mention', async () => {
   const f = fixture({ draft: 'old draft', clipboard: 'replacement' });
   await f.api.launchSpellcheck();
   await new Promise((resolve) => setImmediate(resolve));
-  assert.equal(f.composer.innerText, 'replacement');
+  assert.equal(f.pluginSelected, true);
+  assert.equal(f.composer.innerText, 'Spellcheck Only\nreplacement');
   assert.equal(f.send.clicks, 1);
 });
 
-test('blank clipboard does not open the plugin picker or submit', async () => {
+test('blank clipboard does not resolve the plugin or submit', async () => {
   const f = fixture({ clipboard: '  \n' });
   await f.api.launchSpellcheck();
   assert.equal(f.pluginSelected, false);
+  assert.equal(f.pluginSuggestionClicks, 0);
   assert.equal(f.send.clicks, 0);
+});
+
+test('missing Spellcheck Only mention result fails closed without submitting', async () => {
+  const f = fixture({ suggestionAvailable: false });
+  await f.api.launchSpellcheck();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(f.pluginSelected, false);
+  assert.equal(f.send.clicks, 0);
+  assert.equal(f.pickerLookups, 0);
 });
 
 test('submission cancels if navigation leaves the main new-chat page', async () => {
   const f = fixture();
-  await f.api.activateSpellcheckPlugin(f.composer);
-  await f.api.pasteIntoComposer(f.composer, 'clipboard text');
+  assert.equal(await f.api.activateSpellcheckPlugin(f.composer), true);
+  assert.equal(await f.api.appendSpellcheckText(f.composer, 'clipboard text'), true);
   f.context.location.pathname = '/c/example';
   f.api.submitWhenReady(f.composer, 'clipboard text', 10_000);
   assert.equal(f.send.clicks, 0);
