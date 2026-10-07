@@ -201,7 +201,8 @@
         </section>
 
         <section id="settings-panel-chatgpt" class="standalone-settings-panel" role="tabpanel" aria-labelledby="settings-tab-chatgpt" hidden>
-        <fieldset class="standalone-first-fieldset" aria-label="ChatGPT display settings">
+        <fieldset id="chatgpt-interaction-settings" class="standalone-first-fieldset" aria-label="Chat interaction settings">
+          <legend>Interaction</legend>
           <label for="composer-placeholder">Composer placeholder</label>
           <input id="composer-placeholder" type="text" placeholder="For example, Dash" aria-describedby="composer-placeholder-help" />
           <p id="composer-placeholder-help" class="help">Choose the text shown in the empty chat input. Leave blank to use ChatGPT’s default.</p>
@@ -226,6 +227,18 @@
               <small>Hides the dedicated composer button for queuing the current draft. Other queue behavior still works while this is hidden.</small>
             </span>
           </label>
+          <label class="preference">
+            <input id="disable-work-mode" type="checkbox" />
+            <span>
+              <strong>Disable Work mode</strong>
+              <small>Hides the Work option and prevents Work mode from being selected.</small>
+            </span>
+          </label>
+        </fieldset>
+
+        <hr class="section-divider" />
+        <fieldset id="chatgpt-display-settings" aria-label="ChatGPT display settings">
+          <legend>Display</legend>
           <label class="preference">
             <input id="block-voice-prompts" type="checkbox" />
             <span>
@@ -255,13 +268,6 @@
             </span>
           </label>
           <label class="preference">
-            <input id="disable-work-mode" type="checkbox" />
-            <span>
-              <strong>Disable Work mode</strong>
-              <small>Hides the Work option and prevents Work mode from being selected.</small>
-            </span>
-          </label>
-          <label class="preference">
             <input id="show-spellcheck-gpt-launcher" type="checkbox" />
             <span>
               <strong>Show Spellcheck Only launcher</strong>
@@ -275,13 +281,11 @@
               <small>Shows the 2048 launcher in the repository dashboard footer.</small>
             </span>
           </label>
-          <label class="preference">
-            <input id="strip-utm-tracking" type="checkbox" checked />
-            <span>
-              <strong>Strip UTM tracking from links</strong>
-              <small>Removes utm_* query parameters from links shown by ChatGPT while preserving other URL data.</small>
-            </span>
-          </label>
+        </fieldset>
+
+        <hr class="section-divider" />
+        <fieldset id="chatgpt-copy-settings" aria-label="Copy and formatting settings">
+          <legend>Copy &amp; formatting</legend>
           <label class="preference">
             <input id="strip-copied-bold" type="checkbox" checked />
             <span>
@@ -303,6 +307,18 @@
               <small>Changes *italic* Markdown to _italic_ and normalizes rich-text italics to underscore syntax when copying.</small>
             </span>
           </label>
+        </fieldset>
+
+        <hr class="section-divider" />
+        <fieldset id="chatgpt-link-settings" aria-label="Link settings">
+          <legend>Links</legend>
+          <label class="preference">
+            <input id="strip-utm-tracking" type="checkbox" checked />
+            <span>
+              <strong>Strip UTM tracking from links</strong>
+              <small>Removes utm_* query parameters from links shown by ChatGPT while preserving other URL data.</small>
+            </span>
+          </label>
           <label class="preference">
             <input id="open-external-links-in-new-tabs" type="checkbox" checked />
             <span>
@@ -314,7 +330,7 @@
             <input id="open-external-links-in-split-view" type="checkbox" />
             <span>
               <strong>Open links beside the response</strong>
-              <small>Shows a website preview on the right instead of opening a tab. Sites that block previews can be opened in a new tab.</small>
+              <small>Shows a website preview on the right. Blocked or failed previews fall back to native split view; older browsers offer instructions for opening it manually.</small>
             </span>
           </label>
           <label class="preference">
@@ -324,6 +340,11 @@
               <small>Automatically continues when ChatGPT asks you to confirm an external destination.</small>
             </span>
           </label>
+        </fieldset>
+
+        <hr class="section-divider" />
+        <fieldset id="chatgpt-hidden-ui-settings" aria-label="Hidden and dismissed ChatGPT interface settings">
+          <legend>Hide &amp; dismiss</legend>
           <label class="preference">
             <input id="dismiss-history-rate-limit-modal" type="checkbox" />
             <span>
