@@ -30,10 +30,10 @@
   }
 
   function markChatTimestamps() {
-    const exactTime = /^(?:[01]?\\d|2[0-3]):[0-5]\\d(?:\\s?[AP]M)?$/i;
-    const dateLabel = /^(?:\\d{1,2}\\s+[A-Z][a-z]{2,8}\\s+\\d{4}|[A-Z][a-z]{2,8}\\s+\\d{1,2},\\s+\\d{4})$/;
-    const relativeDateTime = /^(?:Today|Yesterday),?\\s+(?:at\\s+)?(?:[01]?\\d|2[0-3]):[0-5]\\d(?:\\s?[AP]M)?$/i;
-    const absoluteDateTime = /^(?:\\d{1,2}\\s+[A-Z][a-z]{2,8}(?:\\s+\\d{4})?|[A-Z][a-z]{2,8}\\s+\\d{1,2}(?:,\\s+\\d{4})?)\\s+(?:at\\s+)?(?:[01]?\\d|2[0-3]):[0-5]\\d(?:\\s?[AP]M)?$/i;
+    const exactTime = /^(?:[01]?\d|2[0-3]):[0-5]\d(?:\s?[AP]M)?$/i;
+    const dateLabel = /^(?:\d{1,2}\s+[A-Z][a-z]{2,8}\s+\d{4}|[A-Z][a-z]{2,8}\s+\d{1,2},\s+\d{4})$/;
+    const relativeDateTime = /^(?:Today|Yesterday),?\s+(?:at\s+)?(?:[01]?\d|2[0-3]):[0-5]\d(?:\s?[AP]M)?$/i;
+    const absoluteDateTime = /^(?:\d{1,2}\s+[A-Z][a-z]{2,8}(?:\s+\d{4})?|[A-Z][a-z]{2,8}\s+\d{1,2}(?:,\s+\d{4})?)\s+(?:at\s+)?(?:[01]?\d|2[0-3]):[0-5]\d(?:\s?[AP]M)?$/i;
     const textStyleHint = /(?:text-xs|text-sm|tertiary|secondary|timestamp|time)/i;
 
     for (const turn of document.querySelectorAll(TURN_QUERY)) {
@@ -63,7 +63,7 @@
 
     for (const element of conversation.querySelectorAll("span, div")) {
       if (element.closest(TURN_QUERY) || element.children.length) continue;
-      const text = element.textContent?.replace(/\\s+/g, " ").trim() || "";
+      const text = element.textContent?.replace(/\s+/g, " ").trim() || "";
       if (!relativeDateTime.test(text) && !absoluteDateTime.test(text)) continue;
       const classes = typeof element.className === "string" ? element.className : "";
       if (!textStyleHint.test(classes)) continue;
