@@ -13,6 +13,7 @@
   const OWNER_GROUPS_PER_PAGE_KEY = "ownerGroupsPerPage";
   const SHOW_REPOSITORY_SEARCH_KEY = "showRepositorySearch";
   const SHOW_REPOSITORY_TOTAL_KEY = "showRepositoryTotal";
+  const PERSONAL_REPOSITORY_COLUMN_TITLE_KEY = "personalRepositoryColumnTitle";
   const SHOW_WOOTEN_LINK_SEARCH_KEY = "showWootenLinkSearch";
   const DEFAULT_OWNER_GROUPS_PER_PAGE = 6;
   const REPOSITORIES_PER_COLUMN = 7;
@@ -401,10 +402,16 @@
     return item;
   }
 
-  function createOwnerColumn(group, pinnedRepositories) {
+  function createOwnerColumn(group, pinnedRepositories, personalRepositoryColumnTitle) {
     const column = document.createElement("section");
     column.className = "ghrc-owner-column";
     const displayName = group.owner.displayName || group.owner.login;
+    const personalTitle = typeof personalRepositoryColumnTitle === "string"
+      ? personalRepositoryColumnTitle.trim()
+      : "";
+    const columnTitle = group.owner.type === "Organization" || !personalTitle
+      ? displayName
+      : personalTitle;
     column.setAttribute("aria-label", `${displayName} repositories`);
 
     const header = document.createElement("header");
@@ -418,8 +425,8 @@
 
     const heading = document.createElement("div");
     const name = document.createElement("h3");
-    name.textContent = displayName;
-    if (displayName !== group.owner.login) name.title = group.owner.login;
+    name.textContent = columnTitle;
+    if (columnTitle !== group.owner.login) name.title = group.owner.login;
     const type = document.createElement("span");
     type.textContent = group.owner.type === "Organization" ? "Organization" : "Personal";
     heading.append(name, type);
@@ -925,6 +932,7 @@
     ownerGroupsPerPage,
     showRepositorySearch,
     showRepositoryTotal,
+    personalRepositoryColumnTitle,
     showWootenLinkSearch,
   ) {
     widget.replaceChildren();
@@ -978,7 +986,11 @@
       const firstGroup = pageIndex * groupsPerPage;
       const pageGroups = groups.slice(firstGroup, firstGroup + groupsPerPage);
       columns.replaceChildren(
-        ...pageGroups.map((group) => createOwnerColumn(group, pinnedRepositories)),
+        ...pageGroups.map((group) => createOwnerColumn(
+          group,
+          pinnedRepositories,
+          personalRepositoryColumnTitle,
+        )),
       );
     };
 
@@ -1028,6 +1040,7 @@
           [OWNER_GROUPS_PER_PAGE_KEY]: DEFAULT_OWNER_GROUPS_PER_PAGE,
           [SHOW_REPOSITORY_SEARCH_KEY]: true,
           [SHOW_REPOSITORY_TOTAL_KEY]: true,
+          [PERSONAL_REPOSITORY_COLUMN_TITLE_KEY]: "Personal Repos",
           [SHOW_WOOTEN_LINK_SEARCH_KEY]: false,
         }),
       ]);
@@ -1047,6 +1060,7 @@
           stored[OWNER_GROUPS_PER_PAGE_KEY],
           Boolean(stored[SHOW_REPOSITORY_SEARCH_KEY]),
           Boolean(stored[SHOW_REPOSITORY_TOTAL_KEY]),
+          stored[PERSONAL_REPOSITORY_COLUMN_TITLE_KEY],
           Boolean(stored[SHOW_WOOTEN_LINK_SEARCH_KEY]),
         );
       }
@@ -1160,6 +1174,7 @@
       || changes.ownerGroupsPerPage
       || changes.showRepositorySearch
       || changes.showRepositoryTotal
+      || changes.personalRepositoryColumnTitle
       || changes.showWootenLinkSearch
     ) {
       repositoryRequest = null;
