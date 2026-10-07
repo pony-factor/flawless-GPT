@@ -4,6 +4,7 @@
   const ENABLED_KEY = "showClipboardSendButton";
   const BUTTON_ID = "ghrc-clipboard-send-button";
   const URL_BUTTON_ID = "ghrc-clipboard-open-url-button";
+  const ROUTE_CHANGE_EVENT = "ghrc:route-change";
 
   let enabled = false;
   let mountScheduled = false;
@@ -13,6 +14,10 @@
     // Use the same bottom composer as the queue. Inline message editors reuse
     // the markdown markup and must not receive or compete for these controls.
     return globalThis.__ghrcMessageQueue?.findComposerInput() || null;
+  }
+
+  function isNewChatPage() {
+    return window.location.pathname === "/";
   }
 
   function setButtonBusy(button, busy) {
@@ -180,6 +185,11 @@
       button = null;
     }
 
+    if (!isNewChatPage()) {
+      removeUrlButton();
+      return;
+    }
+
     let urlButton = document.getElementById(URL_BUTTON_ID);
     if (!urlButton) urlButton = createUrlButton();
     const urlAnchor = button?.parentElement === anchor.parentElement ? button : anchor;
@@ -212,7 +222,13 @@
   });
 
   const observer = new MutationObserver(scheduleMount);
-  context.onStop(() => { observer.disconnect(); removeButton(); removeUrlButton(); });
+  window.addEventListener(ROUTE_CHANGE_EVENT, scheduleMount);
+  context.onStop(() => {
+    window.removeEventListener(ROUTE_CHANGE_EVENT, scheduleMount);
+    observer.disconnect();
+    removeButton();
+    removeUrlButton();
+  });
   observer.observe(document.documentElement, {
     childList: true,
     subtree: true,
