@@ -2,7 +2,7 @@ importScripts("token-vault.js");
 
 const DEFAULT_OWNER_ORDER = [];
 const REPOSITORIES_PER_PAGE = 100;
-const REPOSITORY_CACHE_KEY = "repositoryPayloadCacheV2";
+const REPOSITORY_CACHE_KEY = "repositoryPayloadCacheV3";
 const REPOSITORY_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 const WOOTEN_LINK_TAB_ID_KEY = "wootenLinkSearchTabId";
 const ownerProfileCache = new Map();
@@ -160,31 +160,35 @@ async function loadInteractedRepositories(
   const repositoryUrls = new Map();
   const pageLimit = allPages ? 10 : 1;
 
-  for (let page = 1; page <= pageLimit; page += 1) {
-    const url = new URL("https://api.github.com/search/issues");
-    url.searchParams.set("q", `involves:${viewer.login}`);
-    url.searchParams.set("sort", "updated");
-    url.searchParams.set("order", "desc");
-    url.searchParams.set("page", String(page));
-    url.searchParams.set("per_page", String(REPOSITORIES_PER_PAGE));
+  // GitHub App user tokens require an explicit issue type. Search both types
+  // independently so issue comments and pull request activity are included.
+  for (const type of ["issue", "pull-request"]) {
+    for (let page = 1; page <= pageLimit; page += 1) {
+      const url = new URL("https://api.github.com/search/issues");
+      url.searchParams.set("q", `involves:${viewer.login} is:${type}`);
+      url.searchParams.set("sort", "updated");
+      url.searchParams.set("order", "desc");
+      url.searchParams.set("page", String(page));
+      url.searchParams.set("per_page", String(REPOSITORIES_PER_PAGE));
 
-    const payload = await fetchGitHub(url.toString(), token);
-    const items = Array.isArray(payload.items) ? payload.items : [];
+      const payload = await fetchGitHub(url.toString(), token);
+      const items = Array.isArray(payload.items) ? payload.items : [];
 
-    for (const item of items) {
-      const fullName = repositoryNameFromApiUrl(item.repository_url);
-      const key = fullName.toLowerCase();
-      if (!fullName || knownNames.has(key) || repositoryUrls.has(key)) continue;
-      repositoryUrls.set(key, item.repository_url);
-    }
+      for (const item of items) {
+        const fullName = repositoryNameFromApiUrl(item.repository_url);
+        const key = fullName.toLowerCase();
+        if (!fullName || knownNames.has(key) || repositoryUrls.has(key)) continue;
+        repositoryUrls.set(key, item.repository_url);
+      }
 
-    const searchableTotal = Math.min(Number(payload.total_count) || 0, 1000);
-    if (
-      !allPages
-      || items.length < REPOSITORIES_PER_PAGE
-      || page * REPOSITORIES_PER_PAGE >= searchableTotal
-    ) {
-      break;
+      const searchableTotal = Math.min(Number(payload.total_count) || 0, 1000);
+      if (
+        !allPages
+        || items.length < REPOSITORIES_PER_PAGE
+        || page * REPOSITORIES_PER_PAGE >= searchableTotal
+      ) {
+        break;
+      }
     }
   }
 

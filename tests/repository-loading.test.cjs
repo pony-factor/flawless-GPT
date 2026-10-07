@@ -121,7 +121,7 @@ test("repository cache hits do not refresh GitHub App credentials or depend on t
   const worker = createWorker({
     storage: {
       ownerOrder: [],
-      repositoryPayloadCacheV2: {
+      repositoryPayloadCacheV3: {
         fetchedAt: Date.now(),
         tokenSignature: tokenSignature([oldToken]),
         ownerOrder: [],
@@ -224,12 +224,13 @@ test("cold repository loads return a first-page payload while the complete refre
 
   releaseSecondPage();
   await new Promise((resolve) => setTimeout(resolve, 20));
-  assert.equal(worker.local.repositoryPayloadCacheV2.complete, true);
-  assert.equal(worker.local.repositoryPayloadCacheV2.payload.repositories[0].owner.displayName, "Octo");
+  assert.equal(worker.local.repositoryPayloadCacheV3.complete, true);
+  assert.equal(worker.local.repositoryPayloadCacheV3.payload.repositories[0].owner.displayName, "Octo");
 });
 
 
-test("complete repository refresh adds interacted upstream repositories to search only", async () => {
+test("GitHub App interaction searches use explicit issue types and replace the old cache", async () => {
+  const interactionQueries = [];
   const localRepository = makeRepository(0);
   const upstreamRepository = {
     ...makeRepository(1),
@@ -245,7 +246,25 @@ test("complete repository refresh adds interacted upstream repositories to searc
   };
 
   const worker = createWorker({
-    storage: { ownerOrder: [] },
+    storage: {
+      ownerOrder: [],
+      repositoryPayloadCacheV2: {
+        fetchedAt: Date.now(),
+        tokenSignature: tokenSignature([{
+          label: "GitHub App",
+          token: "access-token",
+          cacheKey: "github-app:stable-session",
+        }]),
+        ownerOrder: [],
+        complete: true,
+        payload: {
+          mode: "authenticated",
+          ownerOrder: [],
+          repositories: [localRepository],
+          searchRepositories: [localRepository],
+        },
+      },
+    },
     loadTokens: async () => [{
       label: "GitHub App",
       token: "access-token",
@@ -261,6 +280,12 @@ test("complete repository refresh adds interacted upstream repositories to searc
         return jsonResponse({ login: "octo" });
       }
       if (parsed.pathname === "/search/issues") {
+        const query = parsed.searchParams.get("q");
+        interactionQueries.push(query);
+        assert.match(query, / is:(issue|pull-request)$/);
+        if (query.endsWith("is:issue")) {
+          return jsonResponse({ total_count: 0, items: [] });
+        }
         return jsonResponse({
           total_count: 1,
           items: [{
@@ -280,23 +305,24 @@ test("complete repository refresh adds interacted upstream repositories to searc
 
   const initial = await worker.send({ type: "load-repositories" });
   assert.deepEqual(
-    initial.repositories.map(({ fullName }) => fullName),
+    Array.from(initial.repositories, ({ fullName }) => fullName),
     ["octo/repo-1"],
   );
   assert.deepEqual(
-    initial.searchRepositories.map(({ fullName }) => fullName),
+    Array.from(initial.searchRepositories, ({ fullName }) => fullName),
     ["octo/repo-1"],
   );
 
   await new Promise((resolve) => setTimeout(resolve, 30));
-  const refreshed = worker.local.repositoryPayloadCacheV2;
+  const refreshed = worker.local.repositoryPayloadCacheV3;
   assert.equal(refreshed.complete, true);
+  assert.deepEqual(interactionQueries, ["involves:octo is:issue", "involves:octo is:pull-request"]);
   assert.deepEqual(
-    refreshed.payload.repositories.map(({ fullName }) => fullName),
+    Array.from(refreshed.payload.repositories, ({ fullName }) => fullName),
     ["octo/repo-1"],
   );
   assert.deepEqual(
-    refreshed.payload.searchRepositories.map(({ fullName }) => fullName).sort(),
+    Array.from(refreshed.payload.searchRepositories, ({ fullName }) => fullName).sort(),
     ["octo/repo-1", "stellar/stellar-docs"],
   );
 });
