@@ -260,6 +260,10 @@
     return settledMs >= COMPLETE_SETTLE_MS;
   }
 
+  function queueSendCanProceed(responseActive, sendReady, steer) {
+    return !responseActive || Boolean(steer && sendReady);
+  }
+
   function shouldQueueComposerEnter(event) {
     return Boolean(
       event
@@ -283,6 +287,7 @@
     normalizeQueueItems,
     pumpSchedulingMode,
     queueCanAdvance,
+    queueSendCanProceed,
     shouldQueueComposerEnter,
   };
 
@@ -1268,12 +1273,19 @@
         if (!stop || stop.disabled || stop.getAttribute("aria-disabled") === "true") return;
         stop.click();
         const stopDeadline = Date.now() + SUBMIT_TIMEOUT_MS;
-        while (responseIsActive(composer) && Date.now() < stopDeadline) {
+        while (Date.now() < stopDeadline) {
           if (!context.active() || key !== activeKey || conversationKey() !== key || routeSyncRunning
             || composer !== findComposerInput() || !composer.isConnected) return;
+          const sendButton = findSendButton(composer);
+          const sendReady = Boolean(sendButton && !sendButton.disabled
+            && sendButton.getAttribute("aria-disabled") !== "true");
+          if (queueSendCanProceed(responseIsActive(composer), sendReady, true)) break;
           await new Promise(resolve => window.setTimeout(resolve, 80));
         }
-        if (responseIsActive(composer)) return;
+        const sendButton = findSendButton(composer);
+        const sendReady = Boolean(sendButton && !sendButton.disabled
+          && sendButton.getAttribute("aria-disabled") !== "true");
+        if (!queueSendCanProceed(responseIsActive(composer), sendReady, true)) return;
       }
       if (!context.active() || key !== activeKey || conversationKey() !== key || routeSyncRunning
         || composer !== findComposerInput() || !composer.isConnected
@@ -1311,7 +1323,7 @@
       }
 
       if (!context.active() || (queuePaused && !steer) || key !== activeKey || conversationKey() !== key
-        || routeSyncRunning || responseIsActive()
+        || routeSyncRunning || !queueSendCanProceed(responseIsActive(composer), true, steer)
         || !textMatchesComposer(composer, item.text)
         || !mentionsMatch(composer, item.mentions || [])
         || !contextMatches(restoredContext, composer)) return;

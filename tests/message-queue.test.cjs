@@ -129,6 +129,16 @@ test("requires the response-complete state to remain settled", () => {
   );
 });
 
+
+test("steer proceeds when Send is ready even if stale response markers remain", () => {
+  const helpers = api();
+
+  assert.equal(helpers.queueSendCanProceed(true, true, true), true);
+  assert.equal(helpers.queueSendCanProceed(true, false, true), false);
+  assert.equal(helpers.queueSendCanProceed(true, true, false), false);
+  assert.equal(helpers.queueSendCanProceed(false, false, false), true);
+});
+
 test("can start a queued message in an otherwise empty new chat", () => {
   const helpers = api();
   assert.equal(
