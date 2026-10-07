@@ -47,15 +47,6 @@ test('clipboard URL button only appears on the New Chat route', async () => {
         'send',
       ],
     );
-    assert.deepEqual(
-      await page.locator('main > button').evaluateAll(buttons => buttons.map(button => button.id)),
-      [
-        'ghrc-clipboard-send-button',
-        'ghrc-clipboard-open-url-button',
-        'ghrc-message-interrupt-button',
-        'send',
-      ],
-    );
 
     await page.evaluate(() => {
       history.pushState({}, '', '/c/example');
@@ -73,6 +64,15 @@ test('clipboard URL button only appears on the New Chat route', async () => {
     });
     await page.waitForSelector('#ghrc-clipboard-open-url-button');
     assert.equal(await page.locator('#ghrc-clipboard-open-url-button').count(), 1);
+    assert.deepEqual(
+      await page.locator('main > button').evaluateAll(buttons => buttons.map(button => button.id)),
+      [
+        'ghrc-clipboard-send-button',
+        'ghrc-clipboard-open-url-button',
+        'ghrc-message-interrupt-button',
+        'send',
+      ],
+    );
   } finally {
     await browser.close();
   }
