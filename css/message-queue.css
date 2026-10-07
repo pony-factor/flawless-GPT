@@ -11,8 +11,9 @@
   max-width: calc(100vw - 28px);
   overflow: hidden;
   position: relative;
+  container-type: inline-size;
   left: var(--ghrc-queue-left-offset, 0px);
-  width: min(38.4rem, 100%);
+  width: min(38.4rem, var(--ghrc-queue-available-width, 100%));
 }
 
 html.dark #ghrc-message-queue,
@@ -117,6 +118,7 @@ html[data-theme="dark"] #ghrc-message-queue {
   border-radius: 6px;
   font-size: 13px;
   height: 26px;
+  min-width: 0;
   opacity: 0.66;
   padding: 0;
   width: 24px;
@@ -191,14 +193,16 @@ html[data-theme="dark"] #ghrc-message-queue {
   display: none;
 }
 
-@media (max-width: 560px) {
+/* Respond to the queue's actual available width, even in narrow chat columns
+   inside otherwise wide desktop windows. */
+@container (max-width: 480px) {
   .ghrc-message-queue-header {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 2px;
+    flex-wrap: wrap;
   }
 
   .ghrc-message-queue-status {
+    flex-basis: 100%;
+    order: 3;
     text-align: left;
   }
 
