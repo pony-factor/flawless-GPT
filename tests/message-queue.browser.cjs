@@ -149,6 +149,24 @@ async function fixture({ active = false, voice = false, editable = true, stored 
   return page;
 }
 
+test('generating dots keep Enter in the queue when the native Stop control is stale', async () => {
+  const p = await fixture({ active: true });
+  await p.locator('[data-composer-markdown]').fill('Queue while the dots are active');
+  await p.evaluate(() => {
+    button.dataset.testid = 'send-button';
+    button.setAttribute('aria-label', 'Send prompt');
+    const turn = document.querySelector('[data-testid^="conversation-turn-"]:last-child');
+    turn.insertAdjacentHTML('beforeend', '<div role="status"><span>•••</span></div>');
+  });
+  await p.locator('[data-composer-markdown]').press('Enter');
+  await p.locator('.ghrc-message-queue-editor').waitFor();
+  assert.equal(await p.locator('.ghrc-message-queue-editor').inputValue(), 'Queue while the dots are active');
+  assert.deepEqual(await p.evaluate(() => sent), []);
+  assert.equal(await p.evaluate(() => stops), 0);
+  assert.deepEqual(p.errors, []);
+  await p.close();
+});
+
 for (const pending of ['generation', 'image-load']) test(`image-only reply advances the queue after ${pending} finishes`, async () => {
   const p = await fixture({ active: true, liveMarkup: true });
   await p.evaluate(async pending => {
@@ -218,6 +236,41 @@ test('standalone queue button is opt-in and follows setting changes', async () =
   await p.locator('#ghrc-message-queue-button').waitFor();
   await p.evaluate(() => chrome.storage.local.set({ showMessageQueueButton: false }));
   await p.waitForFunction(() => !document.getElementById('ghrc-message-queue-button'));
+  assert.deepEqual(p.errors, []);
+  await p.close();
+});
+
+test('inline message edits with app mentions stay outside the queue composer', async () => {
+  const p = await fixture({ active: true });
+  await p.evaluate(() => {
+    const editForm = document.createElement('form');
+    editForm.id = 'inline-edit-form';
+    editForm.innerHTML = `
+      <div id="inline-edit" data-composer-markdown contenteditable="true" role="textbox">
+        <p>Edited with <span app-mention-name="Plugin" app-mention-display-name="Plugin" app-mention-path="app://plugin" contenteditable="false">Plugin</span></p>
+      </div>
+      <button id="inline-edit-send" type="submit" aria-label="Send edit">Send edit</button>
+    `;
+    document.getElementById('turns').prepend(editForm);
+    window.inlineEditSubmits = 0;
+    editForm.addEventListener('submit', event => {
+      event.preventDefault();
+      window.inlineEditSubmits++;
+    });
+    editForm.querySelector('#inline-edit').addEventListener('keydown', event => {
+      if (event.key === 'Enter' && !event.defaultPrevented) {
+        event.preventDefault();
+        editForm.requestSubmit();
+      }
+    });
+  });
+
+  await p.waitForFunction(() => document.getElementById('ghrc-message-queue-button')?.closest('form') !== document.getElementById('inline-edit-form'));
+  await p.locator('#inline-edit').press('Enter');
+
+  assert.equal(await p.evaluate(() => window.inlineEditSubmits), 1);
+  assert.equal(await p.locator('.ghrc-message-queue-editor').count(), 0);
+  assert.equal(await p.evaluate(() => document.getElementById('ghrc-message-queue-button')?.closest('form')?.id || ''), '');
   assert.deepEqual(p.errors, []);
   await p.close();
 });

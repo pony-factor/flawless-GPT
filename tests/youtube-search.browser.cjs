@@ -6,6 +6,9 @@ const path = require('node:path');
 const { chromium } = require('playwright');
 
 const source = fs.readFileSync(path.join(__dirname, '../js/youtube-search.js'), 'utf8');
+const baseStyles = fs.readFileSync(path.join(__dirname, '../css/styles.css'), 'utf8');
+const wootenStyles = fs.readFileSync(path.join(__dirname, '../css/wooten-link-zipp-placeholder.css'), 'utf8');
+const searchStyles = fs.readFileSync(path.join(__dirname, '../css/youtube-search.css'), 'utf8');
 let browser;
 
 before(async () => {
@@ -24,7 +27,7 @@ async function fixture(stored = {}) {
 
   await page.route('https://youtube-search.test/**', route => route.fulfill({
     contentType: 'text/html',
-    body: '<main id="github-repositories-for-chatgpt"><footer class="ghrc-dashboard-footer"><nav class="ghrc-pagination"></nav></footer></main>',
+    body: '<main id="github-repositories-for-chatgpt"><footer class="ghrc-dashboard-footer"><form class="ghrc-wooten-link-search"><label><img class="ghrc-wooten-link-mark" alt=""><input type="search" placeholder="hrefs"></label><button class="ghrc-wooten-link-submit" type="submit"></button></form><nav class="ghrc-pagination"></nav></footer></main>',
   }));
   await page.goto('https://youtube-search.test/');
   await page.evaluate((initial) => {
@@ -61,6 +64,9 @@ async function fixture(stored = {}) {
     };
   }, stored);
 
+  await page.addStyleTag({ content: baseStyles });
+  await page.addStyleTag({ content: wootenStyles });
+  await page.addStyleTag({ content: searchStyles });
   await page.addScriptTag({ content: source });
   page.errors = errors;
   return page;
@@ -69,6 +75,14 @@ async function fixture(stored = {}) {
 test('YouTube search is visible by default and follows its setting live', async () => {
   const page = await fixture();
   await page.locator('.ghrc-youtube-search').waitFor();
+
+  const youtubeSubmit = page.locator('.ghrc-youtube-submit');
+  assert.equal(await youtubeSubmit.getAttribute('aria-label'), 'Search YouTube');
+  assert.equal(await youtubeSubmit.locator('svg.ghrc-youtube-logo').count(), 1);
+
+  const wootenInputWidth = await page.locator('.ghrc-wooten-link-search input').evaluate(element => element.getBoundingClientRect().width);
+  const youtubeInputWidth = await page.locator('.ghrc-youtube-search input').evaluate(element => element.getBoundingClientRect().width);
+  assert.ok(Math.abs(wootenInputWidth - youtubeInputWidth) < 0.5);
 
   await page.evaluate(() => chrome.storage.local.set({ showYoutubeSearch: false }));
   await page.waitForFunction(() => !document.querySelector('.ghrc-youtube-search'));

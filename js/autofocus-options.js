@@ -34,7 +34,10 @@
   bindCheckbox(document.getElementById("block-voice-prompts"), "blockVoicePrompts", false);
   bindInvertedCheckbox(document.getElementById("hide-message-queue-button"), MESSAGE_QUEUE_BUTTON_SETTING_KEY, false);
 
-  const chatDisplayFieldset = autoFocusInput?.closest("fieldset");
+  const chatInteractionFieldset = document.getElementById("chatgpt-interaction-settings")
+    || autoFocusInput?.closest("fieldset");
+  const chatDisplayFieldset = document.getElementById("chatgpt-display-settings")
+    || chatInteractionFieldset;
   const disableWorkPreference = document.getElementById("disable-work-mode")?.closest("label.preference");
 
   let sidebarHoverInput = document.getElementById("hover-reveal-sidebar");
@@ -48,15 +51,15 @@
         <small>Keeps the sidebar collapsed until you hover over the left edge, then collapses it again when you move away.</small>
       </span>
     `;
-    const preserveScrollPreference = document.getElementById("preserve-scroll-position-on-send")?.closest("label.preference");
-    if (preserveScrollPreference) preserveScrollPreference.insertAdjacentElement("beforebegin", preference);
+    const dictationPreference = document.getElementById("hide-dictation-button")?.closest("label.preference");
+    if (dictationPreference) dictationPreference.insertAdjacentElement("afterend", preference);
     else chatDisplayFieldset.append(preference);
     sidebarHoverInput = preference.querySelector("input");
   }
   bindCheckbox(sidebarHoverInput, HOVER_REVEAL_SIDEBAR_SETTING_KEY, false);
 
   let highInput = document.getElementById("force-high-thinking");
-  if (!highInput && chatDisplayFieldset) {
+  if (!highInput && chatInteractionFieldset) {
     const preference = document.createElement("label");
     preference.className = "preference";
     preference.innerHTML = `
@@ -67,13 +70,13 @@
       </span>
     `;
     if (disableWorkPreference) disableWorkPreference.insertAdjacentElement("afterend", preference);
-    else chatDisplayFieldset.append(preference);
+    else chatInteractionFieldset.append(preference);
     highInput = preference.querySelector("input");
   }
   bindCheckbox(highInput, FORCE_HIGH_SETTING_KEY, false);
 
   let clipboardSendInput = document.getElementById("show-clipboard-send-button");
-  if (!clipboardSendInput && chatDisplayFieldset) {
+  if (!clipboardSendInput && chatInteractionFieldset) {
     const preference = document.createElement("label");
     preference.className = "preference";
     preference.innerHTML = `
@@ -83,11 +86,11 @@
         <small>Adds a button that queues clipboard text without interrupting the response or replacing your draft.</small>
       </span>
     `;
-    const spellcheckPreference = document.getElementById("show-spellcheck-gpt-launcher")?.closest("label.preference");
+    const queuePreference = document.getElementById("hide-message-queue-button")?.closest("label.preference");
     const highPreference = highInput?.closest("label.preference");
-    const anchor = spellcheckPreference || highPreference || disableWorkPreference;
+    const anchor = queuePreference || highPreference || disableWorkPreference;
     if (anchor) anchor.insertAdjacentElement("afterend", preference);
-    else chatDisplayFieldset.append(preference);
+    else chatInteractionFieldset.append(preference);
     clipboardSendInput = preference.querySelector("input");
   }
   bindCheckbox(clipboardSendInput, CLIPBOARD_SEND_SETTING_KEY, false);

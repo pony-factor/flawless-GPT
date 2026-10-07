@@ -35,7 +35,7 @@
     return new Date(hasZone ? text : text + "Z");
   }
 
-  function formatDate(value) {
+  function formatAbsoluteDate(value) {
     const date = asDate(value);
     if (!date || Number.isNaN(date.getTime())) return "";
     const options = {
@@ -46,9 +46,20 @@
     return new Intl.DateTimeFormat("en-GB", options).format(date).replace(/,/g, "");
   }
 
+  function formatAge(value) {
+    const date = asDate(value);
+    if (!date || Number.isNaN(date.getTime())) return "";
+
+    const days = Math.max(0, Math.floor((Date.now() - date.getTime()) / 86_400_000));
+    if (days < 30) return `${days}d`;
+    if (days < 365) return `${Math.floor(days / 30)}mo`;
+    return `${Math.floor(days / 365)}y`;
+  }
+
   function annotateLink(link) {
     const id = conversationId(link);
-    const label = id ? dates.get(id) : "";
+    const createTime = id ? dates.get(id) : null;
+    const label = formatAge(createTime);
     let badge = link.querySelector(`:scope > .${DATE_CLASS}`);
     if (!label) {
       badge?.remove();
@@ -61,7 +72,7 @@
       link.prepend(badge);
     }
     if (badge.textContent !== label) badge.textContent = label;
-    badge.title = "Created " + label;
+    badge.title = "Created " + formatAbsoluteDate(createTime);
   }
 
   function scan() {
@@ -81,8 +92,8 @@
     if (event.data?.source !== SOURCE || event.data?.type !== DATA_EVENT) return;
     for (const item of event.data.items || []) {
       const id = typeof item?.id === "string" ? item.id : "";
-      const label = formatDate(item?.createTime);
-      if (id && label) dates.set(id, label);
+      const label = formatAge(item?.createTime);
+      if (id && label) dates.set(id, item.createTime);
     }
     scheduleScan();
   }
@@ -95,8 +106,10 @@
     attributes: true,
     attributeFilter: ["href"],
   });
+  const refreshTimer = setInterval(scheduleScan, 60 * 60 * 1000);
 
   context.onStop(() => {
+    clearInterval(refreshTimer);
     observer.disconnect();
     window.removeEventListener("message", receive);
   });
