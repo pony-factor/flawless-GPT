@@ -57,11 +57,6 @@ html[data-ghrc-link-preview="left"] {
   position: relative;
 }
 
-.ghrc-citation-source {
-  padding-inline-end: 40px !important;
-  box-sizing: border-box;
-}
-
 .ghrc-citation-actions {
   position: absolute;
   inset-inline-end: 8px;
