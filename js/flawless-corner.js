@@ -6,6 +6,19 @@
   const toggles = new Set();
   const newChats = new Set();
   let link = null;
+  const MASCOT_SIZE = 33;
+
+  function centerOverToggle(toggle) {
+    if (!link || !toggle) return;
+    const rect = toggle.getBoundingClientRect();
+    if (!rect.width || !rect.height) return;
+    // The mascot is a New chat link, but visually replaces the sidebar icon.
+    // Match the native button center instead of guessing the rail's padding.
+    const left = Math.round(rect.left + (rect.width - MASCOT_SIZE) / 2);
+    const top = Math.round(rect.top + (rect.height - MASCOT_SIZE) / 2);
+    link.style.left = `${Math.max(0, Math.min(window.innerWidth - MASCOT_SIZE, left))}px`;
+    link.style.top = `${Math.max(0, top)}px`;
+  }
 
   function reconcile() {
     if (!context.active() || !document.body) return;
@@ -34,6 +47,7 @@
       const bounds = control.getBoundingClientRect();
       return bounds.width && bounds.height && getComputedStyle(control).visibility !== "hidden";
     });
+    centerOverToggle(visible);
     for (const toggle of controls) {
       toggle.classList.add("ghrc-flawless-logo-button");
       toggles.add(toggle);
@@ -56,10 +70,12 @@
   const observer = new MutationObserver(reconcile);
   observer.observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ["aria-label"] });
   window.addEventListener("resize", reconcile);
+  window.addEventListener("scroll", reconcile, true);
   reconcile();
   context.onStop(() => {
     observer.disconnect();
     window.removeEventListener("resize", reconcile);
+    window.removeEventListener("scroll", reconcile, true);
     link?.remove();
     toggles.forEach(toggle => toggle.classList.remove("ghrc-flawless-logo-button"));
     newChats.forEach(control => control.classList.remove("ghrc-flawless-hidden-new-chat"));
