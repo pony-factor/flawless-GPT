@@ -2,15 +2,16 @@
   const context = globalThis.__ghrcExtensionContext;
   if (!context?.active()) return;
 
-  const IMAGE_CLASS = "ghrc-flawless-new-chat-image";
-  const ICON_CLASS = "ghrc-flawless-new-chat-icon";
+  const IMAGE_CLASS = "ghrc-flawless-logo-image";
+  const ICON_CLASS = "ghrc-flawless-logo-icon";
   const icons = new Set();
+  const buttons = new Set();
 
   function replaceIcons() {
     if (!context.active()) return;
     const controls = document.querySelectorAll(
-      'button[aria-label="New chat"], a[aria-label="New chat"], '
-      + 'button[data-testid="create-new-chat-button"], a[data-testid="create-new-chat-button"]',
+      'button[aria-label="Show sidebar"], button[aria-label="Open sidebar"], '
+      + 'button[aria-label="Expand sidebar"]',
     );
     for (const control of controls) {
       if (control.querySelector(`.${IMAGE_CLASS}`)) continue;
@@ -29,7 +30,12 @@
       }
       icon.before(image);
       icon.classList.add(ICON_CLASS);
+      control.classList.add("ghrc-flawless-logo-button");
+      buttons.add(control);
       icons.add(icon);
+    }
+    for (const button of buttons) {
+      if (!button.isConnected) buttons.delete(button);
     }
     for (const icon of icons) {
       if (!icon.isConnected) icons.delete(icon);
@@ -47,5 +53,7 @@
     document.querySelectorAll(`.${IMAGE_CLASS}`).forEach(image => image.remove());
     icons.forEach(icon => icon.classList.remove(ICON_CLASS));
     icons.clear();
+    buttons.forEach(button => button.classList.remove("ghrc-flawless-logo-button"));
+    buttons.clear();
   });
 })();

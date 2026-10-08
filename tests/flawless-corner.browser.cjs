@@ -18,7 +18,7 @@ async function fixture() {
   const page = await browser.newPage({ viewport: { width: 1100, height: 800 } });
   page.errors = [];
   page.on('pageerror', error => page.errors.push(error.message));
-  await page.setContent('<style>body{margin:0}aside{position:fixed;left:0;top:0;width:260px;height:100vh;background:#eee}svg{width:24px;height:24px}button{display:flex;align-items:center}</style><aside><button aria-label="Show sidebar"><svg></svg></button><button aria-label="New chat" onclick="window.newChats=(window.newChats||0)+1"><svg></svg><span>New chat</span></button><p>ChatGPT</p></aside><main></main>');
+  await page.setContent('<style>body{margin:0}aside{position:fixed;left:0;top:0;width:260px;height:100vh;background:#eee}svg{width:24px;height:24px}button{display:flex;align-items:center}</style><aside><button aria-label="Show sidebar" onclick="window.sidebarClicks=(window.sidebarClicks||0)+1"><svg></svg></button><button aria-label="New chat" onclick="window.newChats=(window.newChats||0)+1"><svg></svg><span>New chat</span></button><p>ChatGPT</p></aside><main></main>');
   await page.evaluate(() => {
     window.chrome = {
       runtime: { id: 'fixture', getURL: file => 'chrome-extension://fixture/' + file },
@@ -31,22 +31,25 @@ async function fixture() {
   return page;
 }
 
-test('Flawless image replaces the New chat icon while preserving native actions', async () => {
+test('Flawless image replaces the OpenAI logo while preserving native actions', async () => {
   const page = await fixture();
-  const button = page.getByRole('button', { name: 'New chat', exact: true });
-  const image = button.locator('.ghrc-flawless-new-chat-image');
+  const button = page.getByRole('button', { name: 'Show sidebar', exact: true });
+  const image = button.locator('.ghrc-flawless-logo-image');
   assert.equal(await image.count(), 1);
   assert.match(await image.getAttribute('src'), /artwork\/squeaky-belle-full\.webp$/);
   assert.equal(await button.locator('svg').isVisible(), false);
-  assert.equal(await button.locator('span').isVisible(), true);
-  assert.equal(await page.getByRole('button', { name: 'Show sidebar', exact: true }).locator('svg').isVisible(), true);
+  assert.equal(await page.getByRole('button', { name: 'New chat', exact: true }).locator('svg').isVisible(), true);
   const bounds = await image.boundingBox();
-  assert.equal(bounds.width, 22);
-  assert.equal(bounds.height, 22);
+  assert.equal(bounds.width, 33);
+  assert.equal(bounds.height, 33);
+  assert.deepEqual(await button.evaluate(element => {
+    const style = getComputedStyle(element);
+    return [style.padding, style.borderWidth];
+  }), ['0px', '0px']);
   await image.click();
-  assert.equal(await page.evaluate(() => window.newChats), 1);
-  await page.evaluate(() => document.querySelector('button[aria-label="New chat"]').innerHTML = '<svg></svg><span>New chat</span>');
-  await page.waitForFunction(() => !!document.querySelector('.ghrc-flawless-new-chat-image'));
+  assert.equal(await page.evaluate(() => window.sidebarClicks), 1);
+  await page.evaluate(() => document.querySelector('button[aria-label="Show sidebar"]').innerHTML = '<svg></svg>');
+  await page.waitForFunction(() => !!document.querySelector('.ghrc-flawless-logo-image'));
   assert.equal(await image.count(), 1);
   assert.deepEqual(page.errors, []);
   await page.close();
@@ -58,8 +61,8 @@ test('native icons return when the extension stops', async () => {
     chrome.runtime = undefined;
     __ghrcExtensionContext.active();
   });
-  assert.equal(await page.locator('.ghrc-flawless-new-chat-image').count(), 0);
-  assert.equal(await page.getByRole('button', { name: 'New chat', exact: true }).locator('svg').isVisible(), true);
+  assert.equal(await page.locator('.ghrc-flawless-logo-image').count(), 0);
+  assert.equal(await page.getByRole('button', { name: 'Show sidebar', exact: true }).locator('svg').isVisible(), true);
   assert.deepEqual(page.errors, []);
   await page.close();
 });
