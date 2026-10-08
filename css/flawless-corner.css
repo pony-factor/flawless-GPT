@@ -1,4 +1,4 @@
-/* Replace the OpenAI logo in the native sidebar toggle. */
+/* Replace the OpenAI logo and New chat icon in their native controls. */
 .ghrc-flawless-logo-button {
   background: transparent !important;
   border: 0 !important;
@@ -24,4 +24,11 @@
 
 .ghrc-flawless-logo-icon {
   display: none !important;
+}
+
+.ghrc-flawless-new-chat-button {
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  padding: 0 !important;
 }

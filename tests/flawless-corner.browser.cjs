@@ -38,7 +38,9 @@ test('Flawless image replaces the OpenAI logo while preserving native actions', 
   assert.equal(await image.count(), 1);
   assert.match(await image.getAttribute('src'), /artwork\/squeaky-belle-full\.webp$/);
   assert.equal(await button.locator('svg').isVisible(), false);
-  assert.equal(await page.getByRole('button', { name: 'New chat', exact: true }).locator('svg').isVisible(), true);
+  assert.equal(await page.getByRole('button', { name: 'New chat', exact: true }).locator('svg').isVisible(), false);
+  await page.getByRole('button', { name: 'New chat', exact: true }).locator('.ghrc-flawless-logo-image').click();
+  assert.equal(await page.evaluate(() => window.newChats), 1);
   const bounds = await image.boundingBox();
   assert.equal(bounds.width, 33);
   assert.equal(bounds.height, 33);

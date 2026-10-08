@@ -11,7 +11,8 @@
     if (!context.active()) return;
     const controls = document.querySelectorAll(
       'button[aria-label="Show sidebar"], button[aria-label="Open sidebar"], '
-      + 'button[aria-label="Expand sidebar"]',
+      + 'button[aria-label="Expand sidebar"], button[aria-label="New chat"], '
+      + 'a[aria-label="New chat"], [data-testid="create-new-chat-button"]',
     );
     for (const control of controls) {
       if (control.querySelector(`.${IMAGE_CLASS}`)) continue;
@@ -30,7 +31,8 @@
       }
       icon.before(image);
       icon.classList.add(ICON_CLASS);
-      control.classList.add("ghrc-flawless-logo-button");
+      const isSidebarToggle = /^(show|open|expand) sidebar$/i.test(control.getAttribute("aria-label") || "");
+      control.classList.add(isSidebarToggle ? "ghrc-flawless-logo-button" : "ghrc-flawless-new-chat-button");
       buttons.add(control);
       icons.add(icon);
     }
@@ -53,7 +55,7 @@
     document.querySelectorAll(`.${IMAGE_CLASS}`).forEach(image => image.remove());
     icons.forEach(icon => icon.classList.remove(ICON_CLASS));
     icons.clear();
-    buttons.forEach(button => button.classList.remove("ghrc-flawless-logo-button"));
+    buttons.forEach(button => button.classList.remove("ghrc-flawless-logo-button", "ghrc-flawless-new-chat-button"));
     buttons.clear();
   });
 })();
