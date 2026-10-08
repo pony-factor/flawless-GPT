@@ -38,6 +38,7 @@ const hideHomeSuggestionsInput = document.getElementById("hide-home-suggestions"
 const hideModelControlsInput = document.getElementById("hide-model-controls");
 const hideConversationFeedbackPromptInput = document.getElementById("hide-conversation-feedback-prompt");
 const hideChatTimestampsInput = document.getElementById("hide-chat-timestamps");
+const wrapChatResponsesInput = document.getElementById("wrap-chat-responses");
 const composerPlaceholderInput = document.getElementById("composer-placeholder");
 const hideChatgptDisclaimerInput = document.getElementById("hide-chatgpt-disclaimer");
 const hideCookiePreferencesInput = document.getElementById("hide-cookie-preferences");
@@ -340,6 +341,7 @@ async function loadSettings() {
     hideModelControls: true,
     hideConversationFeedbackPrompt: true,
     hideChatTimestamps: false,
+    wrapChatResponses: true,
     composerPlaceholder: "",
   });
   const storedOwnerOrder = normalizedOwnerOrder(settings.ownerOrder);
@@ -383,6 +385,7 @@ async function loadSettings() {
   hideHomeSuggestionsInput.checked = settings.hideHomeSuggestions !== false;
   hideModelControlsInput.checked = settings.hideModelControls !== false;
   hideConversationFeedbackPromptInput.checked = settings.hideConversationFeedbackPrompt !== false;
+  wrapChatResponsesInput.checked = settings.wrapChatResponses !== false;
   hideChatTimestampsInput.checked = Boolean(settings.hideChatTimestamps);
   composerPlaceholderInput.value = typeof settings.composerPlaceholder === "string" ? settings.composerPlaceholder : "";
   hideChatgptDisclaimerInput.checked = !Boolean(settings.showChatgptDisclaimer);
@@ -479,6 +482,7 @@ async function saveSettings() {
       hideModelControls: hideModelControlsInput.checked,
       hideConversationFeedbackPrompt: hideConversationFeedbackPromptInput.checked,
       hideChatTimestamps: hideChatTimestampsInput.checked,
+      wrapChatResponses: wrapChatResponsesInput.checked,
       composerPlaceholder: composerPlaceholderInput.value.trim(),
     });
     ownerListDirty = false;

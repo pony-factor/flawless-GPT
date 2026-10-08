@@ -130,10 +130,11 @@
     document.documentElement?.toggleAttribute("data-ghrc-show-model-controls", !settings.hideModelControls);
     document.documentElement?.toggleAttribute("data-ghrc-hide-conversation-feedback-prompt", settings.hideConversationFeedbackPrompt);
     document.documentElement?.toggleAttribute("data-ghrc-hide-chat-timestamps", settings.hideChatTimestamps);
+    document.documentElement?.toggleAttribute("data-ghrc-disable-response-wrap", !settings.wrapChatResponses);
     scheduleScan();
   }
 
-  let settings = { hideHomeSuggestions: true, hideModelControls: true, hideConversationFeedbackPrompt: true, hideChatTimestamps: false };
+  let settings = { hideHomeSuggestions: true, hideModelControls: true, hideConversationFeedbackPrompt: true, hideChatTimestamps: false, wrapChatResponses: true };
   document.documentElement?.setAttribute("data-ghrc-hide-conversation-feedback-prompt", "");
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== "local") return;
@@ -156,6 +157,7 @@
       hideModelControls: stored.hideModelControls !== false,
       hideConversationFeedbackPrompt: stored.hideConversationFeedbackPrompt !== false,
       hideChatTimestamps: Boolean(stored.hideChatTimestamps),
+      wrapChatResponses: stored.wrapChatResponses !== false,
     };
     apply(settings);
   });
