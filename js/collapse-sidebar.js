@@ -10,7 +10,6 @@
   const REVEAL_DELAY_MS = 350;
   const REVEAL_RETRY_MS = 750;
   const MENU_HOVER_PADDING = 12;
-  const RAIL_CLUSTER_GAP = 32;
   let initialCollapseFinished = false;
   let hoverRevealEnabled = false;
   let collapseTimer = null;
@@ -106,50 +105,13 @@
     return null;
   }
 
-  function presetIconBounds() {
-    const library = libraryControl();
-    if (!library) return null;
-
-    const scope = library.element.closest(
-      'aside, nav, [data-testid*="sidebar"], [data-testid*="navigation"]',
-    ) || document;
-    const railControls = Array.from(scope.querySelectorAll('a[href], button, [role="button"]'))
-      .filter(element => element !== library.element
-        && !element.contains(library.element)
-        && !library.element.contains(element))
-      .map(element => ({ element, bounds: visibleBounds(element) }))
-      .filter(({ bounds }) => (
-        bounds
-        && bounds.left <= EDGE_HOTSPOT_WIDTH + 24
-        && bounds.right <= EDGE_HOTSPOT_WIDTH + 32
-        && bounds.top >= library.bounds.bottom
-      ))
-      .sort((a, b) => a.bounds.top - b.bounds.top);
-
-    const presetBounds = [];
-    let clusterBottom = library.bounds.bottom;
-    for (const { bounds } of railControls) {
-      if (bounds.top - clusterBottom > RAIL_CLUSTER_GAP) break;
-      presetBounds.push(bounds);
-      clusterBottom = Math.max(clusterBottom, bounds.bottom);
-    }
-
-    // The current rail omits preset icons. Keep a small reveal band below
-    // Library so hover remains available without activating its own button.
-    if (!presetBounds.length) return {
-      top: library.bounds.bottom,
-      bottom: Math.min(window.innerHeight, library.bounds.bottom + library.bounds.height * 3),
-    };
-    return {
-      top: library.bounds.bottom,
-      bottom: clusterBottom,
-    };
-  }
-
   function pointerInRevealHotspot() {
-    if (!pointer.inside || pointer.x > EDGE_HOTSPOT_WIDTH) return false;
-    const band = presetIconBounds();
-    return Boolean(band && pointer.y >= band.top && pointer.y <= band.bottom);
+    if (!pointer.inside || pointer.x < 0 || pointer.x > EDGE_HOTSPOT_WIDTH) return false;
+    const library = libraryControl();
+    // The entire left rail below Library is a hover target, even when there
+    // are no preset icons or the pointer is near the bottom of the viewport.
+    return Boolean(library && pointer.y >= library.bounds.bottom
+      && pointer.y < window.innerHeight);
   }
 
   function scheduleReveal() {
