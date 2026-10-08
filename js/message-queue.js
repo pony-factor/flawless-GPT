@@ -1171,7 +1171,10 @@
     if (!text.trim()) return false;
     const composer = findComposerInput();
     if (!composer) return false;
-    if (queue.length || responseIsActive(composer) || nativeSubmissionPending(composer)
+    // Work can keep an enabled Send control while its response is unfinished.
+    // Use the same completion gate as the FIFO, rather than treating a missing
+    // Stop/streaming indicator as permission to submit and interrupt that work.
+    if (queue.length || !queueCanAdvance(lifecycleSnapshot(), COMPLETE_SETTLE_MS) || nativeSubmissionPending(composer)
       || sendingItemId || enqueueRunning || interruptRunning) return enqueueText(text);
     // Preserve attachments and selected context for the existing draft.
     if (hasComposerContext(composer)) return enqueueText(text);
@@ -1193,7 +1196,7 @@
         if (!context.active() || key !== activeKey || conversationKey() !== key || routeSyncRunning
           || composer !== findComposerInput() || !composer.isConnected
           || !textMatchesComposer(composer, text) || hasComposerContext(composer)) return false;
-        if (responseIsActive(composer) || queue.length) return enqueueText(text);
+        if (!queueCanAdvance(lifecycleSnapshot(), COMPLETE_SETTLE_MS) || queue.length) return enqueueText(text);
         const sendButton = findSendButton(composer);
         if (sendButton && !sendButton.disabled && sendButton.getAttribute("aria-disabled") !== "true") {
           sendButton.click();
