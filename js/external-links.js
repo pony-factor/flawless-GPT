@@ -312,7 +312,7 @@
     const close = document.createElement("button");
     close.className = "ghrc-preview-control";
     close.type = "button";
-    close.textContent = "×";
+    close.innerHTML = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 5l14 14M19 5L5 19"/></svg>';
     close.title = "Close website preview";
     close.setAttribute("aria-label", "Close website preview");
     close.addEventListener("click", closeLinkPreview);
