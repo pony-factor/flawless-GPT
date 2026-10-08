@@ -879,6 +879,50 @@ test('native Stop only stops, and the idle hat sends a draft immediately', async
   await p.close();
 });
 
+test('native Send overrides a stale Stop instead of showing two hats', async () => {
+  const p = await fixture({ active: true, queueButton: false });
+  await p.locator('[data-composer-markdown]').fill('Draft during generation');
+  await p.getByRole('button', { name: 'Interrupt and send', exact: true }).waitFor();
+  await p.evaluate(() => {
+    const send = document.createElement('button');
+    send.id = 'concurrent-native-send';
+    send.type = 'button';
+    send.dataset.testid = 'send-button';
+    send.setAttribute('aria-label', 'Send prompt');
+    send.textContent = 'Send';
+    window.button.after(send);
+  });
+  await p.waitForFunction(() => !document.querySelector('#ghrc-message-interrupt-button'));
+  assert.equal(await p.locator('button[data-testid="send-button"]').count(), 1);
+  await p.evaluate(() => { document.querySelector('#concurrent-native-send').disabled = true; });
+  await p.waitForTimeout(100);
+  assert.equal(await p.locator('#ghrc-message-interrupt-button').count(), 0);
+  await p.evaluate(() => document.querySelector('#concurrent-native-send').remove());
+  await p.getByRole('button', { name: 'Interrupt and send', exact: true }).waitFor();
+  assert.deepEqual(p.errors, []);
+  await p.close();
+});
+
+test('aria-label-only Voice to Send transitions remove the stale empty hat', async () => {
+  const p = await fixture({ voice: true, liveMarkup: true, queueButton: false });
+  await p.addStyleTag({ content: fs.readFileSync(path.join(__dirname, '../css/hide-dictation.css'), 'utf8') });
+  await p.evaluate(() => document.documentElement.setAttribute('data-ghrc-hide-dictation', ''));
+  await p.getByRole('button', { name: 'Send message', exact: true }).waitFor();
+  // Selection-only sends can update the native action without an input event.
+  await p.evaluate(() => { window.button.setAttribute('aria-label', 'Send'); });
+  await p.waitForFunction(() => !document.querySelector('#ghrc-message-interrupt-button'));
+  assert.equal(await p.getByRole('button', { name: 'Send', exact: true }).count(), 1);
+  await p.evaluate(() => { window.button.setAttribute('aria-label', 'Start Voice'); });
+  await p.getByRole('button', { name: 'Send message', exact: true }).waitFor();
+  await p.evaluate(() => {
+    window.button.setAttribute('aria-label', 'Submit prompt');
+    window.button.dataset.testid = 'composer-submit-button';
+  });
+  await p.waitForFunction(() => !document.querySelector('#ghrc-message-interrupt-button'));
+  assert.deepEqual(p.errors, []);
+  await p.close();
+});
+
 test('an empty disabled hat remains visible with voice hidden and yields to native Send', async () => {
   const p = await fixture({ voice: true, liveMarkup: true, queueButton: false });
   await p.addStyleTag({ content: fs.readFileSync(path.join(__dirname, '../css/hide-dictation.css'), 'utf8') });
