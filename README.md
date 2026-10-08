@@ -14,6 +14,8 @@ The dashboard:
 - can independently hide the repository search bar or repository total;
 - optionally hides the dictation microphone, compacts the new-chat heading, or
   disables ChatGPT Work mode;
+- wraps long ChatGPT response text, links, and code by default, with a Display
+  preference to restore native horizontal overflow;
 - strips UTM tracking parameters from links shown by ChatGPT by default;
 - can skip ChatGPT's external-site warning and dismiss its history rate-limit
   modal independently;

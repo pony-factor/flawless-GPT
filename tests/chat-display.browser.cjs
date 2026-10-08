@@ -195,6 +195,35 @@ test('response wrap opt-out persists and can be switched live without reloading'
   await p.close();
 });
 
+test('long response links wrap and delayed preferences restore native overflow', async () => {
+  const p = await fixture({ delayStorage: true, stored: { wrapChatResponses: false } });
+  await p.evaluate(() => {
+    document.querySelector('main').insertAdjacentHTML('beforeend', `
+      <article data-message-author-role="assistant">
+        <a id="wrapped-link" style="display:block;width:110px" href="https://example.org/averyveryveryveryveryveryveryverylongurl">
+          https://example.org/averyveryveryveryveryveryveryverylongurl
+        </a>
+        <pre id="delayed-wrap-code" style="width:110px"><code>averylongunbrokencodeline</code></pre>
+      </article>`);
+  });
+  // Defaults must apply while asynchronous storage is unresolved.
+  assert.equal(await p.locator('#wrapped-link').evaluate(e => getComputedStyle(e).overflowWrap), 'anywhere');
+  assert.equal(await p.locator('#wrapped-link').evaluate(e => e.scrollWidth <= e.clientWidth), true);
+  assert.equal(await p.locator('#delayed-wrap-code').evaluate(e => getComputedStyle(e).whiteSpace), 'pre-wrap');
+
+  await p.evaluate(() => window.resolveStorage());
+  await p.waitForFunction(() => document.documentElement.hasAttribute('data-ghrc-disable-response-wrap'));
+  assert.notEqual(await p.locator('#wrapped-link').evaluate(e => getComputedStyle(e).overflowWrap), 'anywhere');
+  assert.equal(await p.locator('#delayed-wrap-code').evaluate(e => getComputedStyle(e).whiteSpace), 'pre');
+
+  await p.evaluate(() => chrome.storage.local.set({ wrapChatResponses: true }));
+  await p.waitForFunction(() => !document.documentElement.hasAttribute('data-ghrc-disable-response-wrap'));
+  assert.equal(await p.locator('#wrapped-link').evaluate(e => getComputedStyle(e).overflowWrap), 'anywhere');
+  assert.equal(await p.locator('#delayed-wrap-code').evaluate(e => getComputedStyle(e).whiteSpace), 'pre-wrap');
+  assert.deepEqual(p.errors, []);
+  await p.close();
+});
+
 test('conversation tail spacer follows the newest outer turn and creates real scroll range', async () => {
   const p = await fixture();
   await p.evaluate(() => {
