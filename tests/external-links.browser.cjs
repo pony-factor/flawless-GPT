@@ -18,6 +18,9 @@ async function fixture(settings = {}, githubResponse = null) {
     body: '<style>body{margin:0}main{width:100%;min-height:1800px;padding-top:500px;box-sizing:border-box}</style><main><p><a id="source" href="https://example.org/source?utm_source=chatgpt&keep=1#section">Source reference</a></p><p><a id="internal" href="/c/another">Another chat</a></p></main>',
   }));
   await page.route('https://example.org/**', route => route.fulfill({ contentType: 'text/html', body: '<h1>Source content</h1>' }));
+  await page.route('https://preview.test/link-preview.html', route => route.fulfill({
+    contentType: 'text/html', body: '<body><script>' + read('js/link-preview-host.js') + '</script></body>',
+  }));
   await page.goto('https://chatgpt.com/c/example');
   await page.evaluate(({ settings, githubResponse }) => {
     window.settingsListeners = [];
@@ -33,6 +36,7 @@ async function fixture(settings = {}, githubResponse = null) {
     });
     window.chrome = {
       runtime: {
+        getURL: file => `https://preview.test/${file}`,
         onMessage: { addListener: fn => runtimeListeners.push(fn) },
         sendMessage: async message => {
           previewRequests.push(message);
@@ -79,7 +83,7 @@ test('sidebar mode adds a separate action while preserving the normal new-tab in
   await page.evaluate(() => window.scrollTo(0, 420));
   const before = await page.evaluate(() => window.scrollY);
   await actions.locator('.ghrc-link-sidebar-button').click();
-  await page.frameLocator('#ghrc-link-preview iframe').locator('h1').waitFor();
+  await page.frameLocator('#ghrc-link-preview iframe').frameLocator('iframe').locator('h1').waitFor();
   const after = await page.evaluate(() => window.scrollY);
   assert.ok(Math.abs(after - before) < 3);
   assert.equal((await page.evaluate(() => openedLinks)).length, 1);
@@ -107,7 +111,7 @@ test('preview waits for its navigation watch without mounting a same-origin blan
   await page.waitForFunction(() => Boolean(window.releaseWatch));
   assert.equal(await page.locator('#ghrc-link-preview iframe').count(), 0);
   await page.evaluate(() => releaseWatch());
-  await page.frameLocator('#ghrc-link-preview iframe').locator('h1').waitFor();
+  await page.frameLocator('#ghrc-link-preview iframe').frameLocator('iframe').locator('h1').waitFor();
   assert.deepEqual(warnings, []);
   await page.close();
 });
@@ -117,7 +121,7 @@ test('left-side preview moves the panel, keeps controls ordered, and resizes fro
   const actions = page.locator('.ghrc-link-actions');
   await actions.waitFor();
   await actions.locator('.ghrc-link-sidebar-button').click();
-  await page.frameLocator('#ghrc-link-preview iframe').locator('h1').waitFor();
+  await page.frameLocator('#ghrc-link-preview iframe').frameLocator('iframe').locator('h1').waitFor();
 
   const preview = await page.locator('#ghrc-link-preview').boundingBox();
   assert.ok(preview.x <= 1);
@@ -164,7 +168,7 @@ test('GitHub embeds the website first and uses the API only after the active fra
   await page.route('https://github.com/**', route => route.fulfill({ contentType: 'text/html', body: '<h1>Full GitHub website</h1>' }));
   await page.locator('#source').evaluate(link => { link.href = 'https://github.com/owner/repo/pull/42'; });
   await page.locator('.ghrc-link-sidebar-button').click();
-  await page.frameLocator('#ghrc-link-preview iframe').locator('h1').waitFor();
+  await page.frameLocator('#ghrc-link-preview iframe').frameLocator('iframe').locator('h1').waitFor();
   assert.equal((await page.evaluate(() => previewRequests)).some(message => message.type === 'load-github-link-preview'), false);
   const watch = (await page.evaluate(() => previewRequests)).find(message => message.type === 'watch-link-preview');
   await page.evaluate(watch => runtimeListeners.forEach(fn => fn({
@@ -190,7 +194,7 @@ test('GitHub embeds the website first and uses the API only after the active fra
 test('the vertical divider resizes the sidebar and persists the allocation', async () => {
   const page = await fixture({ openExternalLinksInSplitView: true });
   await page.locator('.ghrc-link-sidebar-button').click();
-  await page.frameLocator('#ghrc-link-preview iframe').locator('h1').waitFor();
+  await page.frameLocator('#ghrc-link-preview iframe').frameLocator('iframe').locator('h1').waitFor();
   const before = (await page.locator('#ghrc-link-preview').boundingBox()).width;
   const separator = page.getByRole('separator', { name: 'Resize website sidebar' });
   await separator.focus();
@@ -204,7 +208,7 @@ test('the vertical divider resizes the sidebar and persists the allocation', asy
 test('blocked embedded previews can still fall back to the browser native split', async () => {
   const page = await fixture({ openExternalLinksInSplitView: true });
   await page.locator('.ghrc-link-sidebar-button').click();
-  await page.frameLocator('#ghrc-link-preview iframe').locator('h1').waitFor();
+  await page.frameLocator('#ghrc-link-preview iframe').frameLocator('iframe').locator('h1').waitFor();
   const watch = (await page.evaluate(() => previewRequests)).find(message => message.type === 'watch-link-preview');
   assert.ok(watch);
   await page.evaluate(watch => runtimeListeners.forEach(fn => fn({
@@ -287,7 +291,7 @@ for (const side of ['right', 'left']) {
       document.body.prepend(root);
     });
     await page.locator('.ghrc-link-sidebar-button').click();
-    await page.frameLocator('#ghrc-link-preview iframe').locator('h1').waitFor();
+    await page.frameLocator('#ghrc-link-preview iframe').frameLocator('iframe').locator('h1').waitFor();
     const dimensions = () => page.evaluate(() => {
       const rect = id => {
         if (!document.getElementById(id)) return null;

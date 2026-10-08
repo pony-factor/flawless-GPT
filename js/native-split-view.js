@@ -79,7 +79,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 });
 
 chrome.webNavigation.onBeforeNavigate.addListener(details => {
-  if (details.frameId === 0 || details.parentFrameId !== 0) return;
+  if (details.frameId === 0) return;
   void (async () => {
     const key = `linkPreviewWatch:${details.tabId}`;
     const saved = await chrome.storage.session.get(key);

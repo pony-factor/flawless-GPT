@@ -68,7 +68,7 @@ test('rejects foreign origins and callers outside ChatGPT', () => {
 test('blocked preview navigation forwards only the active matching frame, including redirects', async () => {
   const f = fixture();
   f.session['linkPreviewWatch:10'] = { url: 'https://example.org/article', id: 'preview' };
-  f.navigation.before({ tabId: 10, frameId: 3, parentFrameId: 0, url: 'https://example.org/article' });
+  f.navigation.before({ tabId: 10, frameId: 3, parentFrameId: 2, url: 'https://example.org/article' });
   await new Promise(resolve => setImmediate(resolve));
   f.navigation.error({ tabId: 10, frameId: 4, url: 'https://unrelated.test', error: 'net::ERR_BLOCKED_BY_RESPONSE' });
   f.navigation.error({ tabId: 10, frameId: 0, url: 'https://example.org/article', error: 'net::ERR_BLOCKED_BY_RESPONSE' });

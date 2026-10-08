@@ -167,6 +167,7 @@
   "web_accessible_resources": [
     {
       "resources": [
+        "link-preview.html",
         "artwork/spellcheck-only.png",
         "artwork/calligraphy-initials.png",
         "artwork/research-telescope.png",

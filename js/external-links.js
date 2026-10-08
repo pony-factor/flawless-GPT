@@ -328,7 +328,6 @@
     } else {
       const frame = document.createElement("iframe");
       frame.title = "Website preview: " + url.hostname;
-      frame.setAttribute("sandbox", "allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox");
       frame.referrerPolicy = "no-referrer";
       const watch = { id: `${Date.now()}:${nativeSplitRequest}`, href, link, panel };
       previewWatch = watch;
@@ -339,10 +338,9 @@
           // Keep usable embedded previews available if the worker is restarting.
         }
         if (previewWatch === watch && panel.isConnected) {
-          // Set the external destination before connecting the frame. Mounting
-          // about:blank first inherits ChatGPT's origin and triggers the
-          // allow-scripts/allow-same-origin sandbox warning.
-          frame.src = href;
+          // Host the remote frame in an extension page so ChatGPT's
+          // frame-src policy does not reject ordinary sites and PDF viewers.
+          frame.src = `${chrome.runtime.getURL("link-preview.html")}#${encodeURIComponent(href)}`;
           panel.append(frame);
         }
       })();
