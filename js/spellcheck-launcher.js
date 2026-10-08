@@ -60,7 +60,9 @@
     const scope = composer?.closest?.("form")
       || composer?.closest?.('[data-type="unified-composer"]')
       || composer;
-    return [...(scope?.querySelectorAll?.("[app-mention-path], [app-mention-display-name]") || [])].find((node) => {
+    const inline = [...(composer?.querySelectorAll?.("[app-mention-path]") || [])];
+    const outer = scope === composer ? [] : [...(scope?.querySelectorAll?.("[app-mention-path], [app-mention-display-name]") || [])];
+    return [...inline, ...outer].find((node) => {
       const path = node.getAttribute?.("app-mention-path") || "";
       return (!path || /^app:\/\//.test(path)) && pluginLabelMatches(node);
     }) || null;
