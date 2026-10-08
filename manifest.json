@@ -109,6 +109,7 @@
         "js/avatar-cache-ui.js",
         "js/repository-fast-ui.js",
         "js/owner-grid.js",
+        "js/repository-search-shortcut.js",
         "js/content.js"
       ],
       "run_at": "document_start"

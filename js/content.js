@@ -12,6 +12,9 @@
   const HIDDEN_OWNERS_KEY = "hiddenOwners";
   const OWNER_GROUPS_PER_PAGE_KEY = "ownerGroupsPerPage";
   const SHOW_REPOSITORY_SEARCH_KEY = "showRepositorySearch";
+  const REPOSITORY_SEARCH_SHORTCUT_KEY = "repositorySearchShortcut";
+  const searchShortcutUtils = globalThis.__ghrcRepositorySearchShortcut;
+  let repositorySearchShortcut = searchShortcutUtils.normalize();
   const ENABLE_CUSTOM_REPOSITORIES_KEY = "enableCustomRepositorySearch";
   const CUSTOM_REPOSITORIES_KEY = "customRepositorySearchOverrides";
   const SHOW_REPOSITORY_TOTAL_KEY = "showRepositoryTotal";
@@ -524,6 +527,7 @@
     showRepositorySearch,
     showRepositoryTotal,
     customRepositories,
+    searchShortcut,
     enableCustomRepositorySearch,
   ) {
     if (!showRepositorySearch && !showRepositoryTotal) return;
@@ -576,7 +580,7 @@
       searchLabel.append(search);
 
       const shortcut = document.createElement("kbd");
-      shortcut.textContent = "Alt R";
+      shortcut.textContent = searchShortcutUtils.format(searchShortcut);
       searchLabel.append(shortcut);
 
       const overrideButton = document.createElement("button");
@@ -1094,6 +1098,7 @@
     personalRepositoryColumnTitle,
     showWootenLinkSearch,
     customRepositories,
+    searchShortcut,
     enableCustomRepositorySearch,
   ) {
     widget.replaceChildren();
@@ -1119,6 +1124,7 @@
       showRepositorySearch,
       showRepositoryTotal,
       customRepositories,
+      searchShortcut,
       enableCustomRepositorySearch,
     );
 
@@ -1205,6 +1211,7 @@
           [HIDDEN_OWNERS_KEY]: [],
           [OWNER_GROUPS_PER_PAGE_KEY]: DEFAULT_OWNER_GROUPS_PER_PAGE,
           [SHOW_REPOSITORY_SEARCH_KEY]: true,
+          [REPOSITORY_SEARCH_SHORTCUT_KEY]: searchShortcutUtils.DEFAULT,
           [CUSTOM_REPOSITORIES_KEY]: [],
           [ENABLE_CUSTOM_REPOSITORIES_KEY]: false,
           [SHOW_REPOSITORY_TOTAL_KEY]: true,
@@ -1218,6 +1225,7 @@
         throw new Error(payload.error);
       }
 
+      repositorySearchShortcut = searchShortcutUtils.normalize(stored[REPOSITORY_SEARCH_SHORTCUT_KEY]);
       if (widget.isConnected) {
         renderRepositories(
           widget,
@@ -1231,6 +1239,7 @@
           stored[PERSONAL_REPOSITORY_COLUMN_TITLE_KEY],
           Boolean(stored[SHOW_WOOTEN_LINK_SEARCH_KEY]),
           stored[CUSTOM_REPOSITORIES_KEY],
+          repositorySearchShortcut,
           Boolean(stored[ENABLE_CUSTOM_REPOSITORIES_KEY]),
         );
       }
@@ -1308,13 +1317,15 @@
   }
 
   document.addEventListener("keydown", (event) => {
-    if (event.altKey && event.key.toLowerCase() === "r") {
-      const search = document.querySelector(`#${WIDGET_ID} input[type="search"]`);
-      if (search) {
-        event.preventDefault();
-        search.focus();
-      }
-    }
+    if (!searchShortcutUtils.matches(event, repositorySearchShortcut)) return;
+    if (!searchShortcutUtils.hasModifiers(repositorySearchShortcut)
+      && searchShortcutUtils.isEditable(event, document)
+      && !searchShortcutUtils.isEmptyComposer(event, repositorySearchShortcut)) return;
+    if (document.querySelector('dialog[open], [role="dialog"][aria-modal="true"]')) return;
+    const search = document.querySelector(`#${WIDGET_ID} input[type="search"]`);
+    if (!search) return;
+    event.preventDefault();
+    search.focus();
   });
 
   window.addEventListener("resize", scheduleMount);
@@ -1331,6 +1342,12 @@
 
   chrome.storage.onChanged.addListener((changes, areaName) => {
     if (areaName !== "local") return;
+
+    if (changes.repositorySearchShortcut) {
+      repositorySearchShortcut = searchShortcutUtils.normalize(changes.repositorySearchShortcut.newValue);
+      const hint = document.querySelector(`#${WIDGET_ID} .ghrc-search kbd`);
+      if (hint) hint.textContent = searchShortcutUtils.format(repositorySearchShortcut);
+    }
 
     if (changes.hideDictationButton || changes.compactNewChatHeader) {
       void context.run(loadDisplayPreferences);

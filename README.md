@@ -248,4 +248,10 @@ ciphertext stays there as well, while its non-extractable encryption key is kept
 in the extension's IndexedDB vault. Tokens are decrypted only when the extension
 needs to load settings or authenticate to GitHub's API.
 
-Press **Alt+R** on the new-chat page to focus the repository search field.
+Press **Alt+R** on the new-chat page to focus the repository search field by
+default. In **Dashboard → Repository search shortcut**, click the shortcut
+button and press a key or key combination to replace it (for example, **Del**).
+The setting works in both the browser popup and Full settings, updates the
+shortcut hint immediately, and includes **Reset** to restore Alt+R. A plain
+shortcut key leaves normal typing, deletion, and editing alone while a text
+field is active. Browser-reserved keyboard combinations may be unavailable.

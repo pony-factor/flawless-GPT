@@ -630,3 +630,35 @@ button.secondary {
 #composer-color-settings .composer-color-clear { font-size:12px; padding:4px 6px; min-height:30px; }
 #composer-color-settings .composer-color-clear[hidden] { display:none; }
 #composer-color-reset:disabled { opacity:0.45; cursor:default; }
+
+.repository-shortcut-setting {
+  margin: 14px 0;
+}
+
+.repository-shortcut-setting > label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  margin: 0 0 8px;
+}
+
+.repository-shortcut-controls {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+}
+
+.repository-shortcut-controls #repository-search-shortcut {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.repository-shortcut-controls #repository-search-shortcut[aria-pressed="true"] {
+  outline: 2px solid #a97dee;
+  outline-offset: 2px;
+}
+
+.repository-shortcut-setting .help {
+  margin-top: 8px;
+}

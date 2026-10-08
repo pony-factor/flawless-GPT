@@ -95,6 +95,14 @@
               <small>Shows the repository search field in the dashboard header.</small>
             </span>
           </label>
+          <div class="repository-shortcut-setting">
+            <label for="repository-search-shortcut">Repository search shortcut</label>
+            <div class="repository-shortcut-controls">
+              <button id="repository-search-shortcut" type="button" class="secondary" aria-label="Record repository search shortcut">Alt+R</button>
+              <button id="repository-search-shortcut-reset" type="button" class="secondary">Reset</button>
+            </div>
+            <p id="repository-search-shortcut-help" class="help" role="status">Click the shortcut, then press any non-modifier key or key combination. Unmodified keys won't interrupt typing in a text field.</p>
+          </div>
           <label class="preference">
             <input id="enable-custom-repository-search" type="checkbox" />
             <span>
@@ -499,6 +507,7 @@
       </div>
     </template>
     <script src="js/token-vault.js"></script>
+    <script src="js/repository-search-shortcut.js"></script>
     <script src="js/options.js"></script>
     <script src="js/highlighted-pages-options.js"></script>
     <script src="js/research-publisher-options.js"></script>
