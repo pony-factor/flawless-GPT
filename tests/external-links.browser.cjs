@@ -55,6 +55,7 @@ async function fixture(settings = {}, githubResponse = null) {
     };
   }, { settings, githubResponse });
   await page.addStyleTag({ content: read('css/external-links.css') });
+  await page.addScriptTag({ content: read('js/citation-links-main.js') });
   await page.addScriptTag({ content: read('js/external-links.js') });
   return page;
 }
@@ -68,13 +69,24 @@ test('normal link click keeps the configured new-tab behavior and sidebar contro
   await page.close();
 });
 
-test('sidebar mode adds a separate action while preserving the normal new-tab indicator', async () => {
+test('sidebar mode adds only the sidebar action and preserves normal new-tab clicks', async () => {
   const page = await fixture({ openExternalLinksInSplitView: true });
   const actions = page.locator('.ghrc-link-actions');
   await actions.waitFor();
-  assert.equal(await actions.locator('.ghrc-link-mode').textContent(), '↗');
-  assert.equal(await actions.locator('.ghrc-link-mode').getAttribute('title'), 'Normal click opens in a new tab');
+  assert.equal(await actions.locator('.ghrc-link-mode').count(), 0);
   assert.equal(await actions.locator('.ghrc-link-sidebar-button').getAttribute('aria-label'), 'Open link beside chat');
+
+  await page.evaluate(() => {
+    for (const insideChat of [false, true]) {
+      const popup = document.createElement('div');
+      popup.setAttribute('data-radix-popper-content-wrapper', '');
+      popup.innerHTML = '<a href="https://example.org/source">Hovered URL</a>';
+      (insideChat ? document.querySelector('main') : document.body).append(popup);
+    }
+  });
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  assert.equal(await page.locator('[data-radix-popper-content-wrapper] .ghrc-link-actions').count(), 0);
+  assert.equal(await page.locator('.ghrc-link-sidebar-button').count(), 1);
 
   await page.locator('#source').click();
   assert.equal(await page.locator('#ghrc-link-preview').count(), 0);
@@ -91,6 +103,36 @@ test('sidebar mode adds a separate action while preserving the normal new-tab in
   assert.ok(preview.width > 576);
   assert.ok(preview.x >= 1279 - preview.width);
   assert.equal(await page.locator('html').getAttribute('data-ghrc-link-preview'), 'right');
+  await page.close();
+});
+
+test('embedded citation buttons open the actual source beside chat without invoking native navigation', async () => {
+  const page = await fixture({ openExternalLinksInSplitView: true });
+  await page.evaluate(() => {
+    const popup = document.createElement('div');
+    popup.setAttribute('role', 'dialog');
+    const source = document.createElement('button');
+    source.id = 'citation-source';
+    source.setAttribute('data-d-component', 'pressable');
+    source.setAttribute('aria-label', 'Open example.org');
+    source.textContent = 'Embedded source';
+    source.__reactFiber$fixture = { memoizedProps: {}, return: {
+      memoizedProps: { __dilHostElement: { props: { children: { props: {
+        __dilHostElement: { props: { onVisibleKey: 'https://example.org/embedded' } },
+      } } } } },
+    } };
+    window.nativeCitationClicks = 0;
+    source.addEventListener('click', () => nativeCitationClicks++);
+    popup.append(source);
+    document.body.append(popup);
+  });
+  const action = page.locator('[role="dialog"] .ghrc-link-sidebar-button');
+  await action.waitFor();
+  assert.equal(await action.getAttribute('data-href'), 'https://example.org/embedded');
+  await action.click();
+  await page.frameLocator('#ghrc-link-preview iframe').frameLocator('iframe').locator('h1').waitFor();
+  assert.equal(await page.evaluate(() => nativeCitationClicks), 0);
+  assert.equal((await page.evaluate(() => openedLinks)).length, 0);
   await page.close();
 });
 
@@ -146,12 +188,10 @@ test('left-side preview moves the panel, keeps controls ordered, and resizes fro
   await page.close();
 });
 
-test('current-tab mode is shown as the normal action while the sidebar remains separate', async () => {
+test('current-tab mode keeps only the separate sidebar action', async () => {
   const page = await fixture({ openExternalLinksInSplitView: true, openExternalLinksInNewTabs: false });
-  const mode = page.locator('.ghrc-link-mode');
-  await mode.waitFor();
-  assert.equal(await mode.textContent(), '→');
-  assert.equal(await mode.getAttribute('title'), 'Normal click opens in this tab');
+  await page.locator('.ghrc-link-actions').waitFor();
+  assert.equal(await page.locator('.ghrc-link-mode').count(), 0);
   assert.equal(await page.locator('.ghrc-link-sidebar-button').count(), 1);
   await page.close();
 });

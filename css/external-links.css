@@ -25,7 +25,6 @@ html[data-ghrc-link-preview="left"] {
   color: currentColor;
 }
 
-.ghrc-link-mode,
 .ghrc-link-sidebar-button {
   align-items: center;
   justify-content: center;
@@ -34,19 +33,11 @@ html[data-ghrc-link-preview="left"] {
   box-sizing: border-box;
 }
 
-.ghrc-link-mode {
-  display: inline-flex;
-  padding: 0 4px;
-  font: 11px/1 system-ui, sans-serif;
-  opacity: 0.65;
-}
-
 .ghrc-link-sidebar-button {
   display: inline-flex;
   width: 24px;
   padding: 0;
   border: 0;
-  border-left: 1px solid color-mix(in srgb, currentColor 18%, transparent);
   border-radius: 0;
   background: transparent;
   color: inherit;
@@ -60,6 +51,21 @@ html[data-ghrc-link-preview="left"] {
 .ghrc-link-sidebar-button:focus-visible {
   outline: 2px solid Highlight;
   outline-offset: -2px;
+}
+
+.ghrc-citation-sources {
+  position: relative;
+}
+
+.ghrc-citation-source {
+  padding-inline-end: 40px !important;
+  box-sizing: border-box;
+}
+
+.ghrc-citation-actions {
+  position: absolute;
+  inset-inline-end: 8px;
+  margin: 0;
 }
 
 #ghrc-link-preview {

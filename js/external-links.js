@@ -470,10 +470,6 @@
     actions.className = "ghrc-link-actions";
     actions.setAttribute("contenteditable", "false");
 
-    const mode = document.createElement("span");
-    mode.className = "ghrc-link-mode";
-    mode.setAttribute("aria-hidden", "true");
-
     const sidebar = document.createElement("button");
     sidebar.className = "ghrc-link-sidebar-button";
     sidebar.type = "button";
@@ -487,25 +483,25 @@
       if (href) showLinkPreview(href, link);
     });
 
-    actions.append(mode, sidebar);
+    actions.append(sidebar);
     linkActions.set(link, actions);
     updateLinkActions(link, url, actions);
     return actions;
   }
 
   function updateLinkActions(link, url, actions = linkActions.get(link)) {
-    const mode = actions?.querySelector(".ghrc-link-mode");
     const sidebar = actions?.querySelector(".ghrc-link-sidebar-button");
-    if (!mode || !sidebar) return;
-    mode.textContent = newTabsEnabled ? "↗" : "→";
-    mode.title = newTabsEnabled ? "Normal click opens in a new tab" : "Normal click opens in this tab";
+    if (!sidebar) return;
     sidebar.dataset.href = url.href;
   }
 
   function ensureLinkActions(link) {
     const existing = linkActions.get(link);
     const url = externalUrlForLink(link);
-    if (!splitViewEnabled || !url) {
+    // Native hover cards repeat the URL in a portal outside the conversation.
+    // Only decorate the original chat link, not its popup copy.
+    if (!splitViewEnabled || !url || !link.closest('main')
+        || link.closest('[role="tooltip"], [data-radix-popper-content-wrapper]')) {
       existing?.remove();
       return;
     }
@@ -520,14 +516,37 @@
     if (!(node instanceof Element)) return;
     if (node.matches("a[href]")) ensureLinkActions(node);
     node.querySelectorAll("a[href]").forEach(ensureLinkActions);
+    const selector = 'button[data-d-component="pressable"][aria-label^="Open "]';
+    if (node.matches(selector)) ensureCitationActions(node);
+    node.querySelectorAll(selector).forEach(ensureCitationActions);
+  }
+
+  function ensureCitationActions(button) {
+    if (!splitViewEnabled || !button.closest('[role="dialog"]')) return;
+    button.dispatchEvent(new Event("ghrc-resolve-citation-url", { bubbles: true }));
+    const href = button.getAttribute("data-ghrc-citation-url");
+    let url;
+    try { url = new URL(href); } catch { return; }
+    if (!["http:", "https:"].includes(url.protocol)) return;
+    let actions = linkActions.get(button);
+    if (!actions?.isConnected) {
+      actions = createLinkActions(button, url);
+      actions.classList.add("ghrc-citation-actions");
+      button.after(actions);
+    } else updateLinkActions(button, url, actions);
+    button.classList.add("ghrc-citation-source");
+    button.parentElement.classList.add("ghrc-citation-sources");
+    actions.style.top = `${button.offsetTop + 12}px`;
   }
 
   function refreshLinkActions() {
     document.querySelectorAll(".ghrc-link-actions").forEach((actions) => {
-      if (!(actions.previousSibling instanceof HTMLAnchorElement)) actions.remove();
+      if (!(actions.previousSibling instanceof HTMLAnchorElement)
+          && !actions.previousSibling?.matches?.('.ghrc-citation-source')) actions.remove();
     });
     if (!splitViewEnabled) {
       document.querySelectorAll(".ghrc-link-actions").forEach(actions => actions.remove());
+      document.querySelectorAll('.ghrc-citation-source').forEach(button => button.classList.remove('ghrc-citation-source'));
       return;
     }
     if (document.documentElement) decorateExternalLinks(document.documentElement);
