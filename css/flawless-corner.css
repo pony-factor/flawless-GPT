@@ -44,3 +44,8 @@
 .ghrc-flawless-hidden-new-chat {
   display: none !important;
 }
+
+/* Keep the native ChatGPT heading from showing behind the Flawless mascot. */
+.ghrc-flawless-hidden-wordmark {
+  display: none !important;
+}
