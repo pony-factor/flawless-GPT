@@ -23,6 +23,23 @@
   let previewWidthPx = null;
   const linkActions = new WeakMap();
 
+  async function savePreviewWidth() {
+    if (!Number.isFinite(previewWidthPx)) return;
+    try {
+      await chrome.storage.local.set({ linkPreviewWidth: Math.round(previewWidthPx) });
+    } catch {
+      // A reloaded extension can invalidate this tab's storage API synchronously.
+    }
+  }
+
+  async function unwatchLinkPreview(previewId) {
+    try {
+      await chrome.runtime.sendMessage({ type: "unwatch-link-preview", previewId });
+    } catch {
+      // Local preview cleanup must still work after an extension reload.
+    }
+  }
+
   function normalizedText(element) {
     return (element.textContent || "").replace(/\s+/g, " ").trim();
   }
@@ -154,7 +171,7 @@
   function closeLinkPreview(restoreFocus = true) {
     nativeSplitRequest += 1;
     if (previewWatch) {
-      void chrome.runtime.sendMessage({ type: "unwatch-link-preview", previewId: previewWatch.id }).catch(() => {});
+      void unwatchLinkPreview(previewWatch.id);
       previewWatch = null;
     }
     previewPanel?.remove();
@@ -233,9 +250,7 @@
       const onUp = () => {
         window.removeEventListener("pointermove", onMove, true);
         window.removeEventListener("pointerup", onUp, true);
-        if (Number.isFinite(previewWidthPx)) {
-          void chrome.storage.local.set({ linkPreviewWidth: Math.round(previewWidthPx) }).catch(() => {});
-        }
+        void savePreviewWidth();
       };
       window.addEventListener("pointermove", onMove, true);
       window.addEventListener("pointerup", onUp, true);
@@ -247,9 +262,7 @@
       const direction = event.key === "ArrowLeft" ? -1 : 1;
       const delta = splitViewOnLeft ? direction * 24 : -direction * 24;
       resizePreview(currentWidth() + delta, handle);
-      if (Number.isFinite(previewWidthPx)) {
-        void chrome.storage.local.set({ linkPreviewWidth: Math.round(previewWidthPx) }).catch(() => {});
-      }
+      void savePreviewWidth();
     });
 
     return handle;
@@ -340,8 +353,12 @@
         if (previewWatch === watch && panel.isConnected) {
           // Host the remote frame in an extension page so ChatGPT's
           // frame-src policy does not reject ordinary sites and PDF viewers.
-          frame.src = `${chrome.runtime.getURL("link-preview.html")}#${encodeURIComponent(href)}`;
-          panel.append(frame);
+          try {
+            frame.src = `${chrome.runtime.getURL("link-preview.html")}#${encodeURIComponent(href)}`;
+            panel.append(frame);
+          } catch {
+            // The extension may have reloaded while the navigation watch settled.
+          }
         }
       })();
       frame.addEventListener("error", () => {
@@ -367,7 +384,7 @@
     }
     if (!["net::ERR_BLOCKED_BY_RESPONSE", "net::ERR_BLOCKED_BY_CSP"].includes(error)) return;
     // GitHub's API is a fallback for a rejected embed, not the default view.
-    void chrome.runtime.sendMessage({ type: "unwatch-link-preview", previewId: previewWatch.id }).catch(() => {});
+    void unwatchLinkPreview(previewWatch.id);
     previewWatch = null;
     panel.querySelector("iframe")?.remove();
     const content = document.createElement("div");
