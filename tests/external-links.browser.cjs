@@ -152,7 +152,7 @@ test('current-tab mode is shown as the normal action while the sidebar remains s
   await page.close();
 });
 
-test('GitHub sidebar restores the API change view instead of opening a generic frame', async () => {
+test('GitHub embeds the website first and uses the API only after the active frame is blocked', async () => {
   const page = await fixture({ openExternalLinksInSplitView: true }, {
     ok: true,
     subtitle: 'owner/repo #42',
@@ -161,8 +161,23 @@ test('GitHub sidebar restores the API change view instead of opening a generic f
     body: '<img src=x onerror="window.injected=true">',
     files: [{ filename: 'example.js', additions: 2, deletions: 1, patch: '+safe change' }],
   });
+  await page.route('https://github.com/**', route => route.fulfill({ contentType: 'text/html', body: '<h1>Full GitHub website</h1>' }));
   await page.locator('#source').evaluate(link => { link.href = 'https://github.com/owner/repo/pull/42'; });
   await page.locator('.ghrc-link-sidebar-button').click();
+  await page.frameLocator('#ghrc-link-preview iframe').locator('h1').waitFor();
+  assert.equal((await page.evaluate(() => previewRequests)).some(message => message.type === 'load-github-link-preview'), false);
+  const watch = (await page.evaluate(() => previewRequests)).find(message => message.type === 'watch-link-preview');
+  await page.evaluate(watch => runtimeListeners.forEach(fn => fn({
+    type: 'link-preview-navigation-error', previewId: 'stale', url: watch.url, error: 'net::ERR_BLOCKED_BY_RESPONSE',
+  })), watch);
+  await page.evaluate(watch => runtimeListeners.forEach(fn => fn({
+    type: 'link-preview-navigation-error', previewId: watch.previewId, url: watch.url, error: 'net::ERR_INTERNET_DISCONNECTED',
+  })), watch);
+  assert.equal((await page.evaluate(() => previewRequests)).some(message => message.type === 'load-github-link-preview'), false);
+  assert.equal(await page.locator('#ghrc-link-preview iframe').count(), 1);
+  await page.evaluate(watch => runtimeListeners.forEach(fn => fn({
+    type: 'link-preview-navigation-error', previewId: watch.previewId, url: watch.url, error: 'net::ERR_BLOCKED_BY_RESPONSE',
+  })), watch);
   await page.locator('#ghrc-link-preview h2').waitFor();
   assert.equal(await page.locator('#ghrc-link-preview h2').textContent(), 'A useful PR');
   assert.equal(await page.locator('#ghrc-link-preview iframe').count(), 0);

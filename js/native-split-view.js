@@ -98,7 +98,7 @@ chrome.webNavigation.onErrorOccurred.addListener(details => {
     const watch = saved[key];
     if (!watch || (watch.frameId !== details.frameId && watch.url !== details.url)) return;
     await chrome.tabs.sendMessage(details.tabId, {
-      type: "link-preview-navigation-error", previewId: watch.id, url: watch.url,
+      type: "link-preview-navigation-error", previewId: watch.id, url: watch.url, error: details.error,
     }, { frameId: 0 });
   })().catch(() => {});
 });
