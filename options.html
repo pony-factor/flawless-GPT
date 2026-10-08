@@ -284,6 +284,14 @@
         </fieldset>
 
         <hr class="section-divider" />
+        <fieldset id="composer-color-settings" aria-label="Composer color settings">
+          <legend>Chat bar colors</legend>
+          <p class="help">Customize the chat bar background, borders, focus, text, buttons and attachment chips independently. Unchecked colors inherit ChatGPT's current light or dark theme. Changes apply to open chats.</p>
+          <div id="composer-color-grid" class="composer-color-grid"></div>
+          <button id="composer-color-reset" type="button" class="secondary">Restore ChatGPT colors</button>
+        </fieldset>
+
+        <hr class="section-divider" />
         <fieldset id="chatgpt-copy-settings" aria-label="Copy and formatting settings">
           <legend>Copy &amp; formatting</legend>
           <label class="preference">
@@ -483,6 +491,7 @@
     <script src="js/web-commit-guidance.js"></script>
     <script src="js/owner-grid-options.js"></script>
     <script src="js/options-page.js"></script>
+    <script src="js/composer-colors.js"></script>
     <script src="js/autofocus-options.js"></script>
   </body>
 </html>
