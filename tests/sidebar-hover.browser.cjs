@@ -7,7 +7,7 @@ const read = file => fs.readFileSync(path.join(__dirname, '..', file), 'utf8');
 let browser;
 before(async () => { browser = await chromium.launch({executablePath:'/Applications/Brave Browser.app/Contents/MacOS/Brave Browser',headless:true}); });
 after(async () => { await browser?.close(); });
-async function fixture({labels=['Show sidebar','Hide sidebar'], enabled=true, expanded=false, delay=0, duplicate=false}={}) {
+async function fixture({labels=['Show sidebar','Hide sidebar'], enabled=true, expanded=false, delay=0, duplicate=false, mouseOnly=false}={}) {
   const page = await browser.newPage();
   page.errors=[];
   page.on('pageerror', error => page.errors.push(error.message));
@@ -37,6 +37,11 @@ async function fixture({labels=['Show sidebar','Hide sidebar'], enabled=true, ex
     });
     window.chrome={runtime:{id:'fixture'},storage:{local:{get:async defaults=>({...defaults,hoverRevealSidebar:enabled})},onChanged:{addListener:fn=>listeners.push(fn)}}};
   },{labels,enabled,delay});
+  if (mouseOnly) await page.evaluate(() => {
+    for (const type of ['pointermove', 'pointerover']) {
+      document.addEventListener(type, event => event.stopImmediatePropagation(), true);
+    }
+  });
   await page.addScriptTag({content:read('js/extension-context.js')});
   await page.addScriptTag({content:read('js/collapse-sidebar.js')});
   return page;
@@ -220,6 +225,21 @@ test('hovering the sidebar toggle opens it without a click', async () => {
   await page.waitForTimeout(150);
   assert.equal(await page.locator('aside').getAttribute('data-expanded'), 'true');
   await page.mouse.move(500, 20);
+  await page.waitForFunction(() => document.querySelector('aside').dataset.expanded === 'false');
+  assert.equal(await page.evaluate(() => clicks), 2);
+  assert.deepEqual(page.errors, []);
+  await page.close();
+});
+
+test('mouse hover reveals without pointer events or an activation click', async () => {
+  const page = await fixture({ mouseOnly: true });
+  await page.mouse.move(500, 170);
+  await page.mouse.move(12, 170);
+  await page.waitForFunction(() => document.querySelector('aside').dataset.expanded === 'true');
+  await page.evaluate(() => window.dispatchEvent(new Event('blur')));
+  await page.waitForTimeout(150);
+  assert.equal(await page.locator('aside').getAttribute('data-expanded'), 'true');
+  await page.mouse.move(500, 170);
   await page.waitForFunction(() => document.querySelector('aside').dataset.expanded === 'false');
   assert.equal(await page.evaluate(() => clicks), 2);
   assert.deepEqual(page.errors, []);

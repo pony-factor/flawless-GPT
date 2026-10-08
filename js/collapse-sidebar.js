@@ -311,24 +311,28 @@
     if (toggle?.state === "expanded") toggle.button.click();
   }
 
-  document.addEventListener("pointermove", (event) => {
+  function trackMouse(event) {
     if (!event.isTrusted) return;
     if (event.pointerType && event.pointerType !== "mouse") return;
     pointer = { x: event.clientX, y: event.clientY, inside: true };
     reconcileHoverState();
-  }, true);
+  }
 
-  window.addEventListener("pointerout", (event) => {
-    if (!event.isTrusted) return;
-    if (event.relatedTarget !== null) return;
+  function trackMouseExit(event) {
+    if (!event.isTrusted || event.relatedTarget !== null) return;
     pointer.inside = false;
     reconcileHoverState();
-  }, true);
+  }
 
-  window.addEventListener("blur", () => {
-    pointer.inside = false;
-    reconcileHoverState();
-  });
+  // Mouse events still report hover when the browser window lacks keyboard
+  // focus. Entering the page must not require a click or a pointermove first.
+  const mouseEntryEvents = ["pointermove", "pointerover", "mousemove", "mouseover"];
+  const mouseExitEvents = ["pointerout", "mouseout"];
+  mouseEntryEvents.forEach(type => document.addEventListener(type, trackMouse, true));
+  mouseExitEvents.forEach(type => window.addEventListener(type, trackMouseExit, true));
+
+  // Keyboard focus can leave the page while the mouse remains over the rail.
+  // Collapse on mouse exit instead of treating window blur as mouse exit.
 
   chrome.storage.onChanged.addListener((changes, areaName) => {
     if (areaName !== "local" || !changes[SETTING_KEY]) return;
@@ -350,6 +354,8 @@
     clearTimeout(initialCollapseTimer);
     clearCollapseTimer();
     clearRevealRetry();
+    mouseEntryEvents.forEach(type => document.removeEventListener(type, trackMouse, true));
+    mouseExitEvents.forEach(type => window.removeEventListener(type, trackMouseExit, true));
   });
 
   void context.run(async () => {
