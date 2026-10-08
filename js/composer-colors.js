@@ -3,6 +3,11 @@
   const STORAGE_KEY = "composerColors";
   const SPECS = [["surface","Bar background","#303030"],["surface-border","Bar border","#666666"],["focus-ring","Focus border and ring","#a97dee"],["text","Typed text","#ffffff"],["caret","Typing cursor","#a97dee"],["placeholder","Placeholder text","#a1a1aa"],["selection-background","Selected text background","#8556c6"],["selection-text","Selected text","#ffffff"],["toolbar-background","Toolbar button backgrounds","#444444"],["toolbar-icon","Toolbar icons and labels","#ffffff"],["toolbar-hover","Toolbar hover","#555555"],["send-background","Send button background","#ffffff"],["send-icon","Send button icon","#202020"],["send-hover","Send button hover","#dadada"],["stop-background","Stop button background","#ffffff"],["stop-icon","Stop button icon","#202020"],["attachment-background","Attachment background","#404040"],["attachment-text","Attachment text","#ffffff"],["attachment-border","Attachment border","#747474"]];
   const HEX = /^#[0-9a-f]{6}$/i;
+  const normalizeHex = input => {
+    const text = typeof input === "string" ? input.trim() : "";
+    const value = text.startsWith("#") ? text : `#${text}`;
+    return HEX.test(value) ? value.toLowerCase() : null;
+  };
   const valid = input => Object.fromEntries(SPECS.flatMap(([key]) => {
     const value = input && typeof input === "object" ? input[key] : undefined;
     return typeof value === "string" && HEX.test(value) ? [[key, value.toLowerCase()]] : [];
@@ -19,10 +24,11 @@
 
     function render(input) {
       colors = valid(input);
-      for (const [key, { toggle, picker, preview }] of fields) {
+      for (const [key, { toggle, picker, hex, preview }] of fields) {
         toggle.checked = Boolean(colors[key]);
-        picker.disabled = !toggle.checked;
-        picker.value = colors[key] || preview;
+        picker.disabled = hex.disabled = !toggle.checked;
+        picker.value = hex.value = colors[key] || preview;
+        hex.removeAttribute("aria-invalid");
       }
       reset.disabled = Object.keys(colors).length === 0;
     }
@@ -48,19 +54,57 @@
       picker.value = preview;
       picker.disabled = true;
       picker.setAttribute("aria-label", `${title} color`);
-      row.append(label, picker);
+      const controls = document.createElement("div");
+      controls.className = "composer-color-controls";
+      const hex = document.createElement("input");
+      hex.type = "text";
+      hex.className = "composer-color-hex";
+      hex.value = preview;
+      hex.maxLength = 7;
+      hex.placeholder = "#RRGGBB";
+      hex.spellcheck = false;
+      hex.autocomplete = "off";
+      hex.disabled = true;
+      hex.setAttribute("aria-label", `${title} HEX color`);
+      controls.append(picker, hex);
+      row.append(label, controls);
       grid.append(row);
-      fields.set(key, { toggle, picker, preview });
+      fields.set(key, { toggle, picker, hex, preview });
       toggle.addEventListener("change", () => {
-        picker.disabled = !toggle.checked;
+        picker.disabled = hex.disabled = !toggle.checked;
         if (toggle.checked) colors[key] = picker.value;
         else delete colors[key];
+        hex.value = picker.value;
+        hex.removeAttribute("aria-invalid");
         persist();
       });
       picker.addEventListener("input", () => {
         if (!toggle.checked) return;
         colors[key] = picker.value;
+        hex.value = picker.value;
+        hex.removeAttribute("aria-invalid");
         persist();
+      });
+      hex.addEventListener("input", () => {
+        if (!toggle.checked) return;
+        const value = normalizeHex(hex.value);
+        if (!value) {
+          hex.setAttribute("aria-invalid", "true");
+          return;
+        }
+        hex.removeAttribute("aria-invalid");
+        picker.value = colors[key] = value;
+        persist();
+      });
+      hex.addEventListener("change", () => {
+        const value = normalizeHex(hex.value);
+        if (toggle.checked && value && colors[key] !== value) {
+          picker.value = colors[key] = value;
+          persist();
+        }
+        // An incomplete or invalid edit never replaces the last saved color.
+        hex.value = colors[key] || picker.value;
+        hex.removeAttribute("aria-invalid");
       });
     }
     // Keep changes out of the larger form's unrelated settings writer.
