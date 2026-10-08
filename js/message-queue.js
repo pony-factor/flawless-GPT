@@ -936,7 +936,13 @@
 
     // Align with the composer text, but never let that offset push the panel
     // past the form, its containing column, or the viewport edge.
-    const parentRect = panel.parentElement.getBoundingClientRect();
+    // ChatGPT wraps the composer in display: contents elements. Those have
+    // no layout box, so using their zero-width rect collapses the saved queue.
+    let container = panel.parentElement;
+    while (container?.parentElement && getComputedStyle(container).display === "contents") {
+      container = container.parentElement;
+    }
+    const parentRect = container.getBoundingClientRect();
     const formRight = findComposerForm(composer)?.getBoundingClientRect().right ?? parentRect.right;
     const leftBoundary = Math.max(14, parentRect.left);
     const rightBoundary = Math.min(window.innerWidth - 14, parentRect.right, formRight);
@@ -953,7 +959,7 @@
       panel.style.setProperty("--ghrc-queue-left-offset", value);
     }
     queueResizeObserver?.observe(composer);
-    queueResizeObserver?.observe(panel.parentElement);
+    queueResizeObserver?.observe(container);
   }
 
   const queueResizeObserver = typeof ResizeObserver === "function"
