@@ -94,13 +94,13 @@
     for (const candidate of candidates) {
       const bounds = visibleBounds(candidate);
       if (!bounds || bounds.left > EDGE_HOTSPOT_WIDTH + 24) continue;
-      const label = [
+      const labels = [
         candidate.getAttribute("aria-label"),
         candidate.getAttribute("title"),
         candidate.textContent,
-      ].filter(Boolean).join(" ").trim().toLowerCase();
+      ].filter(Boolean).map(label => label.trim().toLowerCase());
       const pathname = pathnameFor(candidate);
-      if (pathname === "/library" || label === "library") return { element: candidate, bounds };
+      if (pathname === "/library" || labels.includes("library")) return { element: candidate, bounds };
     }
     return null;
   }

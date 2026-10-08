@@ -192,3 +192,21 @@ test('overflowing sidebar children stay interactive past the sidebar bounds',asy
   await page.waitForFunction(()=>document.querySelector('aside').dataset.expanded==='false');
   await page.close();
 });
+
+test('Library button with both accessible label and text reveals below Library', async () => {
+  const page = await fixture();
+  await page.evaluate(() => {
+    document.querySelectorAll('[id^="preset-"]').forEach(element => element.remove());
+    document.getElementById('library').outerHTML = '<button id="library" class="rail-item" aria-label="Library" title="Library">Library</button>';
+  });
+  await page.mouse.move(12, 115);
+  await page.waitForTimeout(500);
+  assert.equal(await page.locator('aside').getAttribute('data-expanded'), 'false');
+  await page.mouse.move(12, 170);
+  await page.waitForFunction(() => document.querySelector('aside').dataset.expanded === 'true');
+  await page.mouse.move(500, 170);
+  await page.waitForFunction(() => document.querySelector('aside').dataset.expanded === 'false');
+  assert.equal(await page.evaluate(() => clicks), 2);
+  assert.deepEqual(page.errors, []);
+  await page.close();
+});
