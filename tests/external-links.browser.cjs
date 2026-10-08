@@ -75,6 +75,18 @@ test('sidebar mode adds only the sidebar action and preserves normal new-tab cli
   assert.equal(await actions.locator('.ghrc-link-mode').count(), 0);
   assert.equal(await actions.locator('.ghrc-link-sidebar-button').getAttribute('aria-label'), 'Open link beside chat');
 
+  await page.evaluate(() => {
+    for (const insideChat of [false, true]) {
+      const popup = document.createElement('div');
+      popup.setAttribute('data-radix-popper-content-wrapper', '');
+      popup.innerHTML = '<a href="https://example.org/source">Hovered URL</a>';
+      (insideChat ? document.querySelector('main') : document.body).append(popup);
+    }
+  });
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  assert.equal(await page.locator('[data-radix-popper-content-wrapper] .ghrc-link-actions').count(), 0);
+  assert.equal(await page.locator('.ghrc-link-sidebar-button').count(), 1);
+
   await page.locator('#source').click();
   assert.equal(await page.locator('#ghrc-link-preview').count(), 0);
   assert.equal((await page.evaluate(() => openedLinks)).length, 1);

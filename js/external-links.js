@@ -498,7 +498,10 @@
   function ensureLinkActions(link) {
     const existing = linkActions.get(link);
     const url = externalUrlForLink(link);
-    if (!splitViewEnabled || !url) {
+    // Native hover cards repeat the URL in a portal outside the conversation.
+    // Only decorate the original chat link, not its popup copy.
+    if (!splitViewEnabled || !url || !link.closest('main')
+        || link.closest('[role="tooltip"], [data-radix-popper-content-wrapper]')) {
       existing?.remove();
       return;
     }
