@@ -8,6 +8,21 @@
   let frameTimer;
   let automaticBusy = false;
   const reportCandidates = new WeakMap();
+  const RELOAD_MESSAGE = 'The extension was updated. Reload this ChatGPT page to reconnect and retry the import.';
+  async function request(message) {
+    if (!globalThis.chrome?.runtime?.sendMessage) {
+      clearInterval(frameTimer);
+      throw new Error(RELOAD_MESSAGE);
+    }
+    try { return await chrome.runtime.sendMessage(message); }
+    catch (error) {
+      if (/extension context invalidated/i.test(error?.message || '')) {
+        clearInterval(frameTimer);
+        throw new Error(RELOAD_MESSAGE);
+      }
+      throw error;
+    }
+  }
 
   async function autoImport(doc) {
     if (!enabled || automaticBusy) return;
@@ -16,8 +31,21 @@
     if (!scope || scope.querySelector('[aria-busy="true"], [role="progressbar"]') || download.disabled) return;
     automaticBusy = true;
     try {
-      const { job } = await chrome.runtime.sendMessage({ type: 'research-launch-job' }) || {};
-      if (job?.state !== 'submitted') return;
+      const { job } = await request({ type: 'research-launch-job' }) || {};
+      const status = scope.querySelector('.ghrc-report-status');
+      if (job?.state === 'complete' && job.result) {
+        if (status) globalThis.__ghrcResearchImportStatus(status, job.result);
+        const button = scope.querySelector('.' + BUTTON);
+        if (button) {
+          button.setAttribute('aria-label', 'Report added to repo');
+          button.title = `Added to ${job.result.repository} (${job.result.branch})`;
+        }
+        return;
+      }
+      if (!['submitted', 'import-retry'].includes(job?.state)) return;
+      if (job.state === 'import-retry' && status && status.textContent !== 'Import interrupted. Retrying automatically…')
+        status.textContent = 'Import interrupted. Retrying automatically…';
+      if (job.retryAt && job.retryAt > Date.now()) return;
       const report = reportPayload(scope);
       const previous = reportCandidates.get(scope);
       if (!previous || previous.markdown !== report.markdown) {
@@ -25,7 +53,7 @@
         return;
       }
       if (Date.now() - previous.since < 5000) return;
-      const result = await chrome.runtime.sendMessage({ type: 'publish-research-report', ...report, automationJobId: job.id });
+      const result = await request({ type: 'publish-research-report', ...report, automationJobId: job.id });
       if (!result?.ok) {
         const status = scope.querySelector('.ghrc-report-status');
         if (status) status.textContent = result?.error || 'Automatic import could not finish. Use Add to repo to retry.';
@@ -33,7 +61,11 @@
         const status = scope.querySelector('.ghrc-report-status');
         if (status) globalThis.__ghrcResearchImportStatus(status, result);
       }
-    } catch {
+    } catch (error) {
+      if (error.message === RELOAD_MESSAGE) {
+        const status = scope.querySelector('.ghrc-report-status');
+        if (status && status.textContent !== RELOAD_MESSAGE) status.textContent = RELOAD_MESSAGE;
+      }
       // Partial reports and replaced sandbox documents are revisited by the next scan.
     } finally { automaticBusy = false; }
   }
@@ -98,7 +130,7 @@
         event.preventDefault();
         event.stopImmediatePropagation();
         try {
-          const result = await chrome.runtime.sendMessage({ type: 'open-research-link', url: url.href });
+          const result = await request({ type: 'open-research-link', url: url.href });
           if (!result?.ok) throw new Error(result?.error || 'Could not open report link.');
         } catch (error) {
           const status = link.closest(PAGE).parentElement.querySelector('.ghrc-report-status');
@@ -136,14 +168,14 @@
           button.setAttribute('aria-busy', 'true');
           status.textContent = 'Checking repository connection…';
           try {
-            const connection = await chrome.runtime.sendMessage({ type: 'research-publisher-status' });
+            const connection = await request({ type: 'research-publisher-status' });
             if (!connection?.ok) throw new Error(connection?.error || 'Use Link repository in extension settings to connect a repository.');
             status.textContent = '';
             const category = await globalThis.__ghrcChooseResearchCategory(doc, connection);
             if (category === null) return;
             const report = reportPayload(scope);
             status.textContent = 'Adding report to repository…';
-            const result = await chrome.runtime.sendMessage({ type: 'publish-research-report', ...report, category });
+            const result = await request({ type: 'publish-research-report', ...report, category });
             if (!result?.ok) throw new Error(result?.error || 'Publishing failed. Try again.');
             button.title = `${result.unchanged ? 'Already in' : 'Added to'} ${result.repository} (${result.branch})`;
             button.setAttribute('aria-label', 'Report added to repo');

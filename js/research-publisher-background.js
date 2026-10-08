@@ -42,14 +42,18 @@
       result = await chrome.runtime.sendNativeMessage(HOST, payload);
     } catch (error) {
       await recordConnection({ ok: false });
-      throw connectionError(error);
+      const failure = connectionError(error);
+      failure.retryable = true;
+      throw failure;
     }
 
     if (!result?.ok) {
       if (!publishing) await recordConnection({ ok: false });
-      throw new Error(result?.error || (publishing
+      const failure = new Error(result?.error || (publishing
         ? 'Publishing failed. Check the repository connection and try again.'
         : 'The native publisher did not confirm the linked repository.'));
+      failure.retryable = /another report|could not fetch|push (?:was not confirmed|failed)|unable to publish/i.test(failure.message);
+      throw failure;
     }
 
     await recordConnection(result);
@@ -123,7 +127,7 @@
         if (automaticJob) await globalThis.__ghrcResearchLaunch.finishImport(sender.tab.id, automaticJob.id, result);
         return result;
       } catch (error) {
-        if (automaticJob) await globalThis.__ghrcResearchLaunch.finishImport(sender.tab.id, automaticJob.id, undefined, error.message);
+        if (automaticJob) await globalThis.__ghrcResearchLaunch.finishImport(sender.tab.id, automaticJob.id, undefined, error.message, error.retryable);
         throw error;
       } finally { if (key) inFlight.delete(key); }
     })().then(respond, (error) => respond({ ok: false, error: error.message }));

@@ -35,6 +35,7 @@
   function statusFor(job) {
     if (!job) return 'Research window closed before import finished.';
     if (job.state === 'complete') return `Imported: ${job.result.repository} / ${job.result.path} (${job.result.branch}).`;
+    if (job.state === 'import-retry') return 'Import interrupted. Retrying automatically…';
     if (job.error) return job.error;
     return ({ pending: 'Opening research…', preparing: 'Preparing Deep Research…', sending: 'Submitting research…',
       submitted: 'Research running. Answer any follow-up questions in the research window.', importing: 'Importing completed report…' })[job.state] || 'Research needs attention in its window.';
