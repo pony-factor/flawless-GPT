@@ -3,6 +3,12 @@ html[data-ghrc-link-preview] {
   width: calc(100% - var(--ghrc-preview-width));
 }
 
+/* ChatGPT's app layout uses viewport width even when its root is narrower. */
+html[data-ghrc-link-preview] #root > [class*="Layout-"] {
+  width: 100% !important;
+  min-width: 0;
+}
+
 html[data-ghrc-link-preview="left"] {
   margin-left: var(--ghrc-preview-width);
 }

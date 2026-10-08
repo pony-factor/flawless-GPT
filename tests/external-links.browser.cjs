@@ -263,3 +263,57 @@ test('batched mutation handling still sanitizes newly added links', async () => 
   assert.equal(await page.locator('#dynamic-source').getAttribute('href'), 'https://example.org/new?keep=1#section');
   await page.close();
 });
+
+for (const side of ['right', 'left']) {
+  test(`dragging the ${side} preview divider reflows the conversation and composer`, async () => {
+    const page = await fixture({ openExternalLinksInSplitView: true, openExternalLinksInSplitViewOnLeft: side === 'left' });
+    await page.evaluate(() => {
+      const root = document.createElement('div');
+      root.id = 'root';
+      const layout = document.createElement('div');
+      layout.className = 'relative flex flex-col Layout-example';
+      layout.style.width = '100vw';
+      const main = document.querySelector('main');
+      const prose = document.createElement('p');
+      prose.id = 'prose';
+      prose.textContent = 'Conversation text should wrap within the available space. '.repeat(16);
+      main.append(prose);
+      const composer = document.createElement('div');
+      composer.id = 'composer';
+      composer.textContent = 'Message composer';
+      composer.style.cssText = 'width:100%;height:60px';
+      layout.append(main, composer);
+      root.append(layout);
+      document.body.prepend(root);
+    });
+    await page.locator('.ghrc-link-sidebar-button').click();
+    await page.frameLocator('#ghrc-link-preview iframe').locator('h1').waitFor();
+    const dimensions = () => page.evaluate(() => {
+      const rect = id => {
+        if (!document.getElementById(id)) return null;
+        const { x, width, right, height } = document.getElementById(id).getBoundingClientRect();
+        return { x, width, right, height };
+      };
+      return { root: rect('root'), chat: document.querySelector('main').getBoundingClientRect().toJSON(), composer: rect('composer'), prose: rect('prose'), preview: rect('ghrc-link-preview') };
+    });
+    const before = await dimensions();
+    const divider = await page.getByRole('separator', { name: 'Resize website sidebar' }).boundingBox();
+    await page.mouse.move(divider.x + divider.width / 2, 300);
+    await page.mouse.down();
+    await page.mouse.move(divider.x + divider.width / 2 + (side === 'left' ? 140 : -140), 300, { steps: 5 });
+    await page.mouse.up();
+    const after = await dimensions();
+    assert.ok(after.preview.width > before.preview.width + 100);
+    assert.ok(after.chat.width < before.chat.width - 100);
+    assert.ok(after.prose.height > before.prose.height);
+    for (const state of [before, after]) {
+      assert.ok(Math.abs(state.chat.width - state.root.width) < 1);
+      assert.ok(Math.abs(state.composer.width - state.root.width) < 1);
+      if (side === 'right') assert.ok(state.chat.right <= state.preview.x + 1);
+      else assert.ok(state.chat.x >= state.preview.right - 1);
+    }
+    await page.getByRole('button', { name: 'Close website preview' }).click();
+    assert.equal((await dimensions()).chat.width, 1280);
+    await page.close();
+  });
+}
