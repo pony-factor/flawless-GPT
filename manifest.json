@@ -65,6 +65,7 @@
         "css/work-mode.css",
         "css/external-links.css",
         "css/compact-header.css",
+        "css/flawless-corner.css",
         "css/chat-display.css",
         "css/composer-colors.css",
         "css/sidebar-chat-dates.css",
@@ -77,6 +78,7 @@
       ],
       "js": [
         "js/extension-context.js",
+        "js/flawless-corner.js",
         "js/web-commit-guidance-sync.js",
         "js/compact-header.js",
         "js/2048-keyboard.js",
@@ -165,7 +167,8 @@
       "resources": [
         "artwork/spellcheck-only.png",
         "artwork/calligraphy-initials.png",
-        "artwork/research-telescope.png"
+        "artwork/research-telescope.png",
+        "artwork/squeaky-belle-full.webp"
       ],
       "matches": [
         "https://chatgpt.com/*"
