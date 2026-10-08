@@ -58,13 +58,13 @@ html[data-ghrc-link-preview="left"] {
 }
 
 .ghrc-citation-source {
-  padding-inline-end: 32px !important;
+  padding-inline-end: 40px !important;
   box-sizing: border-box;
 }
 
 .ghrc-citation-actions {
   position: absolute;
-  inset-inline-end: 0;
+  inset-inline-end: 8px;
   margin: 0;
 }
 
