@@ -6,7 +6,7 @@ const path = require('node:path');
 
 const source = fs.readFileSync(path.join(__dirname, '../js/spellcheck-launcher.js'), 'utf8');
 
-function fixture({ clipboard = 'clipboard text', draft = '', suggestionAvailable = true } = {}) {
+function fixture({ clipboard = 'clipboard text', draft = '', suggestionAvailable = true, adjacentDescription = false } = {}) {
   let now = 0;
   let suggestionOpen = false;
   let pluginSelected = false;
@@ -44,6 +44,12 @@ function fixture({ clipboard = 'clipboard text', draft = '', suggestionAvailable
     suggestionOpen = false;
     composer.innerText = 'Spellcheck Only';
   });
+  if (adjacentDescription) {
+    plugin.textContent = 'Spellcheck Onlyfixes typos and outputs in markdown';
+    plugin.getAttribute = () => null;
+    plugin.querySelector = selector => selector === '[data-menu-row-content] .truncate.shrink-0'
+      ? { textContent: 'Spellcheck Only' } : null;
+  }
 
   const suggestionSurface = {
     isConnected: true,
@@ -145,6 +151,14 @@ test('resolves Spellcheck Only through the app mention service and sends clipboa
   assert.equal(f.pluginSuggestionClicks, 1);
   assert.equal(f.pickerLookups, 0);
   assert.equal(f.composer.innerText, 'Spellcheck Only\nclipboard text');
+  assert.equal(f.send.clicks, 1);
+});
+
+test('resolves a suggestion whose adjacent description has no text separator', async () => {
+  const f = fixture({ adjacentDescription: true });
+  await f.api.launchSpellcheck();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(f.pluginSelected, true);
   assert.equal(f.send.clicks, 1);
 });
 

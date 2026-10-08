@@ -40,6 +40,8 @@
       node?.getAttribute?.("title"),
       node?.getAttribute?.("app-mention-display-name"),
       node?.getAttribute?.("app-mention-name"),
+      // Suggestion titles and descriptions are adjacent spans without whitespace.
+      node?.querySelector?.('[data-menu-row-content] .truncate.shrink-0')?.textContent,
       node?.textContent,
     ].filter(Boolean).map((value) => value.replace(/\s+/g, " ").trim()).filter(Boolean);
   }

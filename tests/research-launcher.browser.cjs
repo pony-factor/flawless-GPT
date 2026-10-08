@@ -8,6 +8,28 @@ before(async () => {
 });
 after(async () => { await browser.close(); });
 
+test('startup waits for body before reading and displaying a research handoff', async () => {
+  const page = await browser.newPage();
+  const errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.evaluate(() => {
+    document.body.remove();
+    window.reads = 0;
+    window.chrome = { storage: { local: {} }, runtime: {
+      id: 'fixture', onMessage: { addListener() {} },
+      sendMessage: async () => { window.reads++; return { ok: true, job: { state: 'error', error: 'Recovered handoff' } }; },
+    } };
+  });
+  for (const file of ['js/extension-context.js', 'js/research-launcher.js'])
+    await page.addScriptTag({ content: fs.readFileSync(file, 'utf8') });
+  assert.equal(await page.evaluate(() => window.reads), 0);
+  await page.evaluate(() => document.documentElement.append(document.createElement('body')));
+  await page.locator('#ghrc-research-run-status').waitFor();
+  assert.equal(await page.locator('#ghrc-research-run-status').innerText(), 'Recovered handoff');
+  assert.deepEqual(errors, []);
+  await page.close();
+});
+
 async function fixture({ handoff = false, draft = '' } = {}) {
   const page = await browser.newPage();
   page.errors = [];

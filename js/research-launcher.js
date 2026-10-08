@@ -155,7 +155,9 @@
     await request({ type: 'research-launch-submitted', id: job.id });
   }
   async function poll() {
-    if (polling || !context.active()) return;
+    // A worker reply can arrive at document_start before the parser creates body.
+    // Leave the handoff unclaimed so the next poll can mount its status safely.
+    if (polling || !context.active() || !document.body) return;
     polling = true;
     try {
       for (const [id, run] of runs) {
