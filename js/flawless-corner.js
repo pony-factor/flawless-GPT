@@ -2,9 +2,11 @@
   const context = globalThis.__ghrcExtensionContext;
   if (!context?.active()) return;
   const TOGGLE_SELECTOR = 'button[aria-label="Show sidebar"], button[aria-label="Open sidebar"], button[aria-label="Expand sidebar"]';
+  const HEADER_TOGGLE_SELECTOR = `${TOGGLE_SELECTOR}, button[aria-label="Hide sidebar"], button[aria-label="Close sidebar"], button[aria-label="Collapse sidebar"]`;
   const NEW_CHAT_SELECTOR = 'button[aria-label="New chat"], a[aria-label="New chat"], [data-testid="create-new-chat-button"]';
   const toggles = new Set();
   const newChats = new Set();
+  const wordmarks = new Set();
   let link = null;
   const MASCOT_SIZE = 33;
 
@@ -18,6 +20,36 @@
     const top = Math.round(rect.top + (rect.height - MASCOT_SIZE) / 2);
     link.style.left = `${Math.max(0, Math.min(window.innerWidth - MASCOT_SIZE, left))}px`;
     link.style.top = `${Math.max(0, top)}px`;
+  }
+
+  function concealSidebarWordmark(toggle) {
+    for (const wordmark of wordmarks) {
+      if (!wordmark.isConnected || wordmark.textContent.trim() !== 'ChatGPT') {
+        wordmark.classList.remove('ghrc-flawless-hidden-wordmark');
+        wordmarks.delete(wordmark);
+      }
+    }
+    if (!toggle) return;
+    const toggleBounds = toggle.getBoundingClientRect();
+    const root = toggle.closest('aside, nav, [data-testid*="sidebar" i], [data-testid*="navigation" i]') || document.body;
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    let node;
+    while ((node = walker.nextNode())) {
+      if (node.textContent.trim() !== 'ChatGPT') continue;
+      const label = node.parentElement;
+      if (!label || label === root || wordmarks.has(label)
+        || label.matches('aside, nav, header, button, input, textarea')
+        || label.querySelector('button, [role="button"]')
+        || label.closest('main, article, [role="main"], #github-repositories-for-chatgpt, #ghrc-flawless-corner')) continue;
+      const bounds = label.getBoundingClientRect();
+      // Only the native title beside the sidebar control belongs to this
+      // replacement. Chat titles and other occurrences must remain visible.
+      if (!bounds.width || !bounds.height
+        || bounds.top < toggleBounds.top - 36 || bounds.bottom > toggleBounds.bottom + 40
+        || bounds.left < toggleBounds.left - 24 || bounds.right > toggleBounds.right + 320) continue;
+      label.classList.add('ghrc-flawless-hidden-wordmark');
+      wordmarks.add(label);
+    }
   }
 
   function reconcile() {
@@ -43,12 +75,16 @@
       document.body.append(link);
     }
     const controls = Array.from(document.querySelectorAll(TOGGLE_SELECTOR));
-    const visible = controls.find(control => {
+    const headerControls = Array.from(document.querySelectorAll(HEADER_TOGGLE_SELECTOR));
+    const visibleControl = control => {
       const bounds = control.getBoundingClientRect();
       return bounds.width && bounds.height && getComputedStyle(control).visibility !== "hidden";
-    });
-    centerOverToggle(visible);
-    for (const toggle of controls) {
+    };
+    const visible = controls.find(visibleControl);
+    const headerToggle = headerControls.find(visibleControl);
+    centerOverToggle(headerToggle);
+    concealSidebarWordmark(headerToggle);
+    for (const toggle of headerControls) {
       toggle.classList.add("ghrc-flawless-logo-button");
       toggles.add(toggle);
     }
@@ -60,7 +96,7 @@
       if (!control.isConnected) newChats.delete(control);
     }
     for (const toggle of toggles) {
-      if (!toggle.isConnected || !controls.includes(toggle)) {
+      if (!toggle.isConnected || !headerControls.includes(toggle)) {
         toggle.classList.remove("ghrc-flawless-logo-button");
         toggles.delete(toggle);
       }
@@ -68,7 +104,7 @@
   }
 
   const observer = new MutationObserver(reconcile);
-  observer.observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ["aria-label"] });
+  observer.observe(document.documentElement, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ["aria-label"] });
   window.addEventListener("resize", reconcile);
   window.addEventListener("scroll", reconcile, true);
   reconcile();
@@ -79,5 +115,6 @@
     link?.remove();
     toggles.forEach(toggle => toggle.classList.remove("ghrc-flawless-logo-button"));
     newChats.forEach(control => control.classList.remove("ghrc-flawless-hidden-new-chat"));
+    wordmarks.forEach(wordmark => wordmark.classList.remove('ghrc-flawless-hidden-wordmark'));
   });
 })();

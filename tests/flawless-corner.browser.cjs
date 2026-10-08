@@ -83,3 +83,49 @@ test('native controls return when extension stops', async () => {
   assert.deepEqual(page.errors, []);
   await page.close();
 });
+
+test('native ChatGPT wordmark stays hidden as the sidebar opens and updates', async () => {
+  const page = await fixture();
+  await page.evaluate(() => {
+    const brand = document.createElement('a');
+    brand.id = 'native-brand';
+    brand.href = '/';
+    brand.style.cssText = 'position:absolute;top:24px;left:75px';
+    brand.innerHTML = '<span>ChatGPT</span>';
+    document.querySelector('aside').append(brand);
+
+    const history = document.createElement('p');
+    history.id = 'history-name';
+    history.style.cssText = 'position:absolute;top:185px;left:75px';
+    history.textContent = 'ChatGPT';
+    document.querySelector('aside').append(history);
+    document.querySelector('main').innerHTML = '<h1>ChatGPT</h1>';
+  });
+
+  const label = page.locator('#native-brand span');
+  await page.waitForFunction(() => getComputedStyle(document.querySelector('#native-brand span')).display === 'none');
+  assert.equal(await page.locator('#history-name').isVisible(), true);
+  assert.equal(await page.locator('main h1').isVisible(), true);
+
+  await page.evaluate(() => {
+    document.querySelector('button[aria-label="Show sidebar"]').setAttribute('aria-label', 'Hide sidebar');
+    document.querySelector('#native-brand').innerHTML = '<span>ChatGPT</span>';
+  });
+  await page.waitForFunction(() => getComputedStyle(document.querySelector('#native-brand span')).display === 'none');
+  assert.equal(await page.locator('#ghrc-flawless-corner').isVisible(), true);
+
+  // Do not conceal unrelated header text when React changes the wordmark.
+  await page.evaluate(() => { document.querySelector('#native-brand span').textContent = 'Workspace'; });
+  await page.waitForFunction(() => getComputedStyle(document.querySelector('#native-brand span')).display !== 'none');
+  await page.evaluate(() => { document.querySelector('#native-brand span').textContent = 'ChatGPT'; });
+  await page.waitForFunction(() => getComputedStyle(document.querySelector('#native-brand span')).display === 'none');
+
+  await page.evaluate(() => {
+    chrome.runtime = undefined;
+    __ghrcExtensionContext.active();
+  });
+  assert.equal(await label.isVisible(), true);
+  assert.equal(await page.locator('#ghrc-flawless-corner').count(), 0);
+  assert.deepEqual(page.errors, []);
+  await page.close();
+});
