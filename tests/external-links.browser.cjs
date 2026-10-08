@@ -135,7 +135,7 @@ test('left-side preview moves the panel, keeps controls ordered, and resizes fro
   const destination = page.locator('#ghrc-link-preview .ghrc-preview-destination');
   assert.equal(await destination.getAttribute('href'), 'https://example.org/source?keep=1#section');
   assert.equal(await destination.locator('img').getAttribute('src'), 'https://example.org/favicon.ico');
-  assert.equal(await destination.locator('span').textContent(), 'example.org/source?keep=1#section');
+  assert.equal(await destination.locator('span').textContent(), 'example.org/source#section');
 
   const before = (await page.locator('#ghrc-link-preview').boundingBox()).width;
   const separator = page.getByRole('separator', { name: 'Resize website sidebar' });

@@ -277,9 +277,9 @@
     favicon.addEventListener("error", () => favicon.remove());
     const urlLabel = document.createElement("span");
     const displayHost = url.hostname.replace(/^www\./i, "");
-    urlLabel.textContent = `${displayHost}${url.pathname === "/" ? "" : url.pathname}${url.search}${url.hash}`;
+    urlLabel.textContent = `${displayHost}${url.pathname === "/" ? "" : url.pathname}${url.hash}`;
     destination.append(favicon, urlLabel);
-    destination.title = href;
+    destination.title = urlLabel.textContent;
     const copy = document.createElement("button");
     copy.className = "ghrc-preview-control";
     copy.type = "button";
