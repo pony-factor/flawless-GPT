@@ -13,7 +13,7 @@
   let initialCollapseFinished = false;
   let hoverRevealEnabled = false;
   let collapseTimer = null;
-  let revealFrame = null;
+  let revealTimer = null;
   let revealDeadline = 0;
   let pointer = { x: Number.POSITIVE_INFINITY, y: Number.POSITIVE_INFINITY, inside: false };
 
@@ -62,9 +62,9 @@
   }
 
   function clearRevealRetry() {
-    if (revealFrame !== null) {
-      window.cancelAnimationFrame(revealFrame);
-      revealFrame = null;
+    if (revealTimer !== null) {
+      window.clearTimeout(revealTimer);
+      revealTimer = null;
     }
     revealDeadline = 0;
   }
@@ -115,20 +115,14 @@
   }
 
   function scheduleReveal() {
-    if (revealFrame !== null) return;
-    const revealAt = Date.now() + REVEAL_DELAY_MS;
-    revealDeadline = revealAt + REVEAL_RETRY_MS;
+    if (revealTimer !== null) return;
+    revealDeadline = Date.now() + REVEAL_DELAY_MS + REVEAL_RETRY_MS;
 
     const attemptReveal = () => {
-      revealFrame = null;
+      revealTimer = null;
 
       if (!context.active() || !hoverRevealEnabled || !pointerInRevealHotspot()) {
         revealDeadline = 0;
-        return;
-      }
-
-      if (Date.now() < revealAt) {
-        revealFrame = window.requestAnimationFrame(attemptReveal);
         return;
       }
 
@@ -147,10 +141,15 @@
         return;
       }
 
-      revealFrame = window.requestAnimationFrame(attemptReveal);
+      // Backgrounded or unfocused windows may pause animation frames even
+      // while their page still receives mouse hover events. Retry on a timer
+      // instead; a missing or temporarily disabled toggle can still recover.
+      revealTimer = window.setTimeout(attemptReveal, 50);
     };
 
-    revealFrame = window.requestAnimationFrame(attemptReveal);
+    // A timer does not depend on rendering or keyboard focus. The reveal
+    // happens after the same delay when the pointer stays below Library.
+    revealTimer = window.setTimeout(attemptReveal, REVEAL_DELAY_MS);
   }
 
   function sidebarLike(element) {
@@ -286,15 +285,22 @@
     reconcileHoverState();
   }
 
-  // Mouse events still report hover when the browser window lacks keyboard
-  // focus. Entering the page must not require a click or a pointermove first.
-  const mouseEntryEvents = ["pointermove", "pointerover", "mousemove", "mouseover"];
+  // Listen for trusted mouse entry as well as movement. A visible but
+  // unfocused window should not require a click before its hover is detected.
+  const mouseEntryEvents = ["pointermove", "pointerover", "pointerenter", "mousemove", "mouseover", "mouseenter"];
   const mouseExitEvents = ["pointerout", "mouseout"];
   mouseEntryEvents.forEach(type => document.addEventListener(type, trackMouse, true));
   mouseExitEvents.forEach(type => window.addEventListener(type, trackMouseExit, true));
 
-  // Keyboard focus can leave the page while the mouse remains over the rail.
-  // Collapse on mouse exit instead of treating window blur as mouse exit.
+  // Keyboard focus can leave a visible window while the mouse remains over
+  // the rail. Collapse on mouse exit, never on window blur. Hidden tabs do not
+  // have a hoverable pointer; discard stale coordinates if a tab is hidden.
+  function trackVisibility() {
+    if (!document.hidden) return;
+    pointer.inside = false;
+    clearRevealRetry();
+  }
+  document.addEventListener("visibilitychange", trackVisibility);
 
   chrome.storage.onChanged.addListener((changes, areaName) => {
     if (areaName !== "local" || !changes[SETTING_KEY]) return;
@@ -318,6 +324,7 @@
     clearRevealRetry();
     mouseEntryEvents.forEach(type => document.removeEventListener(type, trackMouse, true));
     mouseExitEvents.forEach(type => window.removeEventListener(type, trackMouseExit, true));
+    document.removeEventListener("visibilitychange", trackVisibility);
   });
 
   void context.run(async () => {
