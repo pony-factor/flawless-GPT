@@ -18,7 +18,7 @@ async function fixture() {
   const page = await browser.newPage({ viewport: { width: 1100, height: 800 } });
   page.errors = [];
   page.on('pageerror', error => page.errors.push(error.message));
-  await page.setContent('<style>body{margin:0}aside{position:fixed;left:0;top:0;width:260px;height:100vh;background:#eee}svg{width:24px;height:24px}button{display:flex;align-items:center}</style><aside><button aria-label="Show sidebar" onclick="window.sidebarClicks=(window.sidebarClicks||0)+1"><svg></svg></button><button aria-label="New chat" onclick="window.newChats=(window.newChats||0)+1"><svg></svg><span>New chat</span></button><p>ChatGPT</p></aside><main></main>');
+  await page.setContent('<style>body{margin:0}aside{position:fixed;left:0;top:0;width:260px;height:100vh;background:#eee}svg{width:24px;height:24px}button{display:flex;align-items:center}button[aria-label="Show sidebar"]{position:absolute;left:7px;top:12px;width:44px;height:44px}</style><aside><button aria-label="Show sidebar" onclick="window.sidebarClicks=(window.sidebarClicks||0)+1"><svg></svg></button><button aria-label="New chat" onclick="window.newChats=(window.newChats||0)+1"><svg></svg><span>New chat</span></button><p>ChatGPT</p></aside><main></main>');
   await page.evaluate(() => {
     window.chrome = {
       runtime: { id: 'fixture', getURL: file => 'chrome-extension://fixture/' + file },
@@ -40,7 +40,15 @@ test('one mascot starts native New chat without opening the sidebar', async () =
   const bounds = await mascot.boundingBox();
   assert.equal(bounds.width, 33);
   assert.equal(bounds.height, 33);
-  assert.deepEqual(bounds, { x: 10, y: 20, width: 33, height: 33 });
+  assert.deepEqual(bounds, { x: 13, y: 18, width: 33, height: 33 });
+  // Recenter when ChatGPT changes sidebar padding or the control moves.
+  await page.evaluate(() => {
+    const button = document.querySelector('button[aria-label="Show sidebar"]');
+    button.style.left = '27px';
+    button.style.top = '30px';
+    window.dispatchEvent(new Event('resize'));
+  });
+  assert.deepEqual(await mascot.boundingBox(), { x: 33, y: 36, width: 33, height: 33 });
   assert.equal(await page.evaluate(() => getComputedStyle(document.getElementById('ghrc-flawless-corner')).borderTopLeftRadius), '4px');
   assert.equal(await page.getByRole('button', { name: 'New chat', exact: true }).count(), 0);
   await mascot.click();
