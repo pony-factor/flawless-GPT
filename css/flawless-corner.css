@@ -1,12 +1,12 @@
 /* Replace only the native New chat icon, preserving its button and label. */
 .ghrc-flawless-new-chat-image {
-  border-radius: 0;
+  border-radius: 4px;
   display: block;
   flex-shrink: 0;
-  height: 24px;
+  height: 22px;
   object-fit: cover;
   object-position: center 40%;
-  width: 24px;
+  width: 22px;
 }
 
 .ghrc-flawless-new-chat-icon {

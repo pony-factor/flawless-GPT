@@ -41,8 +41,8 @@ test('Flawless image replaces the New chat icon while preserving native actions'
   assert.equal(await button.locator('span').isVisible(), true);
   assert.equal(await page.getByRole('button', { name: 'Show sidebar', exact: true }).locator('svg').isVisible(), true);
   const bounds = await image.boundingBox();
-  assert.equal(bounds.width, 24);
-  assert.equal(bounds.height, 24);
+  assert.equal(bounds.width, 22);
+  assert.equal(bounds.height, 22);
   await image.click();
   assert.equal(await page.evaluate(() => window.newChats), 1);
   await page.evaluate(() => document.querySelector('button[aria-label="New chat"]').innerHTML = '<svg></svg><span>New chat</span>');
