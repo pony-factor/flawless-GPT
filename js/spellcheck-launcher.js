@@ -55,10 +55,15 @@
   }
 
   function findPluginMention(composer) {
-    return [...(composer?.querySelectorAll?.("[app-mention-path]") || [])].find((node) => (
-      /^app:\/\//.test(node.getAttribute?.("app-mention-path") || "")
-      && pluginLabelMatches(node)
-    )) || null;
+    // ChatGPT can render the selected app as a composer-level chip, rather
+    // than an inline ProseMirror node. Search the enclosing composer as well.
+    const scope = composer?.closest?.("form")
+      || composer?.closest?.('[data-type="unified-composer"]')
+      || composer;
+    return [...(scope?.querySelectorAll?.("[app-mention-path], [app-mention-display-name]") || [])].find((node) => {
+      const path = node.getAttribute?.("app-mention-path") || "";
+      return (!path || /^app:\/\//.test(path)) && pluginLabelMatches(node);
+    }) || null;
   }
 
   function findPluginSuggestion() {
@@ -175,13 +180,23 @@
     if (!pluginAction) return false;
     pluginAction.click();
 
-    return Boolean(await waitUntil(() => findPluginMention(composer)));
+    // App activation may remount the contenteditable editor.
+    return Boolean(await waitUntil(() => findPluginMention(findComposerInput() || composer)));
   }
 
   async function appendSpellcheckText(composer, text) {
-    if (!text.trim() || !findPluginMention(composer)) return false;
-    composer.focus({ preventScroll: true });
+    const mention = findPluginMention(composer);
+    if (!text.trim() || !mention) return false;
 
+    // A selected app chip outside the editor should not be typed into.
+    // Fill the now-empty editor normally, without replacing the app chip.
+    const inlineMention = [...(composer.querySelectorAll?.("[app-mention-path]") || [])].includes(mention);
+    if (!inlineMention) {
+      if (!await replaceComposerText(composer, text)) return false;
+      return spellcheckDraftMatches(composer, text);
+    }
+
+    composer.focus({ preventScroll: true });
     const selection = window.getSelection();
     if (!selection) return false;
     const range = document.createRange();
@@ -189,20 +204,34 @@
     range.collapse(false);
     selection.removeAllRanges();
     selection.addRange(range);
+
+    // insertText triggers the editor's normal input pipeline while preserving
+    // the inline app mention. A separate paragraph is a fallback for editors
+    // that reject a newline after an uneditable mention node.
     document.execCommand("insertText", false, `\n${text}`);
+    await pause(50);
+    if (spellcheckDraftMatches(composer, text)) return true;
+    if (composerText(composer).includes(text)) return false;
+    document.execCommand("insertParagraph", false);
+    document.execCommand("insertText", false, text);
     await pause(50);
     return spellcheckDraftMatches(composer, text);
   }
 
   function findSendButton(composer) {
     const selectors = [
+      'button[data-testid="composer-submit-button"]',
       'button[data-testid="send-button"]',
       'button[aria-label^="Send" i]',
       'button#composer-submit-button:not([data-testid="stop-button"]):not([aria-label*="Stop" i]):not([aria-label*="voice" i])',
     ];
     for (let container = composer.parentElement; container; container = container.parentElement) {
       for (const selector of selectors) {
-        const button = [...container.querySelectorAll(selector)].find((candidate) => isVisible(candidate));
+        const button = [...container.querySelectorAll(selector)].find((candidate) => (
+          isVisible(candidate)
+          && candidate.getAttribute("data-testid") !== "stop-button"
+          && !/stop|voice/i.test(candidate.getAttribute("aria-label") || "")
+        ));
         if (button) return button;
       }
       if (container.matches("main, body")) break;
@@ -212,23 +241,23 @@
   }
 
   function submitWhenReady(composer, text, deadline, shortcutAttempted = false) {
+    const currentComposer = findComposerInput();
     if (
       Date.now() >= deadline
       || !isHomePage()
-      || !composer.isConnected
-      || findComposerInput() !== composer
-      || !spellcheckDraftMatches(composer, text)
+      || !currentComposer?.isConnected
+      || !spellcheckDraftMatches(currentComposer, text)
     ) return;
 
-    const sendButton = findSendButton(composer);
+    const sendButton = findSendButton(currentComposer);
     if (sendButton && !sendButton.disabled && sendButton.getAttribute("aria-disabled") !== "true") {
       sendButton.click();
       return;
     }
     if (!sendButton && !shortcutAttempted) {
-      composer.focus({ preventScroll: true });
+      currentComposer.focus({ preventScroll: true });
       for (const type of ["keydown", "keyup"]) {
-        composer.dispatchEvent(new KeyboardEvent(type, {
+        currentComposer.dispatchEvent(new KeyboardEvent(type, {
           key: "Enter", code: "Enter", keyCode: 13, which: 13,
           bubbles: true, cancelable: true,
         }));
@@ -252,10 +281,14 @@
         console.warn("Spellcheck Only plugin could not be resolved through the app mention service.");
         return;
       }
-      if (!await appendSpellcheckText(composer, text)) return;
+      const activeComposer = findComposerInput();
+      if (!activeComposer || !await appendSpellcheckText(activeComposer, text)) {
+        console.warn("Spellcheck Only: app selected but clipboard text could not be inserted.");
+        return;
+      }
 
       const deadline = Date.now() + SUBMIT_TIMEOUT_MS;
-      window.setTimeout(() => submitWhenReady(composer, text, deadline), SUBMIT_RETRY_MS);
+      window.setTimeout(() => submitWhenReady(activeComposer, text, deadline), SUBMIT_RETRY_MS);
     } catch (error) {
       console.warn("Spellcheck Only could not read the system clipboard:", error);
     } finally {
