@@ -5,6 +5,34 @@ const REPOSITORIES_PER_PAGE = 100;
 const REPOSITORY_CACHE_KEY = "repositoryPayloadCacheV3";
 const REPOSITORY_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 const WOOTEN_LINK_TAB_ID_KEY = "wootenLinkSearchTabId";
+
+async function lookupCustomSearchRepository(fullName) {
+  const name = typeof fullName === "string" ? fullName.trim() : "";
+  if (!/^[a-z0-9-]{1,39}\/[a-z0-9._-]{1,100}$/i.test(name)) {
+    throw new Error("Enter a repository as owner/name.");
+  }
+
+  const [owner, repository] = name.split("/");
+  const url = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repository)}`;
+  const tokens = await TokenVault.loadTokens({ refresh: true });
+  let lastError = null;
+  for (const token of [...tokens.map((entry) => entry.token), ""]) {
+    try {
+      const result = await fetchGitHub(url, token);
+      if (!result?.full_name || !result?.owner?.login) {
+        throw new Error("GitHub returned an invalid repository.");
+      }
+      return normalizeRepository(result, new Map());
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw new Error(
+    lastError?.message?.includes("rate-limited")
+      ? lastError.message
+      : "Repository not found or inaccessible with the configured GitHub account.",
+  );
+}
 const ownerProfileCache = new Map();
 const repositoryRefreshRequests = new Map();
 let repositoryLoadRequest = null;
@@ -578,6 +606,13 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type === "preload-repositories") {
     requestRepositoryPayload()
       .then(() => sendResponse({ ok: true }))
+      .catch((error) => sendResponse({ ok: false, error: error.message }));
+    return true;
+  }
+
+  if (message?.type === "lookup-custom-search-repository") {
+    lookupCustomSearchRepository(message.fullName)
+      .then((repository) => sendResponse({ ok: true, repository }))
       .catch((error) => sendResponse({ ok: false, error: error.message }));
     return true;
   }

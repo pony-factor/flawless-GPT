@@ -12,6 +12,7 @@
   const HIDDEN_OWNERS_KEY = "hiddenOwners";
   const OWNER_GROUPS_PER_PAGE_KEY = "ownerGroupsPerPage";
   const SHOW_REPOSITORY_SEARCH_KEY = "showRepositorySearch";
+  const CUSTOM_REPOSITORIES_KEY = "customRepositorySearchOverrides";
   const SHOW_REPOSITORY_TOTAL_KEY = "showRepositoryTotal";
   const PERSONAL_REPOSITORY_COLUMN_TITLE_KEY = "personalRepositoryColumnTitle";
   const SHOW_WOOTEN_LINK_SEARCH_KEY = "showWootenLinkSearch";
@@ -20,6 +21,7 @@
   const DAY_IN_MILLISECONDS = 24 * 60 * 60 * 1000;
   let mountScheduled = false;
   let repositoryRequest = null;
+  let repositorySearchQuery = "";
   let wootenLinkEntriesRequest = null;
   let layoutObserver = null;
   let observedLayoutContainer = null;
@@ -489,6 +491,18 @@
     container.hidden = false;
   }
 
+  function normalizedCustomRepositories(value) {
+    const seen = new Set();
+    return (Array.isArray(value) ? value : []).filter((repository) => {
+      const fullName = repository?.fullName;
+      const key = typeof fullName === "string" ? fullName.toLowerCase() : "";
+      if (!/^[a-z0-9-]{1,39}\/[a-z0-9._-]{1,100}$/i.test(fullName || "")
+        || !repository?.owner?.login || !repository?.url || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }
+
   function requestOptionsPage(connectGithub = false) {
     try {
       chrome.runtime.sendMessage({ type: "open-options", connectGithub }, () => {
@@ -508,6 +522,7 @@
     pinnedRepositories,
     showRepositorySearch,
     showRepositoryTotal,
+    customRepositories,
   ) {
     if (!showRepositorySearch && !showRepositoryTotal) return;
 
@@ -562,20 +577,126 @@
       shortcut.textContent = "Alt R";
       searchLabel.append(shortcut);
 
+      const overrideButton = document.createElement("button");
+      overrideButton.type = "button";
+      overrideButton.className = "ghrc-search-override-toggle";
+      overrideButton.textContent = "+ Custom repo";
+      overrideButton.setAttribute("aria-expanded", "false");
+      overrideButton.setAttribute("aria-label", "Add or remove a custom GitHub repository search override");
+
+      const controls = document.createElement("div");
+      controls.className = "ghrc-search-controls";
+      controls.append(searchLabel, overrideButton);
+
+      const form = document.createElement("form");
+      form.className = "ghrc-search-override-form";
+      form.hidden = true;
+      const input = document.createElement("input");
+      input.type = "text";
+      input.placeholder = "owner/repository";
+      input.autocomplete = "off";
+      input.spellcheck = false;
+      input.required = true;
+      input.maxLength = 140;
+      input.setAttribute("aria-label", "GitHub repository owner and name");
+      const add = document.createElement("button");
+      add.type = "submit";
+      add.textContent = "Add repository";
+      const cancel = document.createElement("button");
+      cancel.type = "button";
+      cancel.textContent = "Cancel";
+      cancel.addEventListener("click", () => {
+        form.hidden = true;
+        overrideButton.setAttribute("aria-expanded", "false");
+      });
+      const status = document.createElement("p");
+      status.className = "ghrc-search-override-status";
+      status.setAttribute("role", "status");
+      const list = document.createElement("div");
+      list.className = "ghrc-search-override-list";
+      for (const repository of normalizedCustomRepositories(customRepositories)) {
+        const item = document.createElement("div");
+        const name = document.createElement("a");
+        name.textContent = repository.fullName;
+        name.href = repository.url;
+        name.target = "_blank";
+        name.rel = "noopener noreferrer";
+        const remove = document.createElement("button");
+        remove.type = "button";
+        remove.textContent = "Remove";
+        remove.setAttribute("aria-label", `Remove custom repository ${repository.fullName}`);
+        remove.addEventListener("click", async () => {
+          remove.disabled = true;
+          try {
+            const stored = await chrome.storage.local.get({ [CUSTOM_REPOSITORIES_KEY]: [] });
+            const next = normalizedCustomRepositories(stored[CUSTOM_REPOSITORIES_KEY])
+              .filter((entry) => entry.fullName.toLowerCase() !== repository.fullName.toLowerCase());
+            await chrome.storage.local.set({ [CUSTOM_REPOSITORIES_KEY]: next });
+          } catch (error) {
+            status.textContent = error.message || "Could not remove repository.";
+            remove.disabled = false;
+          }
+        });
+        item.append(name, remove);
+        list.append(item);
+      }
+      form.append(input, add, cancel, status, list);
+      overrideButton.addEventListener("click", () => {
+        form.hidden = !form.hidden;
+        overrideButton.setAttribute("aria-expanded", String(!form.hidden));
+        if (!form.hidden) {
+          input.value = /^[a-z0-9-]+\/[a-z0-9._-]+$/i.test(search.value.trim())
+            ? search.value.trim() : "";
+          input.focus();
+        }
+      });
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        if (add.disabled) return;
+        status.textContent = "";
+        add.disabled = true;
+        try {
+          const response = await chrome.runtime.sendMessage({
+            type: "lookup-custom-search-repository",
+            fullName: input.value.trim(),
+          });
+          if (!response?.ok || !response.repository) {
+            throw new Error(response?.error || "Could not find that repository.");
+          }
+          const stored = await chrome.storage.local.get({ [CUSTOM_REPOSITORIES_KEY]: [] });
+          const previous = normalizedCustomRepositories(stored[CUSTOM_REPOSITORIES_KEY]);
+          const additions = previous.filter((entry) => (
+            entry.fullName.toLowerCase() !== response.repository.fullName.toLowerCase()
+          ));
+          additions.push(response.repository);
+          repositorySearchQuery = response.repository.fullName;
+          await chrome.storage.local.set({ [CUSTOM_REPOSITORIES_KEY]: additions.slice(-50) });
+          status.textContent = "Repository added to search overrides.";
+        } catch (error) {
+          status.textContent = error.message || "Repository lookup failed.";
+        } finally {
+          add.disabled = false;
+        }
+      });
+
       const results = document.createElement("div");
       results.className = "ghrc-search-results";
       results.hidden = true;
       search.addEventListener("input", () => {
+        repositorySearchQuery = search.value;
         renderSearchResults(results, searchRepositories, search.value, pinnedRepositories);
       });
       search.addEventListener("keydown", (event) => {
         if (event.key === "Escape") {
           search.value = "";
+          repositorySearchQuery = "";
           renderSearchResults(results, searchRepositories, "", pinnedRepositories);
           search.blur();
         }
       });
-      searchArea.append(searchLabel, results);
+      searchArea.append(controls, form, results);
+      search.value = repositorySearchQuery;
+      renderSearchResults(results, searchRepositories, search.value, pinnedRepositories);
       widget.append(searchArea);
     }
   }
@@ -967,6 +1088,7 @@
     showRepositoryTotal,
     personalRepositoryColumnTitle,
     showWootenLinkSearch,
+    customRepositories,
   ) {
     widget.replaceChildren();
     const rankedRepositories = rankRepositories(
@@ -974,11 +1096,14 @@
       usage,
       pinnedRepositories,
     );
-    const rankedSearchRepositories = rankRepositories(
-      payload.searchRepositories || payload.repositories,
-      usage,
-      pinnedRepositories,
-    );
+    const knownSearchRepositories = payload.searchRepositories || payload.repositories;
+    const knownNames = new Set(knownSearchRepositories.map((repository) => repository.fullName.toLowerCase()));
+    const rankedSearchRepositories = rankRepositories([
+      ...knownSearchRepositories,
+      ...normalizedCustomRepositories(customRepositories).filter((repository) => (
+        !knownNames.has(repository.fullName.toLowerCase())
+      )),
+    ], usage, pinnedRepositories);
     createToolbar(
       widget,
       rankedRepositories,
@@ -987,6 +1112,7 @@
       pinnedRepositories,
       showRepositorySearch,
       showRepositoryTotal,
+      customRepositories,
     );
 
     const groups = groupRepositories(
@@ -1072,6 +1198,7 @@
           [HIDDEN_OWNERS_KEY]: [],
           [OWNER_GROUPS_PER_PAGE_KEY]: DEFAULT_OWNER_GROUPS_PER_PAGE,
           [SHOW_REPOSITORY_SEARCH_KEY]: true,
+          [CUSTOM_REPOSITORIES_KEY]: [],
           [SHOW_REPOSITORY_TOTAL_KEY]: true,
           [PERSONAL_REPOSITORY_COLUMN_TITLE_KEY]: "Personal Repos",
           [SHOW_WOOTEN_LINK_SEARCH_KEY]: false,
@@ -1095,6 +1222,7 @@
           Boolean(stored[SHOW_REPOSITORY_TOTAL_KEY]),
           stored[PERSONAL_REPOSITORY_COLUMN_TITLE_KEY],
           Boolean(stored[SHOW_WOOTEN_LINK_SEARCH_KEY]),
+          stored[CUSTOM_REPOSITORIES_KEY],
         );
       }
     } catch (error) {
@@ -1205,6 +1333,7 @@
       || changes.ownerOrder
       || changes.hiddenOwners
       || changes.ownerGroupsPerPage
+      || changes.customRepositorySearchOverrides
       || changes.showRepositorySearch
       || changes.showRepositoryTotal
       || changes.personalRepositoryColumnTitle

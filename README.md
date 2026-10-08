@@ -21,7 +21,10 @@ The dashboard:
 - queues follow-up messages locally while ChatGPT is responding, keeps them editable and reorderable, and sends them FIFO only after the active response fully completes;
 - adds columns for any other GitHub accounts the connected tokens can access;
 - pins important repositories at the top of their user or organization column;
-- searches across every loaded repository; and
+- searches across every loaded repository, with an optional **+ Custom repo** button
+  to add or remove specific `owner/repository` search overrides even when the
+  normal index misses them (GitHub access is verified before saving; overrides
+  are stored locally and do not affect dashboard account rankings); and
 - combines recent repository activity with locally tracked opening frequency to
   personalize the order.
 

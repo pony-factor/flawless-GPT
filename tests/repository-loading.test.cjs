@@ -339,3 +339,78 @@ test("wide repository search results are anchored below the search field", () =>
   assert.doesNotMatch(wideRule, /^\s*bottom:\s*0;/m);
   assert.match(stylesheet, /\.ghrc-search-results \{[\s\S]*?top: calc\(100% \+ 6px\)/);
 });
+
+
+test("manual search override verifies a repository using any configured GitHub token", async () => {
+  const requests = [];
+  const upstream = {
+    ...makeRepository(0),
+    name: "stellar-docs",
+    full_name: "stellar/stellar-docs",
+    html_url: "https://github.com/stellar/stellar-docs",
+    owner: { login: "stellar", avatar_url: "", type: "Organization" },
+  };
+  const worker = createWorker({
+    loadTokens: async () => [
+      { label: "limited", token: "limited-token" },
+      { label: "allowed", token: "allowed-token" },
+    ],
+    fetchImpl: async (url, options = {}) => {
+      requests.push({ url, auth: options.headers.Authorization });
+      if (options.headers.Authorization === "Bearer allowed-token") {
+        return jsonResponse(upstream);
+      }
+      return { ok: false, status: 404, json: async () => ({ message: "Not Found" }) };
+    },
+  });
+
+  const result = await worker.send({
+    type: "lookup-custom-search-repository",
+    fullName: "stellar/stellar-docs",
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.repository.fullName, "stellar/stellar-docs");
+  assert.equal(result.repository.owner.login, "stellar");
+  assert.deepEqual(requests.map(({ auth }) => auth), [
+    "Bearer limited-token",
+    "Bearer allowed-token",
+  ]);
+  assert.equal(worker.local.customRepositorySearchOverrides, undefined);
+});
+
+test("manual search override rejects invalid names before network access", async () => {
+  let calls = 0;
+  const worker = createWorker({
+    loadTokens: async () => [],
+    fetchImpl: async () => { calls += 1; throw new Error("Unexpected request"); },
+  });
+
+  for (const name of ["https://github.com/octo/repo", "../../private", "not-a-slug"]) {
+    const response = await worker.send({
+      type: "lookup-custom-search-repository",
+      fullName: name,
+    });
+    assert.equal(response.ok, false);
+    assert.match(response.error, /owner\/name/);
+  }
+  assert.equal(calls, 0);
+});
+
+test("manual search override reports inaccessible repositories without saving them", async () => {
+  const worker = createWorker({
+    loadTokens: async () => [],
+    fetchImpl: async () => ({
+      ok: false,
+      status: 404,
+      json: async () => ({ message: "Not Found" }),
+    }),
+  });
+
+  const response = await worker.send({
+    type: "lookup-custom-search-repository",
+    fullName: "octo/missing",
+  });
+  assert.equal(response.ok, false);
+  assert.match(response.error, /not found or inaccessible/i);
+  assert.equal(worker.local.customRepositorySearchOverrides, undefined);
+});
