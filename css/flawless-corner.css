@@ -1,4 +1,4 @@
-/* A compact New chat image replaces the top-left branding. */
+/* One mascot replaces the top branding and starts a native New chat. */
 #ghrc-flawless-corner {
   background: transparent;
   border: 0;
@@ -29,4 +29,18 @@
 #ghrc-flawless-corner:focus-visible {
   outline: 2px solid #a68df3;
   outline-offset: -2px;
+}
+
+.ghrc-flawless-logo-button {
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  height: 33px !important;
+  padding: 0 !important;
+  width: 33px !important;
+}
+
+.ghrc-flawless-logo-button svg,
+.ghrc-flawless-hidden-new-chat {
+  display: none !important;
 }

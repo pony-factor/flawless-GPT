@@ -18,7 +18,7 @@ async function fixture() {
   const page = await browser.newPage({ viewport: { width: 1100, height: 800 } });
   page.errors = [];
   page.on('pageerror', error => page.errors.push(error.message));
-  await page.setContent('<style>body{margin:0}aside{position:fixed;left:0;top:0;width:260px;height:100vh;background:#eee}</style><aside><button aria-label="New chat">New chat</button><p>ChatGPT</p></aside><main></main>');
+  await page.setContent('<style>body{margin:0}aside{position:fixed;left:0;top:0;width:260px;height:100vh;background:#eee}svg{width:24px;height:24px}button{display:flex;align-items:center}</style><aside><button aria-label="Show sidebar" onclick="window.sidebarClicks=(window.sidebarClicks||0)+1"><svg></svg></button><button aria-label="New chat" onclick="window.newChats=(window.newChats||0)+1"><svg></svg><span>New chat</span></button><p>ChatGPT</p></aside><main></main>');
   await page.evaluate(() => {
     window.chrome = {
       runtime: { id: 'fixture', getURL: file => 'chrome-extension://fixture/' + file },
@@ -31,34 +31,47 @@ async function fixture() {
   return page;
 }
 
-test('mascot corner stays compact within the sidebar and links to New chat', async () => {
+test('one mascot starts native New chat without opening the sidebar', async () => {
   const page = await fixture();
-  const card = page.locator('#ghrc-flawless-corner');
-  assert.equal(await card.count(), 1);
-  assert.equal(await card.getAttribute('href'), '/');
-  assert.equal(await card.getAttribute('aria-label'), 'New chat');
-  assert.match(await card.locator('img').getAttribute('src'), /artwork\/squeaky-belle-full\.webp$/);
-  const bounds = await card.boundingBox();
+  const mascot = page.locator('#ghrc-flawless-corner');
+  assert.equal(await mascot.count(), 1);
+  assert.equal(await mascot.getAttribute('aria-label'), 'New chat');
+  assert.match(await mascot.locator('img').getAttribute('src'), /artwork\/squeaky-belle-full\.webp$/);
+  const bounds = await mascot.boundingBox();
+  assert.equal(bounds.width, 33);
+  assert.equal(bounds.height, 33);
   assert.deepEqual(bounds, { x: 10, y: 20, width: 33, height: 33 });
   assert.equal(await page.evaluate(() => getComputedStyle(document.getElementById('ghrc-flawless-corner')).borderTopLeftRadius), '4px');
+  assert.equal(await page.getByRole('button', { name: 'New chat', exact: true }).count(), 0);
+  await mascot.click();
+  assert.equal(await page.evaluate(() => window.newChats), 1);
+  assert.equal(await page.evaluate(() => window.sidebarClicks || 0), 0);
+  await page.evaluate(() => {
+    document.querySelector('button[aria-label="Show sidebar"]').setAttribute('aria-label', 'Hide sidebar');
+  });
+  await page.waitForFunction(() => !document.querySelector('.ghrc-flawless-hidden-new-chat'));
+  assert.equal(await mascot.count(), 1);
+  await mascot.click();
+  assert.equal(await page.evaluate(() => window.newChats), 2);
   await page.evaluate(() => document.getElementById('ghrc-flawless-corner').remove());
   await page.waitForFunction(() => !!document.getElementById('ghrc-flawless-corner'));
-  assert.equal(await card.count(), 1);
+  assert.equal(await mascot.count(), 1);
   assert.deepEqual(page.errors, []);
   await page.close();
 });
 
-test('corner stays within narrow viewports and cleans up with extension', async () => {
+test('native controls return when extension stops', async () => {
   const page = await fixture();
   await page.setViewportSize({ width: 320, height: 600 });
   const bounds = await page.locator('#ghrc-flawless-corner').boundingBox();
   assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= 320);
-  assert.ok(bounds.height <= 88);
   await page.evaluate(() => {
     chrome.runtime = undefined;
     __ghrcExtensionContext.active();
   });
   assert.equal(await page.locator('#ghrc-flawless-corner').count(), 0);
+  assert.equal(await page.getByRole('button', { name: 'Show sidebar', exact: true }).locator('svg').isVisible(), true);
+  assert.equal(await page.getByRole('button', { name: 'New chat', exact: true }).isVisible(), true);
   assert.deepEqual(page.errors, []);
   await page.close();
 });
