@@ -516,14 +516,37 @@
     if (!(node instanceof Element)) return;
     if (node.matches("a[href]")) ensureLinkActions(node);
     node.querySelectorAll("a[href]").forEach(ensureLinkActions);
+    const selector = 'button[data-d-component="pressable"][aria-label^="Open "]';
+    if (node.matches(selector)) ensureCitationActions(node);
+    node.querySelectorAll(selector).forEach(ensureCitationActions);
+  }
+
+  function ensureCitationActions(button) {
+    if (!splitViewEnabled || !button.closest('[role="dialog"]')) return;
+    button.dispatchEvent(new Event("ghrc-resolve-citation-url", { bubbles: true }));
+    const href = button.getAttribute("data-ghrc-citation-url");
+    let url;
+    try { url = new URL(href); } catch { return; }
+    if (!["http:", "https:"].includes(url.protocol)) return;
+    let actions = linkActions.get(button);
+    if (!actions?.isConnected) {
+      actions = createLinkActions(button, url);
+      actions.classList.add("ghrc-citation-actions");
+      button.after(actions);
+    } else updateLinkActions(button, url, actions);
+    button.classList.add("ghrc-citation-source");
+    button.parentElement.classList.add("ghrc-citation-sources");
+    actions.style.top = `${button.offsetTop + 12}px`;
   }
 
   function refreshLinkActions() {
     document.querySelectorAll(".ghrc-link-actions").forEach((actions) => {
-      if (!(actions.previousSibling instanceof HTMLAnchorElement)) actions.remove();
+      if (!(actions.previousSibling instanceof HTMLAnchorElement)
+          && !actions.previousSibling?.matches?.('.ghrc-citation-source')) actions.remove();
     });
     if (!splitViewEnabled) {
       document.querySelectorAll(".ghrc-link-actions").forEach(actions => actions.remove());
+      document.querySelectorAll('.ghrc-citation-source').forEach(button => button.classList.remove('ghrc-citation-source'));
       return;
     }
     if (document.documentElement) decorateExternalLinks(document.documentElement);

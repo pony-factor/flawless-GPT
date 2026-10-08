@@ -53,6 +53,21 @@ html[data-ghrc-link-preview="left"] {
   outline-offset: -2px;
 }
 
+.ghrc-citation-sources {
+  position: relative;
+}
+
+.ghrc-citation-source {
+  padding-inline-end: 32px !important;
+  box-sizing: border-box;
+}
+
+.ghrc-citation-actions {
+  position: absolute;
+  inset-inline-end: 0;
+  margin: 0;
+}
+
 #ghrc-link-preview {
   position: fixed;
   z-index: 10000;
