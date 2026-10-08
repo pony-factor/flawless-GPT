@@ -717,6 +717,18 @@
     }
   }
 
+  function chooseWootenLinkPlacement(bounds, contentHeight, viewportHeight) {
+    // Keep the dropdown inside the viewport, preferring the space below the footer.
+    const availableBelow = Math.max(0, viewportHeight - bounds.bottom - 14);
+    const availableAbove = Math.max(0, bounds.top - 14);
+    const desiredHeight = Math.min(contentHeight, 320, viewportHeight * 0.45);
+    const upward = availableBelow < desiredHeight && availableAbove > availableBelow;
+    return {
+      upward,
+      maxHeight: Math.floor(Math.min(desiredHeight, upward ? availableAbove : availableBelow)),
+    };
+  }
+
   function createWootenLinkSearch() {
     const form = document.createElement("form");
     form.className = "ghrc-wooten-link-search";
@@ -753,6 +765,23 @@
 
     let visibleEntries = [];
     let activeIndex = -1;
+    function stopTrackingResultsPlacement() {
+      window.removeEventListener("resize", updateResultsPlacement);
+      window.removeEventListener("scroll", updateResultsPlacement, true);
+    }
+    function updateResultsPlacement() {
+      if (!form.isConnected || results.hidden) {
+        stopTrackingResultsPlacement();
+        return;
+      }
+      const { upward, maxHeight } = chooseWootenLinkPlacement(
+        form.getBoundingClientRect(),
+        results.scrollHeight,
+        window.innerHeight,
+      );
+      results.classList.toggle("ghrc-open-upward", upward);
+      results.style.maxHeight = `${maxHeight}px`;
+    }
     const setActiveEntry = (index) => {
       activeIndex = index;
       [...results.querySelectorAll('[role="option"]')].forEach((option, optionIndex) => {
@@ -768,6 +797,7 @@
     };
     const hideResults = () => {
       results.hidden = true;
+      stopTrackingResultsPlacement();
       input.setAttribute("aria-expanded", "false");
       setActiveEntry(-1);
     };
@@ -815,6 +845,9 @@
       }
       results.hidden = false;
       input.setAttribute("aria-expanded", "true");
+      updateResultsPlacement();
+      window.addEventListener("resize", updateResultsPlacement);
+      window.addEventListener("scroll", updateResultsPlacement, true);
     };
 
     input.addEventListener("input", () => {
