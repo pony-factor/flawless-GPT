@@ -42,3 +42,23 @@
   stroke-width: 1.8;
   width: 18px;
 }
+
+#ghrc-clipboard-open-url-button[data-ghrc-beside-spellcheck] {
+  position: absolute;
+  left: -80px;
+  bottom: 10px;
+  margin: 0;
+  z-index: 4;
+}
+
+@media (max-width: 700px) {
+  #ghrc-clipboard-open-url-button[data-ghrc-beside-spellcheck] {
+    bottom: calc(100% + 8px);
+    left: 4px;
+  }
+
+  [data-ghrc-spellcheck-launcher-host]:has(> #ghrc-clipboard-open-url-button[data-ghrc-beside-spellcheck])
+    > #ghrc-spellcheck-gpt-launcher {
+    left: 44px;
+  }
+}

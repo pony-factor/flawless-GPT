@@ -65,7 +65,9 @@
         "css/work-mode.css",
         "css/external-links.css",
         "css/compact-header.css",
+        "css/flawless-corner.css",
         "css/chat-display.css",
+        "css/composer-colors.css",
         "css/sidebar-chat-dates.css",
         "css/styles.css",
         "css/hide-dictation.css",
@@ -76,6 +78,7 @@
       ],
       "js": [
         "js/extension-context.js",
+        "js/flawless-corner.js",
         "js/web-commit-guidance-sync.js",
         "js/compact-header.js",
         "js/2048-keyboard.js",
@@ -86,6 +89,7 @@
         "js/chat-display.js",
         "js/hide-share-label.js",
         "js/composer-placeholder.js",
+        "js/composer-colors.js",
         "js/force-high-thinking.js",
         "js/autofocus-composer.js",
         "js/preserve-scroll-on-send.js",
@@ -163,7 +167,8 @@
       "resources": [
         "artwork/spellcheck-only.png",
         "artwork/calligraphy-initials.png",
-        "artwork/research-telescope.png"
+        "artwork/research-telescope.png",
+        "artwork/squeaky-belle-full.webp"
       ],
       "matches": [
         "https://chatgpt.com/*"

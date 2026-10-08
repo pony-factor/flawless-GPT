@@ -332,6 +332,16 @@
       || null;
   }
 
+  function findStopButton(composer = findComposerInput()) {
+    const form = findComposerForm(composer);
+    if (!form) return null;
+    return [...form.querySelectorAll(
+      'button[data-testid="stop-button"], button[data-testid*="stop" i], '
+      + 'button[aria-label="Stop" i], button[aria-label*="Stop generating" i], '
+      + 'button[aria-label*="Stop response" i]'
+    )].find(isVisible) || null;
+  }
+
   function findActionButton(composer = findComposerInput()) {
     const form = findComposerForm(composer);
     if (!composer || !form) return null;
@@ -364,25 +374,28 @@
     const form = findComposerForm(composer);
     if (!composer || !form) return null;
 
+    // ChatGPT can momentarily render Send and Stop together or change the
+    // native action in place. Do not mistake Stop or Voice for Send.
+    const isNativeSend = (button) => (
+      isVisible(button)
+      && !button.id.startsWith("ghrc-")
+      && !button.className.includes("ghrc-")
+      && !/stop|voice|dictat|speech|search/i.test(button.getAttribute("aria-label") || "")
+      && !/stop|voice|dictat|speech/i.test(button.getAttribute("data-testid") || "")
+    );
     const selectors = [
       'button[data-testid="send-button"]',
-      'button[aria-label^="Send" i]:not([id^="ghrc-"])',
-      'button#composer-submit-button:not([data-testid="stop-button"]):not([aria-label*="Stop" i]):not([aria-label*="voice" i])',
+      'button[aria-label^="Send" i]',
+      'button[data-testid="composer-submit-button"]',
+      'button#composer-submit-button',
+      'button[type="submit"]',
     ];
 
     for (const selector of selectors) {
-      const button = [...form.querySelectorAll(selector)].find(isVisible);
+      const button = [...form.querySelectorAll(selector)].find(isNativeSend);
       if (button) return button;
     }
-
-    return [...form.querySelectorAll('button[type="submit"]')]
-      .find((button) => (
-        isVisible(button)
-        && button.getAttribute("data-testid") !== "stop-button"
-        && !button.id.startsWith("ghrc-")
-        && !button.className.includes("ghrc-")
-        && !/stop|voice|search/i.test(button.getAttribute("aria-label") || "")
-      )) || null;
+    return null;
   }
 
   function generationIndicatorIsActive() {
@@ -920,8 +933,21 @@
     const style = getComputedStyle(textStart);
     const textLeft = textStart.getBoundingClientRect().left
       + (parseFloat(style.borderLeftWidth) || 0) + (parseFloat(style.paddingLeft) || 0);
+
+    // Align with the composer text, but never let that offset push the panel
+    // past the form, its containing column, or the viewport edge.
+    const parentRect = panel.parentElement.getBoundingClientRect();
+    const formRight = findComposerForm(composer)?.getBoundingClientRect().right ?? parentRect.right;
+    const leftBoundary = Math.max(14, parentRect.left);
+    const rightBoundary = Math.min(window.innerWidth - 14, parentRect.right, formRight);
+    const alignedLeft = Math.min(Math.max(textLeft, leftBoundary), rightBoundary);
+    const availableWidth = `${Math.max(0, Math.round((rightBoundary - alignedLeft) * 100) / 100)}px`;
+    if (panel.style.getPropertyValue("--ghrc-queue-available-width") !== availableWidth) {
+      panel.style.setProperty("--ghrc-queue-available-width", availableWidth);
+    }
+
     const currentOffset = parseFloat(panel.style.getPropertyValue("--ghrc-queue-left-offset")) || 0;
-    const offset = Math.round((currentOffset + textLeft - panel.getBoundingClientRect().left) * 100) / 100;
+    const offset = Math.round((currentOffset + alignedLeft - panel.getBoundingClientRect().left) * 100) / 100;
     const value = `${offset}px`;
     if (panel.style.getPropertyValue("--ghrc-queue-left-offset") !== value) {
       panel.style.setProperty("--ghrc-queue-left-offset", value);
@@ -1030,7 +1056,8 @@
     let button = document.getElementById(QUEUE_BUTTON_ID);
     if (showQueueButton) {
       if (!button) button = createQueueButton();
-      button.disabled = !stateLoaded || steeringBusy || Boolean(enterPending);
+      const queueDisabled = !stateLoaded || steeringBusy || Boolean(enterPending);
+      if (button.disabled !== queueDisabled) button.disabled = queueDisabled;
 
       const badge = button.querySelector(".ghrc-message-queue-badge");
       const badgeText = queue.length ? String(queue.length) : "";
@@ -1048,9 +1075,17 @@
     let interruptButton = document.getElementById(INTERRUPT_BUTTON_ID);
     const hasDraft = Boolean(composerText(composer).trim());
     const activeResponse = responseIsActive(composer);
-    const emptyHat = !activeResponse && !hasDraft && !findSendButton(composer)
+    const nativeSend = findSendButton(composer);
+    const nativeStop = findStopButton(composer);
+    // Native Send wins over the custom hat, even if a stale Stop remains.
+    // Without a real Stop, an interrupt action cannot safely run.
+    const showInterrupt = activeResponse && hasDraft && Boolean(nativeStop) && !nativeSend;
+    const voiceAction = /voice|dictat|speech/i.test(
+      `${actionButton.getAttribute("aria-label") || ""} ${actionButton.getAttribute("data-testid") || ""}`
+    );
+    const emptyHat = !activeResponse && !hasDraft && !nativeSend && voiceAction
       && document.documentElement.hasAttribute("data-ghrc-hide-dictation");
-    if ((activeResponse && hasDraft) || emptyHat) {
+    if (showInterrupt || emptyHat) {
       if (!interruptButton) {
         interruptButton = document.createElement("button");
         interruptButton.id = INTERRUPT_BUTTON_ID;
@@ -1061,7 +1096,8 @@
       const label = emptyHat ? "Send message" : "Interrupt and send";
       if (interruptButton.title !== title) interruptButton.title = title;
       if (interruptButton.getAttribute("aria-label") !== label) interruptButton.setAttribute("aria-label", label);
-      interruptButton.disabled = emptyHat || interruptRunning || Boolean(sendingItemId) || enqueueRunning;
+      const interruptDisabled = emptyHat || interruptRunning || Boolean(sendingItemId) || enqueueRunning;
+      if (interruptButton.disabled !== interruptDisabled) interruptButton.disabled = interruptDisabled;
       if (interruptButton.parentElement !== actionButton.parentElement
         || interruptButton.nextElementSibling !== actionButton) {
         actionButton.before(interruptButton);
@@ -1070,11 +1106,11 @@
       interruptButton?.remove();
       interruptButton = null;
     }
-    // Keep the same order as clipboard-send: queue, URL, clipboard, hat, Send.
-    // Ignoring the URL control makes both observers move buttons every frame.
+    // Keep the same order as clipboard-send: queue, clipboard, URL, hat, Send.
+    // Ignoring either clipboard control makes both observers move buttons every frame.
     const nextButton = [
-      document.getElementById("ghrc-clipboard-open-url-button"),
       document.getElementById("ghrc-clipboard-send-button"),
+      document.getElementById("ghrc-clipboard-open-url-button"),
       interruptButton,
     ].find(candidate => candidate?.parentElement === actionButton.parentElement) || actionButton;
     if (button && (button.parentElement !== actionButton.parentElement || button.nextElementSibling !== nextButton)) {
@@ -1115,8 +1151,8 @@
     scheduleMount();
     try {
       if (responseIsActive(composer)) {
-        const stop = findActionButton(composer);
-        if (!stop || stop.disabled) return;
+        const stop = findStopButton(composer);
+        if (!stop || stop.disabled || stop.getAttribute("aria-disabled") === "true") return;
         stop.click();
       }
       const deadline = Date.now() + SUBMIT_TIMEOUT_MS;
@@ -1305,7 +1341,7 @@
 
     try {
       if (steer && responseIsActive(composer)) {
-        const stop = findActionButton(composer);
+        const stop = findStopButton(composer);
         if (!stop || stop.disabled || stop.getAttribute("aria-disabled") === "true") return;
         stop.click();
         const stopDeadline = Date.now() + SUBMIT_TIMEOUT_MS;
@@ -1650,7 +1686,7 @@
     childList: true,
     subtree: true,
     attributes: true,
-    attributeFilter: ["aria-disabled", "data-testid", "data-message-status", "data-state", "data-ghrc-hide-dictation"],
+    attributeFilter: ["aria-disabled", "aria-label", "disabled", "data-testid", "data-message-status", "data-state", "data-ghrc-hide-dictation"],
   });
 
   const pumpInterval = window.setInterval(schedulePump, PUMP_INTERVAL_MS);

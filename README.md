@@ -79,6 +79,10 @@ Synchronization uses ChatGPT's own same-origin `/backend-api/user_system_message
 
 Existing guidance from the older `codexCustomInstructions` / `chatgptCustomInstructions` keys is migrated into `webCommitGuidance`. If the older Codex Web co-author preference was enabled, its trailer instruction is folded into the migrated guidance rather than kept as a separate setting. Personalization never writes `~/.codex/AGENTS.md`, inspects `CODEX_HOME`, imports PGP keys, or changes global Git configuration. Commit signing remains a separate feature.
 
+### Chat bar colors
+
+Under **ChatGPT → Chat bar colors**, choose independent opt-in colors for the composer background, border, focus ring, typed text, caret, placeholder, selection, toolbar, send/stop buttons, and attachments. Unchecked swatches use ChatGPT's own theme, including dark-mode changes. Colors are stored locally under `composerColors`, update live in open chats, and can all be reset with **Restore ChatGPT colors**.
+
 ### Token storage
 
 GitHub token values are encrypted with AES-GCM before being written to

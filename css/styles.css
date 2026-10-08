@@ -443,7 +443,7 @@ html.dark #github-repositories-for-chatgpt {
 
 #github-repositories-for-chatgpt .ghrc-wooten-link-results {
   background: var(--ghrc-canvas);
-  bottom: calc(100% + 6px);
+  top: calc(100% + 6px);
   border: 1px solid var(--ghrc-border);
   border-radius: 8px;
   box-shadow: 0 8px 24px rgba(1, 4, 9, 0.22);
@@ -455,6 +455,11 @@ html.dark #github-repositories-for-chatgpt {
   transform: translateX(-50%);
   width: min(420px, calc(100vw - 32px));
   z-index: 4;
+}
+
+#github-repositories-for-chatgpt .ghrc-wooten-link-results.ghrc-open-upward {
+  bottom: calc(100% + 6px);
+  top: auto;
 }
 
 #github-repositories-for-chatgpt .ghrc-wooten-link-results button {

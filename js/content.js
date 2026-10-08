@@ -13,6 +13,7 @@
   const OWNER_GROUPS_PER_PAGE_KEY = "ownerGroupsPerPage";
   const SHOW_REPOSITORY_SEARCH_KEY = "showRepositorySearch";
   const SHOW_REPOSITORY_TOTAL_KEY = "showRepositoryTotal";
+  const PERSONAL_REPOSITORY_COLUMN_TITLE_KEY = "personalRepositoryColumnTitle";
   const SHOW_WOOTEN_LINK_SEARCH_KEY = "showWootenLinkSearch";
   const DEFAULT_OWNER_GROUPS_PER_PAGE = 6;
   const REPOSITORIES_PER_COLUMN = 7;
@@ -401,10 +402,16 @@
     return item;
   }
 
-  function createOwnerColumn(group, pinnedRepositories) {
+  function createOwnerColumn(group, pinnedRepositories, personalRepositoryColumnTitle) {
     const column = document.createElement("section");
     column.className = "ghrc-owner-column";
     const displayName = group.owner.displayName || group.owner.login;
+    const personalTitle = typeof personalRepositoryColumnTitle === "string"
+      ? personalRepositoryColumnTitle.trim()
+      : "";
+    const columnTitle = group.owner.type === "Organization" || !personalTitle
+      ? displayName
+      : personalTitle;
     column.setAttribute("aria-label", `${displayName} repositories`);
 
     const header = document.createElement("header");
@@ -418,8 +425,8 @@
 
     const heading = document.createElement("div");
     const name = document.createElement("h3");
-    name.textContent = displayName;
-    if (displayName !== group.owner.login) name.title = group.owner.login;
+    name.textContent = columnTitle;
+    if (columnTitle !== group.owner.login) name.title = group.owner.login;
     const type = document.createElement("span");
     type.textContent = group.owner.type === "Organization" ? "Organization" : "Personal";
     heading.append(name, type);
@@ -710,6 +717,18 @@
     }
   }
 
+  function chooseWootenLinkPlacement(bounds, contentHeight, viewportHeight) {
+    // Keep the dropdown inside the viewport, preferring the space below the footer.
+    const availableBelow = Math.max(0, viewportHeight - bounds.bottom - 14);
+    const availableAbove = Math.max(0, bounds.top - 14);
+    const desiredHeight = Math.min(contentHeight, 320, viewportHeight * 0.45);
+    const upward = availableBelow < desiredHeight && availableAbove > availableBelow;
+    return {
+      upward,
+      maxHeight: Math.floor(Math.min(desiredHeight, upward ? availableAbove : availableBelow)),
+    };
+  }
+
   function createWootenLinkSearch() {
     const form = document.createElement("form");
     form.className = "ghrc-wooten-link-search";
@@ -746,6 +765,23 @@
 
     let visibleEntries = [];
     let activeIndex = -1;
+    function stopTrackingResultsPlacement() {
+      window.removeEventListener("resize", updateResultsPlacement);
+      window.removeEventListener("scroll", updateResultsPlacement, true);
+    }
+    function updateResultsPlacement() {
+      if (!form.isConnected || results.hidden) {
+        stopTrackingResultsPlacement();
+        return;
+      }
+      const { upward, maxHeight } = chooseWootenLinkPlacement(
+        form.getBoundingClientRect(),
+        results.scrollHeight,
+        window.innerHeight,
+      );
+      results.classList.toggle("ghrc-open-upward", upward);
+      results.style.maxHeight = `${maxHeight}px`;
+    }
     const setActiveEntry = (index) => {
       activeIndex = index;
       [...results.querySelectorAll('[role="option"]')].forEach((option, optionIndex) => {
@@ -761,6 +797,7 @@
     };
     const hideResults = () => {
       results.hidden = true;
+      stopTrackingResultsPlacement();
       input.setAttribute("aria-expanded", "false");
       setActiveEntry(-1);
     };
@@ -808,6 +845,9 @@
       }
       results.hidden = false;
       input.setAttribute("aria-expanded", "true");
+      updateResultsPlacement();
+      window.addEventListener("resize", updateResultsPlacement);
+      window.addEventListener("scroll", updateResultsPlacement, true);
     };
 
     input.addEventListener("input", () => {
@@ -925,6 +965,7 @@
     ownerGroupsPerPage,
     showRepositorySearch,
     showRepositoryTotal,
+    personalRepositoryColumnTitle,
     showWootenLinkSearch,
   ) {
     widget.replaceChildren();
@@ -978,7 +1019,11 @@
       const firstGroup = pageIndex * groupsPerPage;
       const pageGroups = groups.slice(firstGroup, firstGroup + groupsPerPage);
       columns.replaceChildren(
-        ...pageGroups.map((group) => createOwnerColumn(group, pinnedRepositories)),
+        ...pageGroups.map((group) => createOwnerColumn(
+          group,
+          pinnedRepositories,
+          personalRepositoryColumnTitle,
+        )),
       );
     };
 
@@ -1028,6 +1073,7 @@
           [OWNER_GROUPS_PER_PAGE_KEY]: DEFAULT_OWNER_GROUPS_PER_PAGE,
           [SHOW_REPOSITORY_SEARCH_KEY]: true,
           [SHOW_REPOSITORY_TOTAL_KEY]: true,
+          [PERSONAL_REPOSITORY_COLUMN_TITLE_KEY]: "Personal Repos",
           [SHOW_WOOTEN_LINK_SEARCH_KEY]: false,
         }),
       ]);
@@ -1047,6 +1093,7 @@
           stored[OWNER_GROUPS_PER_PAGE_KEY],
           Boolean(stored[SHOW_REPOSITORY_SEARCH_KEY]),
           Boolean(stored[SHOW_REPOSITORY_TOTAL_KEY]),
+          stored[PERSONAL_REPOSITORY_COLUMN_TITLE_KEY],
           Boolean(stored[SHOW_WOOTEN_LINK_SEARCH_KEY]),
         );
       }
@@ -1160,6 +1207,7 @@
       || changes.ownerGroupsPerPage
       || changes.showRepositorySearch
       || changes.showRepositoryTotal
+      || changes.personalRepositoryColumnTitle
       || changes.showWootenLinkSearch
     ) {
       repositoryRequest = null;

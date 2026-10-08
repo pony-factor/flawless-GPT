@@ -149,6 +149,56 @@ async function fixture({ active = false, voice = false, editable = true, stored 
   return page;
 }
 
+test('queue stays inside the composer and viewport as the chat column narrows', async () => {
+  const p = await fixture({ active: true });
+  await enqueue(p, 'Keep this queued draft visible in a compact window');
+  await p.evaluate(() => {
+    const form = document.querySelector('form');
+    const host = form.parentElement;
+    host.style.width = 'min(100%, 610px)';
+    host.style.marginLeft = 'auto';
+    form.style.width = '100%';
+    const composer = form.querySelector('[data-composer-markdown]');
+    composer.style.minWidth = '0';
+    composer.style.flex = '1';
+  });
+
+  for (const width of [850, 540, 390, 320, 820]) {
+    await p.setViewportSize({ width, height: 700 });
+    await p.waitForFunction(() => {
+      const panel = document.getElementById('ghrc-message-queue');
+      if (!panel) return false;
+      const bounds = panel.getBoundingClientRect();
+      const parent = panel.parentElement.getBoundingClientRect();
+      const form = document.querySelector('form').getBoundingClientRect();
+      return bounds.left >= Math.max(14, parent.left) - 1
+        && bounds.right <= Math.min(window.innerWidth - 14, parent.right, form.right) + 1;
+    });
+    const layout = await p.evaluate(() => {
+      const panel = document.getElementById('ghrc-message-queue');
+      const bounds = panel.getBoundingClientRect();
+      const controls = panel.querySelector('.ghrc-message-queue-controls').getBoundingClientRect();
+      const editor = panel.querySelector('.ghrc-message-queue-editor').getBoundingClientRect();
+      return {
+        width: bounds.width,
+        controlsRight: controls.right,
+        panelRight: bounds.right,
+        editorRight: editor.right,
+        controlsTop: controls.top,
+        editorBottom: editor.bottom,
+      };
+    });
+    assert.ok(layout.width > 0, `panel collapsed at ${width}px`);
+    assert.ok(layout.controlsRight <= layout.panelRight + 1, `controls clipped at ${width}px`);
+    assert.ok(layout.editorRight <= layout.panelRight + 1, `editor clipped at ${width}px`);
+    if (layout.width <= 480) {
+      assert.ok(layout.controlsTop >= layout.editorBottom - 1, `controls did not wrap at ${width}px`);
+    }
+  }
+  assert.deepEqual(p.errors, []);
+  await p.close();
+});
+
 test('generating dots keep Enter in the queue when the native Stop control is stale', async () => {
   const p = await fixture({ active: true });
   await p.locator('[data-composer-markdown]').fill('Queue while the dots are active');
@@ -826,6 +876,50 @@ test('native Stop only stops, and the idle hat sends a draft immediately', async
   await sentCount(p, 1);
   assert.deepEqual(await p.evaluate(() => sent), ['Draft']);
   assert.equal(await p.locator('.ghrc-message-queue-editor').count(), 0);
+  await p.close();
+});
+
+test('native Send overrides a stale Stop instead of showing two hats', async () => {
+  const p = await fixture({ active: true, queueButton: false });
+  await p.locator('[data-composer-markdown]').fill('Draft during generation');
+  await p.getByRole('button', { name: 'Interrupt and send', exact: true }).waitFor();
+  await p.evaluate(() => {
+    const send = document.createElement('button');
+    send.id = 'concurrent-native-send';
+    send.type = 'button';
+    send.dataset.testid = 'send-button';
+    send.setAttribute('aria-label', 'Send prompt');
+    send.textContent = 'Send';
+    window.button.after(send);
+  });
+  await p.waitForFunction(() => !document.querySelector('#ghrc-message-interrupt-button'));
+  assert.equal(await p.locator('button[data-testid="send-button"]').count(), 1);
+  await p.evaluate(() => { document.querySelector('#concurrent-native-send').disabled = true; });
+  await p.waitForTimeout(100);
+  assert.equal(await p.locator('#ghrc-message-interrupt-button').count(), 0);
+  await p.evaluate(() => document.querySelector('#concurrent-native-send').remove());
+  await p.getByRole('button', { name: 'Interrupt and send', exact: true }).waitFor();
+  assert.deepEqual(p.errors, []);
+  await p.close();
+});
+
+test('aria-label-only Voice to Send transitions remove the stale empty hat', async () => {
+  const p = await fixture({ voice: true, liveMarkup: true, queueButton: false });
+  await p.addStyleTag({ content: fs.readFileSync(path.join(__dirname, '../css/hide-dictation.css'), 'utf8') });
+  await p.evaluate(() => document.documentElement.setAttribute('data-ghrc-hide-dictation', ''));
+  await p.getByRole('button', { name: 'Send message', exact: true }).waitFor();
+  // Selection-only sends can update the native action without an input event.
+  await p.evaluate(() => { window.button.setAttribute('aria-label', 'Send'); });
+  await p.waitForFunction(() => !document.querySelector('#ghrc-message-interrupt-button'));
+  assert.equal(await p.getByRole('button', { name: 'Send', exact: true }).count(), 1);
+  await p.evaluate(() => { window.button.setAttribute('aria-label', 'Start Voice'); });
+  await p.getByRole('button', { name: 'Send message', exact: true }).waitFor();
+  await p.evaluate(() => {
+    window.button.setAttribute('aria-label', 'Submit prompt');
+    window.button.dataset.testid = 'composer-submit-button';
+  });
+  await p.waitForFunction(() => !document.querySelector('#ghrc-message-interrupt-button'));
+  assert.deepEqual(p.errors, []);
   await p.close();
 });
 
