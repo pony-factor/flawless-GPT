@@ -97,7 +97,9 @@ The sidebar stays open while the mouse is inside it or one of its open menus,
 including nested menus and a 12-pixel margin around those menus. It collapses
 90 milliseconds after the mouse leaves those areas. Hovering should work
 without clicking or giving the browser keyboard focus; moving keyboard focus
-away alone should not collapse it.
+away alone should not collapse it. The hover delay also works in visible but
+unfocused browser windows when animation frames pause; hidden/background tabs
+cannot respond to mouse hover because they are not visible.
 
 ### Chat bar colors
 

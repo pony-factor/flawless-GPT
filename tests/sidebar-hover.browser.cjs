@@ -7,7 +7,7 @@ const read = file => fs.readFileSync(path.join(__dirname, '..', file), 'utf8');
 let browser;
 before(async () => { browser = await chromium.launch({executablePath:'/Applications/Brave Browser.app/Contents/MacOS/Brave Browser',headless:true}); });
 after(async () => { await browser?.close(); });
-async function fixture({labels=['Show sidebar','Hide sidebar'], enabled=true, expanded=false, delay=0, storageDelay=0, duplicate=false, mouseOnly=false}={}) {
+async function fixture({labels=['Show sidebar','Hide sidebar'], enabled=true, expanded=false, delay=0, storageDelay=0, duplicate=false, mouseOnly=false, pausedFrames=false}={}) {
   const page = await browser.newPage();
   page.errors=[];
   page.on('pageerror', error => page.errors.push(error.message));
@@ -44,6 +44,11 @@ async function fixture({labels=['Show sidebar','Hide sidebar'], enabled=true, ex
     for (const type of ['pointermove', 'pointerover']) {
       document.addEventListener(type, event => event.stopImmediatePropagation(), true);
     }
+  });
+  if (pausedFrames) await page.evaluate(() => {
+    // Model a visible, unfocused window where animation frames are suspended.
+    window.requestAnimationFrame = () => 0;
+    window.cancelAnimationFrame = () => {};
   });
   await page.addScriptTag({content:read('js/extension-context.js')});
   await page.addScriptTag({content:read('js/collapse-sidebar.js')});
@@ -271,6 +276,46 @@ test('Library button with both accessible label and text reveals below Library',
   await page.mouse.move(500, 170);
   await page.waitForFunction(() => document.querySelector('aside').dataset.expanded === 'false');
   assert.equal(await page.evaluate(() => clicks), 2);
+  assert.deepEqual(page.errors, []);
+  await page.close();
+});
+
+test('hover reveals in a blurred window even when animation frames are paused', async () => {
+  const page = await fixture({ pausedFrames: true });
+  await page.evaluate(() => window.dispatchEvent(new Event('blur')));
+  await page.mouse.move(500, 250);
+  await page.mouse.move(12, page.viewportSize().height - 8);
+  await page.waitForFunction(() => document.querySelector('aside').dataset.expanded === 'true',
+    null, { polling: 50 });
+  assert.equal(await page.evaluate(() => clicks), 1);
+  await page.mouse.move(500, 250);
+  await page.waitForFunction(() => document.querySelector('aside').dataset.expanded === 'false',
+    null, { polling: 50 });
+  assert.equal(await page.evaluate(() => clicks), 2);
+  assert.deepEqual(page.errors, []);
+  await page.close();
+});
+
+test('blurred-window hover cancels if the pointer leaves before the reveal delay', async () => {
+  const page = await fixture({ pausedFrames: true });
+  await page.evaluate(() => window.dispatchEvent(new Event('blur')));
+  await page.mouse.move(12, 250);
+  await page.waitForTimeout(110);
+  await page.mouse.move(500, 250);
+  await page.waitForTimeout(450);
+  assert.equal(await page.locator('aside').getAttribute('data-expanded'), 'false');
+  assert.equal(await page.evaluate(() => clicks), 0);
+  assert.deepEqual(page.errors, []);
+  await page.close();
+});
+
+test('blurred-window reveal retries disabled controls without animation frames', async () => {
+  const page = await fixture({ pausedFrames: true, delay: 800 });
+  await page.evaluate(() => window.dispatchEvent(new Event('blur')));
+  await page.mouse.move(12, 250);
+  await page.waitForFunction(() => document.querySelector('aside').dataset.expanded === 'true',
+    null, { polling: 50 });
+  assert.equal(await page.evaluate(() => clicks), 1);
   assert.deepEqual(page.errors, []);
   await page.close();
 });
