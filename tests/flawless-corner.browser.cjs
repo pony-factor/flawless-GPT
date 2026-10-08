@@ -31,7 +31,7 @@ async function fixture() {
   return page;
 }
 
-test('mascot corner extends beyond the sidebar and links to New chat', async () => {
+test('mascot corner stays compact within the sidebar and links to New chat', async () => {
   const page = await fixture();
   const card = page.locator('#ghrc-flawless-corner');
   assert.equal(await card.count(), 1);
@@ -39,8 +39,8 @@ test('mascot corner extends beyond the sidebar and links to New chat', async () 
   assert.equal(await card.getAttribute('aria-label'), 'New chat');
   assert.match(await card.locator('img').getAttribute('src'), /artwork\/squeaky-belle-full\.webp$/);
   const bounds = await card.boundingBox();
-  assert.ok(bounds.x < 260 && bounds.x + bounds.width > 330);
-  assert.equal(await page.evaluate(() => getComputedStyle(document.getElementById('ghrc-flawless-corner')).borderTopLeftRadius), '20px');
+  assert.deepEqual(bounds, { x: 10, y: 20, width: 33, height: 33 });
+  assert.equal(await page.evaluate(() => getComputedStyle(document.getElementById('ghrc-flawless-corner')).borderTopLeftRadius), '4px');
   await page.evaluate(() => document.getElementById('ghrc-flawless-corner').remove());
   await page.waitForFunction(() => !!document.getElementById('ghrc-flawless-corner'));
   assert.equal(await card.count(), 1);

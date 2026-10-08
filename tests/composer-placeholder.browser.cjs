@@ -44,6 +44,11 @@ test("custom composer placeholders update live, survive editor replacement, and 
     await page.evaluate(() => setPlaceholder("Dash"));
     await page.waitForFunction(() => getComputedStyle(document.querySelector("[data-placeholder]"), "::before").content === '"Dash"');
     await page.waitForFunction(() => document.querySelector('textarea').placeholder === 'Dash');
+    await page.evaluate(() => { settings.composerColors = { placeholder: '#123456' }; });
+    await page.addScriptTag({ content: read('js/composer-colors.js') });
+    await page.waitForFunction(() => document.documentElement.style.getPropertyValue('--ghrc-composer-placeholder') === '#123456');
+    assert.equal(await page.evaluate(() => getComputedStyle(document.querySelector('[data-placeholder]'), '::before').content), '"Dash"');
+
     assert.equal(await page.locator("[data-placeholder]").getAttribute("data-placeholder"), "Ask ChatGPT");
     assert.equal(await page.locator("textarea").getAttribute("placeholder"), "Dash");
     assert.equal(await page.locator("[data-composer-markdown]").textContent(), "Partial draft");

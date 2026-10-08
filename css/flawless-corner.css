@@ -1,22 +1,24 @@
-/* The illustrated New chat link floats over the native top-left branding. */
+/* A compact New chat image replaces the top-left branding. */
 #ghrc-flawless-corner {
-  background: #292449;
-  border: 2px solid #af97dc;
-  border-radius: 20px;
-  box-shadow: 0 8px 24px rgb(24 18 43 / 25%);
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  box-shadow: none;
   box-sizing: border-box;
   display: block;
-  height: 148px;
-  left: 12px;
+  height: 33px;
+  left: 10px;
   overflow: hidden;
+  padding: 0;
   position: fixed;
   text-decoration: none;
-  top: 12px;
-  width: min(352px, calc(100vw - 24px));
+  top: 20px;
+  width: 33px;
   z-index: 75;
 }
 
 #ghrc-flawless-corner img {
+  border: 0;
   display: block;
   height: 100%;
   object-fit: cover;
@@ -24,22 +26,7 @@
   width: 100%;
 }
 
-#ghrc-flawless-corner:hover {
-  border-color: #d9caff;
-  box-shadow: 0 10px 28px rgb(24 18 43 / 35%);
-}
-
 #ghrc-flawless-corner:focus-visible {
-  outline: 3px solid #a68df3;
-  outline-offset: 3px;
-}
-
-@media (max-width: 640px) {
-  #ghrc-flawless-corner {
-    border-radius: 14px;
-    height: 88px;
-    left: 8px;
-    top: 8px;
-    width: min(200px, calc(100vw - 16px));
-  }
+  outline: 2px solid #a68df3;
+  outline-offset: -2px;
 }
