@@ -1,4 +1,31 @@
-/* Replace the OpenAI logo and New chat icon in their native controls. */
+/* One mascot combines sidebar hover with the native New chat action. */
+#ghrc-flawless-corner {
+  border: 0;
+  border-radius: 4px;
+  display: block;
+  height: 33px;
+  left: 10px;
+  overflow: hidden;
+  padding: 0;
+  position: fixed;
+  top: 20px;
+  width: 33px;
+  z-index: 75;
+}
+
+#ghrc-flawless-corner img {
+  display: block;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 40%;
+  width: 100%;
+}
+
+#ghrc-flawless-corner:focus-visible {
+  outline: 2px solid #a68df3;
+  outline-offset: -2px;
+}
+
 .ghrc-flawless-logo-button {
   background: transparent !important;
   border: 0 !important;
@@ -8,27 +35,7 @@
   width: 33px !important;
 }
 
-.ghrc-flawless-logo-image {
-  border: 0;
-  border-radius: 4px;
-  display: block;
-  flex-shrink: 0;
-  height: 33px;
-  max-height: 33px;
-  max-width: 33px;
-  object-fit: cover;
-  object-position: center 40%;
-  padding: 0;
-  width: 33px;
-}
-
-.ghrc-flawless-logo-icon {
+.ghrc-flawless-logo-button svg,
+.ghrc-flawless-hidden-new-chat {
   display: none !important;
-}
-
-.ghrc-flawless-new-chat-button {
-  background: transparent !important;
-  border: 0 !important;
-  box-shadow: none !important;
-  padding: 0 !important;
 }

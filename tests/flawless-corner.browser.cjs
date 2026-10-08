@@ -31,40 +31,38 @@ async function fixture() {
   return page;
 }
 
-test('Flawless image replaces the OpenAI logo while preserving native actions', async () => {
+test('one mascot combines sidebar hover and native New chat', async () => {
   const page = await fixture();
-  const button = page.getByRole('button', { name: 'Show sidebar', exact: true });
-  const image = button.locator('.ghrc-flawless-logo-image');
-  assert.equal(await image.count(), 1);
-  assert.match(await image.getAttribute('src'), /artwork\/squeaky-belle-full\.webp$/);
-  assert.equal(await button.locator('svg').isVisible(), false);
-  assert.equal(await page.getByRole('button', { name: 'New chat', exact: true }).locator('svg').isVisible(), false);
-  await page.getByRole('button', { name: 'New chat', exact: true }).locator('.ghrc-flawless-logo-image').click();
-  assert.equal(await page.evaluate(() => window.newChats), 1);
-  const bounds = await image.boundingBox();
+  const mascot = page.locator('#ghrc-flawless-corner');
+  assert.equal(await mascot.count(), 1);
+  assert.equal(await mascot.getAttribute('aria-label'), 'New chat');
+  const bounds = await mascot.boundingBox();
   assert.equal(bounds.width, 33);
   assert.equal(bounds.height, 33);
-  assert.deepEqual(await button.evaluate(element => {
-    const style = getComputedStyle(element);
-    return [style.padding, style.borderWidth];
-  }), ['0px', '0px']);
-  await image.click();
-  assert.equal(await page.evaluate(() => window.sidebarClicks), 1);
-  await page.evaluate(() => document.querySelector('button[aria-label="Show sidebar"]').innerHTML = '<svg></svg>');
-  await page.waitForFunction(() => !!document.querySelector('.ghrc-flawless-logo-image'));
-  assert.equal(await image.count(), 1);
+  assert.equal(await page.getByRole('button', { name: 'New chat', exact: true }).count(), 0);
+  await mascot.click();
+  assert.equal(await page.evaluate(() => window.newChats), 1);
+  assert.equal(await page.evaluate(() => window.sidebarClicks || 0), 0);
+  await page.evaluate(() => {
+    document.querySelector('button[aria-label="Show sidebar"]').setAttribute('aria-label', 'Hide sidebar');
+  });
+  await page.waitForFunction(() => !document.querySelector('.ghrc-flawless-hidden-new-chat'));
+  assert.equal(await mascot.count(), 1);
+  await mascot.click();
+  assert.equal(await page.evaluate(() => window.newChats), 2);
   assert.deepEqual(page.errors, []);
   await page.close();
 });
 
-test('native icons return when the extension stops', async () => {
+test('native controls return when extension stops', async () => {
   const page = await fixture();
   await page.evaluate(() => {
     chrome.runtime = undefined;
     __ghrcExtensionContext.active();
   });
-  assert.equal(await page.locator('.ghrc-flawless-logo-image').count(), 0);
+  assert.equal(await page.locator('#ghrc-flawless-corner').count(), 0);
   assert.equal(await page.getByRole('button', { name: 'Show sidebar', exact: true }).locator('svg').isVisible(), true);
+  assert.equal(await page.getByRole('button', { name: 'New chat', exact: true }).isVisible(), true);
   assert.deepEqual(page.errors, []);
   await page.close();
 });

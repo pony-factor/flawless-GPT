@@ -1,61 +1,72 @@
 (() => {
   const context = globalThis.__ghrcExtensionContext;
   if (!context?.active()) return;
+  const TOGGLE_SELECTOR = 'button[aria-label="Show sidebar"], button[aria-label="Open sidebar"], button[aria-label="Expand sidebar"]';
+  const NEW_CHAT_SELECTOR = 'button[aria-label="New chat"], a[aria-label="New chat"], [data-testid="create-new-chat-button"]';
+  const toggles = new Set();
+  const newChats = new Set();
+  let link = null;
 
-  const IMAGE_CLASS = "ghrc-flawless-logo-image";
-  const ICON_CLASS = "ghrc-flawless-logo-icon";
-  const icons = new Set();
-  const buttons = new Set();
-
-  function replaceIcons() {
-    if (!context.active()) return;
-    const controls = document.querySelectorAll(
-      'button[aria-label="Show sidebar"], button[aria-label="Open sidebar"], '
-      + 'button[aria-label="Expand sidebar"], button[aria-label="New chat"], '
-      + 'a[aria-label="New chat"], [data-testid="create-new-chat-button"]',
-    );
-    for (const control of controls) {
-      if (control.querySelector(`.${IMAGE_CLASS}`)) continue;
-      const icon = control.querySelector("svg");
-      if (!icon) continue;
+  function reconcile() {
+    if (!context.active() || !document.body) return;
+    if (!link?.isConnected) {
+      link = document.createElement("a");
+      link.id = "ghrc-flawless-corner";
+      link.href = "/";
+      link.setAttribute("aria-label", "New chat");
+      link.title = "New chat";
       const image = document.createElement("img");
-      image.className = IMAGE_CLASS;
       image.alt = "";
-      image.decoding = "async";
       image.draggable = false;
-      try {
-        image.src = chrome.runtime.getURL("artwork/squeaky-belle-full.webp");
-      } catch (error) {
-        context.handleError(error);
-        return;
+      image.src = chrome.runtime.getURL("artwork/squeaky-belle-full.webp");
+      link.append(image);
+      link.addEventListener("click", event => {
+        const controls = Array.from(document.querySelectorAll(NEW_CHAT_SELECTOR)).filter(control => control !== link);
+        const native = controls.find(control => control.getClientRects().length) || controls[0];
+        if (!native) return;
+        event.preventDefault();
+        native.click();
+      });
+      document.body.append(link);
+    }
+    const controls = Array.from(document.querySelectorAll(TOGGLE_SELECTOR));
+    const visible = controls.find(control => {
+      const bounds = control.getBoundingClientRect();
+      return bounds.width && bounds.height && getComputedStyle(control).visibility !== "hidden";
+    });
+    if (visible) {
+      const bounds = visible.getBoundingClientRect();
+      link.style.left = `${bounds.left}px`;
+      link.style.top = `${bounds.top}px`;
+    }
+    for (const toggle of controls) {
+      toggle.classList.add("ghrc-flawless-logo-button");
+      toggles.add(toggle);
+    }
+    for (const control of document.querySelectorAll(NEW_CHAT_SELECTOR)) {
+      if (control !== link) newChats.add(control);
+    }
+    for (const control of newChats) {
+      control.classList.toggle("ghrc-flawless-hidden-new-chat", Boolean(visible));
+      if (!control.isConnected) newChats.delete(control);
+    }
+    for (const toggle of toggles) {
+      if (!toggle.isConnected || !controls.includes(toggle)) {
+        toggle.classList.remove("ghrc-flawless-logo-button");
+        toggles.delete(toggle);
       }
-      icon.before(image);
-      icon.classList.add(ICON_CLASS);
-      const isSidebarToggle = /^(show|open|expand) sidebar$/i.test(control.getAttribute("aria-label") || "");
-      control.classList.add(isSidebarToggle ? "ghrc-flawless-logo-button" : "ghrc-flawless-new-chat-button");
-      buttons.add(control);
-      icons.add(icon);
-    }
-    for (const button of buttons) {
-      if (!button.isConnected) buttons.delete(button);
-    }
-    for (const icon of icons) {
-      if (!icon.isConnected) icons.delete(icon);
     }
   }
 
-  const observer = new MutationObserver(replaceIcons);
-  observer.observe(document.documentElement, { childList: true, subtree: true });
-  document.addEventListener("DOMContentLoaded", replaceIcons, { once: true });
-  replaceIcons();
-
+  const observer = new MutationObserver(reconcile);
+  observer.observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ["aria-label"] });
+  window.addEventListener("resize", reconcile);
+  reconcile();
   context.onStop(() => {
     observer.disconnect();
-    document.removeEventListener("DOMContentLoaded", replaceIcons);
-    document.querySelectorAll(`.${IMAGE_CLASS}`).forEach(image => image.remove());
-    icons.forEach(icon => icon.classList.remove(ICON_CLASS));
-    icons.clear();
-    buttons.forEach(button => button.classList.remove("ghrc-flawless-logo-button", "ghrc-flawless-new-chat-button"));
-    buttons.clear();
+    window.removeEventListener("resize", reconcile);
+    link?.remove();
+    toggles.forEach(toggle => toggle.classList.remove("ghrc-flawless-logo-button"));
+    newChats.forEach(control => control.classList.remove("ghrc-flawless-hidden-new-chat"));
   });
 })();

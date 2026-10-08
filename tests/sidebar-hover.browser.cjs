@@ -245,3 +245,19 @@ test('mouse hover reveals without pointer events or an activation click', async 
   assert.deepEqual(page.errors, []);
   await page.close();
 });
+
+test('single mascot opens on hover and remains available while expanded', async () => {
+  const page = await fixture();
+  await page.evaluate(() => { chrome.runtime.getURL = file => 'chrome-extension://fixture/' + file; });
+  await page.addStyleTag({ content: read('css/flawless-corner.css') });
+  await page.addScriptTag({ content: read('js/flawless-corner.js') });
+  await page.mouse.move(500, 20);
+  await page.locator('#ghrc-flawless-corner').hover();
+  await page.waitForFunction(() => document.querySelector('aside').dataset.expanded === 'true');
+  assert.equal(await page.locator('#ghrc-flawless-corner').isVisible(), true);
+  await page.mouse.move(500, 20);
+  await page.waitForFunction(() => document.querySelector('aside').dataset.expanded === 'false');
+  assert.equal(await page.evaluate(() => clicks), 2);
+  assert.deepEqual(page.errors, []);
+  await page.close();
+});

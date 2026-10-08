@@ -147,6 +147,9 @@
 
   function pointerInRevealHotspot() {
     if (!pointer.inside || pointer.x > EDGE_HOTSPOT_WIDTH) return false;
+    const mascot = visibleBounds(document.getElementById("ghrc-flawless-corner"));
+    if (mascot && pointer.x >= mascot.left && pointer.x <= mascot.right
+      && pointer.y >= mascot.top && pointer.y <= mascot.bottom) return true;
     const toggle = sidebarToggleState();
     const toggleBounds = toggle?.state === "collapsed" ? visibleBounds(toggle.button) : null;
     if (toggleBounds && pointer.x >= toggleBounds.left && pointer.x <= toggleBounds.right
