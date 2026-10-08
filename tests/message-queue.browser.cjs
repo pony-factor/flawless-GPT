@@ -669,6 +669,30 @@ test('voice-only empty composer mounts queue; hat tilts without hiding native st
   await p.close();
 });
 
+test('saved queue remains visible through display contents composer wrappers', async () => {
+  const p = await fixture({ active: true });
+  await p.evaluate(() => {
+    const form = document.querySelector('form');
+    const host = form.parentElement;
+    host.style.width = '700px';
+    for (let i = 0; i < 3; i++) {
+      const wrapper = document.createElement('div');
+      wrapper.style.display = 'contents';
+      form.before(wrapper);
+      wrapper.append(form);
+    }
+  });
+  await enqueue(p, 'Preserve this message');
+  await p.waitForFunction(() => document.getElementById('ghrc-message-queue')?.getBoundingClientRect().width > 300);
+  const rect = await p.locator('#ghrc-message-queue').boundingBox();
+  assert.ok(rect.width > 300);
+  assert.ok(rect.x >= 14);
+  assert.ok(rect.x + rect.width <= 730);
+  assert.equal(await p.locator('.ghrc-message-queue-editor').inputValue(), 'Preserve this message');
+  assert.deepEqual(await p.evaluate(() => sent), []);
+  await p.close();
+});
+
 test('failed submission pauses and keeps the message for retry', async () => {
   const p = await fixture({ editable: false });
   await p.evaluate(() => { window.rejectSend = true; });

@@ -6,7 +6,7 @@ const path = require('node:path');
 
 const source = fs.readFileSync(path.join(__dirname, '../js/spellcheck-launcher.js'), 'utf8');
 
-function fixture({ clipboard = 'clipboard text', draft = '', suggestionAvailable = true, adjacentDescription = false } = {}) {
+function fixture({ clipboard = 'clipboard text', draft = '', suggestionAvailable = true, adjacentDescription = false, externalAppChip = false, rejectInlineInsertion = false } = {}) {
   let now = 0;
   let suggestionOpen = false;
   let pluginSelected = false;
@@ -42,7 +42,7 @@ function fixture({ clipboard = 'clipboard text', draft = '', suggestionAvailable
     pluginSuggestionClicks++;
     pluginSelected = true;
     suggestionOpen = false;
-    composer.innerText = 'Spellcheck Only';
+    composer.innerText = externalAppChip ? '' : 'Spellcheck Only';
   });
   if (adjacentDescription) {
     plugin.textContent = 'Spellcheck Onlyfixes typos and outputs in markdown';
@@ -63,6 +63,9 @@ function fixture({ clipboard = 'clipboard text', draft = '', suggestionAvailable
     matches: () => false,
     querySelectorAll(selector) {
       if (/aria-label\*="add"|aria-label\*="attach"|aria-label\*="tools"|aria-label\*="more"/.test(selector)) pickerLookups++;
+      if (selector.includes('[app-mention-path]') || selector.includes('[app-mention-display-name]')) {
+        return externalAppChip && pluginSelected ? [mention] : [];
+      }
       if (/send-button|aria-label\^="Send"|composer-submit-button/.test(selector)) return [send];
       return [];
     },
@@ -75,9 +78,9 @@ function fixture({ clipboard = 'clipboard text', draft = '', suggestionAvailable
     isContentEditable: true,
     isConnected: true,
     focus() {},
-    closest() { return null; },
+    closest(selector) { return selector === 'form' ? container : null; },
     querySelectorAll(selector) {
-      return selector === '[app-mention-path]' && pluginSelected ? [mention] : [];
+      return selector === '[app-mention-path]' && pluginSelected && !externalAppChip ? [mention] : [];
     },
   };
 
@@ -195,4 +198,19 @@ test('submission cancels if navigation leaves the main new-chat page', async () 
   f.context.location.pathname = '/c/example';
   f.api.submitWhenReady(f.composer, 'clipboard text', 10_000);
   assert.equal(f.send.clicks, 0);
+});
+
+test('selected app chip outside the editor keeps the plugin and sends pasted text', async () => {
+  const f = fixture({ externalAppChip: true });
+  await f.api.launchSpellcheck();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(f.pluginSelected, true);
+  assert.equal(f.composer.innerText, 'clipboard text');
+  assert.equal(f.send.clicks, 1);
+});
+
+test('spellcheck launcher shows artwork without a CSS border or shadow ring', () => {
+  const css = fs.readFileSync(path.join(__dirname, '../css/spellcheck-launcher.css'), 'utf8');
+  assert.match(css, /#ghrc-spellcheck-gpt-launcher\s*\{[^}]*border:\s*0;/s);
+  assert.match(css, /#ghrc-spellcheck-gpt-launcher\s*\{[^}]*box-shadow:\s*none;/s);
 });

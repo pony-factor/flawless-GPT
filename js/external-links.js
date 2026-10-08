@@ -325,19 +325,11 @@
       content.setAttribute("aria-live", "polite");
       panel.append(content);
       showNativeSplitGuide(href, content);
-    } else if (url.hostname === "github.com" || url.hostname === "www.github.com") {
-      const content = document.createElement("div");
-      content.className = "ghrc-preview-content";
-      content.setAttribute("aria-live", "polite");
-      content.textContent = "Loading GitHub preview…";
-      panel.append(content);
-      void loadGitHubPreview(href, content);
     } else {
       const frame = document.createElement("iframe");
       frame.title = "Website preview: " + url.hostname;
       frame.setAttribute("sandbox", "allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox");
       frame.referrerPolicy = "no-referrer";
-      panel.append(frame);
       const watch = { id: `${Date.now()}:${nativeSplitRequest}`, href, link, panel };
       previewWatch = watch;
       void (async () => {
@@ -346,10 +338,16 @@
         } catch {
           // Keep usable embedded previews available if the worker is restarting.
         }
-        if (previewWatch === watch && panel.isConnected) frame.src = href;
+        if (previewWatch === watch && panel.isConnected) {
+          // Set the external destination before connecting the frame. Mounting
+          // about:blank first inherits ChatGPT's origin and triggers the
+          // allow-scripts/allow-same-origin sandbox warning.
+          frame.src = href;
+          panel.append(frame);
+        }
       })();
       frame.addEventListener("error", () => {
-        if (previewWatch === watch) void openNativeSplitView(href, link);
+        if (previewWatch === watch) handleBlockedPreview();
       });
     }
 
@@ -359,6 +357,27 @@
       document.body.append(panel);
       document.documentElement.setAttribute("data-ghrc-link-preview", splitViewOnLeft ? "left" : "right");
     });
+  }
+
+  function handleBlockedPreview(error) {
+    if (!previewWatch) return;
+    const { href, link, panel } = previewWatch;
+    const hostname = new URL(href).hostname;
+    if (hostname !== "github.com" && hostname !== "www.github.com") {
+      void openNativeSplitView(href, link);
+      return;
+    }
+    if (!["net::ERR_BLOCKED_BY_RESPONSE", "net::ERR_BLOCKED_BY_CSP"].includes(error)) return;
+    // GitHub's API is a fallback for a rejected embed, not the default view.
+    void chrome.runtime.sendMessage({ type: "unwatch-link-preview", previewId: previewWatch.id }).catch(() => {});
+    previewWatch = null;
+    panel.querySelector("iframe")?.remove();
+    const content = document.createElement("div");
+    content.className = "ghrc-preview-content";
+    content.setAttribute("aria-live", "polite");
+    content.textContent = "Loading GitHub preview…";
+    panel.append(content);
+    void loadGitHubPreview(href, content);
   }
 
   async function loadGitHubPreview(href, content) {
@@ -502,8 +521,7 @@
   chrome.runtime.onMessage.addListener(message => {
     if (message?.type !== "link-preview-navigation-error" || !previewWatch
         || message.previewId !== previewWatch.id || message.url !== previewWatch.href) return;
-    const { href, link } = previewWatch;
-    void openNativeSplitView(href, link);
+    handleBlockedPreview(message.error);
   });
 
   function preserveNativeScroll(event) {

@@ -7,7 +7,7 @@ const read = file => fs.readFileSync(path.join(__dirname, '..', file), 'utf8');
 let browser;
 before(async () => { browser = await chromium.launch({executablePath:'/Applications/Brave Browser.app/Contents/MacOS/Brave Browser',headless:true}); });
 after(async () => { await browser?.close(); });
-async function fixture({labels=['Show sidebar','Hide sidebar'], enabled=true, expanded=false, delay=0, duplicate=false, mouseOnly=false}={}) {
+async function fixture({labels=['Show sidebar','Hide sidebar'], enabled=true, expanded=false, delay=0, storageDelay=0, duplicate=false, mouseOnly=false}={}) {
   const page = await browser.newPage();
   page.errors=[];
   page.on('pageerror', error => page.errors.push(error.message));
@@ -22,7 +22,7 @@ async function fixture({labels=['Show sidebar','Hide sidebar'], enabled=true, ex
     #preset-two{top:204px}
     #preset-three{top:248px}
   </style>${duplicate?'<button style="display:none" aria-label="Hide sidebar">Hidden toggle</button>':''}<aside data-expanded="${expanded}"><button id="toggle" aria-label="${labels[expanded?1:0]}">Toggle</button><a id="library" class="rail-item" aria-label="Library" href="/library"></a><a id="preset-one" class="rail-item" aria-label="Preset one" href="/g/g-one"></a><a id="preset-two" class="rail-item" aria-label="Preset two" href="/g/g-two"></a><a id="preset-three" class="rail-item" aria-label="Preset three" href="/gpts/g-three"></a></aside>`);
-  await page.evaluate(({labels,enabled,delay}) => {
+  await page.evaluate(({labels,enabled,delay,storageDelay}) => {
     window.clicks=0;
     window.listeners=[];
     const button=document.getElementById('toggle');
@@ -35,8 +35,11 @@ async function fixture({labels=['Show sidebar','Hide sidebar'], enabled=true, ex
       sidebar.dataset.expanded=String(expanded);
       button.setAttribute('aria-label', labels[expanded?1:0]);
     });
-    window.chrome={runtime:{id:'fixture'},storage:{local:{get:async defaults=>({...defaults,hoverRevealSidebar:enabled})},onChanged:{addListener:fn=>listeners.push(fn)}}};
-  },{labels,enabled,delay});
+    window.chrome={runtime:{id:'fixture'},storage:{local:{get:async defaults=>{
+      if(storageDelay) await new Promise(resolve=>setTimeout(resolve,storageDelay));
+      return {...defaults,hoverRevealSidebar:enabled};
+    }},onChanged:{addListener:fn=>listeners.push(fn)}}};
+  },{labels,enabled,delay,storageDelay});
   if (mouseOnly) await page.evaluate(() => {
     for (const type of ['pointermove', 'pointerover']) {
       document.addEventListener(type, event => event.stopImmediatePropagation(), true);
@@ -81,6 +84,28 @@ test('disabled hover setting leaves the collapsed sidebar alone',async()=>{
   await page.mouse.move(12,250);
   await page.waitForTimeout(150);
   assert.equal(await page.evaluate(()=>clicks),0);
+  await page.close();
+});
+test('enabling hover while the pointer is already below Library reveals without another move', async () => {
+  const page = await fixture({ enabled: false });
+  await page.mouse.move(12, 170);
+  await page.waitForTimeout(500);
+  assert.equal(await page.locator('aside').getAttribute('data-expanded'), 'false');
+  await page.evaluate(() => listeners.forEach(listener => listener({
+    hoverRevealSidebar: { oldValue: false, newValue: true },
+  }, 'local')));
+  await page.waitForFunction(() => document.querySelector('aside').dataset.expanded === 'true');
+  assert.equal(await page.evaluate(() => clicks), 1);
+  await page.close();
+});
+test('hover entered before settings load reveals once they arrive without another move', async () => {
+  const page = await fixture({ storageDelay: 800 });
+  await page.mouse.move(12, 170);
+  await page.waitForTimeout(450);
+  assert.equal(await page.locator('aside').getAttribute('data-expanded'), 'false');
+  await page.waitForFunction(() => document.querySelector('aside').dataset.expanded === 'true');
+  assert.equal(await page.evaluate(() => clicks), 1);
+  assert.deepEqual(page.errors, []);
   await page.close();
 });
 test('collapsed reveal only uses the band below Library through preset icons',async()=>{

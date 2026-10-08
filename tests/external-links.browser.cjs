@@ -90,6 +90,28 @@ test('sidebar mode adds a separate action while preserving the normal new-tab in
   await page.close();
 });
 
+test('preview waits for its navigation watch without mounting a same-origin blank frame', async () => {
+  const page = await fixture({ openExternalLinksInSplitView: true });
+  const warnings = [];
+  page.on('console', message => {
+    if (/both allow-scripts and allow-same-origin/.test(message.text())) warnings.push(message.text());
+  });
+  await page.evaluate(() => {
+    const send = chrome.runtime.sendMessage;
+    chrome.runtime.sendMessage = async message => {
+      if (message.type === 'watch-link-preview') await new Promise(resolve => { window.releaseWatch = resolve; });
+      return send(message);
+    };
+  });
+  await page.locator('.ghrc-link-sidebar-button').click();
+  await page.waitForFunction(() => Boolean(window.releaseWatch));
+  assert.equal(await page.locator('#ghrc-link-preview iframe').count(), 0);
+  await page.evaluate(() => releaseWatch());
+  await page.frameLocator('#ghrc-link-preview iframe').locator('h1').waitFor();
+  assert.deepEqual(warnings, []);
+  await page.close();
+});
+
 test('left-side preview moves the panel, keeps controls ordered, and resizes from its right edge', async () => {
   const page = await fixture({ openExternalLinksInSplitView: true, openExternalLinksInSplitViewOnLeft: true });
   const actions = page.locator('.ghrc-link-actions');
@@ -130,7 +152,7 @@ test('current-tab mode is shown as the normal action while the sidebar remains s
   await page.close();
 });
 
-test('GitHub sidebar restores the API change view instead of opening a generic frame', async () => {
+test('GitHub embeds the website first and uses the API only after the active frame is blocked', async () => {
   const page = await fixture({ openExternalLinksInSplitView: true }, {
     ok: true,
     subtitle: 'owner/repo #42',
@@ -139,8 +161,23 @@ test('GitHub sidebar restores the API change view instead of opening a generic f
     body: '<img src=x onerror="window.injected=true">',
     files: [{ filename: 'example.js', additions: 2, deletions: 1, patch: '+safe change' }],
   });
+  await page.route('https://github.com/**', route => route.fulfill({ contentType: 'text/html', body: '<h1>Full GitHub website</h1>' }));
   await page.locator('#source').evaluate(link => { link.href = 'https://github.com/owner/repo/pull/42'; });
   await page.locator('.ghrc-link-sidebar-button').click();
+  await page.frameLocator('#ghrc-link-preview iframe').locator('h1').waitFor();
+  assert.equal((await page.evaluate(() => previewRequests)).some(message => message.type === 'load-github-link-preview'), false);
+  const watch = (await page.evaluate(() => previewRequests)).find(message => message.type === 'watch-link-preview');
+  await page.evaluate(watch => runtimeListeners.forEach(fn => fn({
+    type: 'link-preview-navigation-error', previewId: 'stale', url: watch.url, error: 'net::ERR_BLOCKED_BY_RESPONSE',
+  })), watch);
+  await page.evaluate(watch => runtimeListeners.forEach(fn => fn({
+    type: 'link-preview-navigation-error', previewId: watch.previewId, url: watch.url, error: 'net::ERR_INTERNET_DISCONNECTED',
+  })), watch);
+  assert.equal((await page.evaluate(() => previewRequests)).some(message => message.type === 'load-github-link-preview'), false);
+  assert.equal(await page.locator('#ghrc-link-preview iframe').count(), 1);
+  await page.evaluate(watch => runtimeListeners.forEach(fn => fn({
+    type: 'link-preview-navigation-error', previewId: watch.previewId, url: watch.url, error: 'net::ERR_BLOCKED_BY_RESPONSE',
+  })), watch);
   await page.locator('#ghrc-link-preview h2').waitFor();
   assert.equal(await page.locator('#ghrc-link-preview h2').textContent(), 'A useful PR');
   assert.equal(await page.locator('#ghrc-link-preview iframe').count(), 0);

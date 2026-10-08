@@ -7,12 +7,12 @@
   box-sizing: border-box;
   display: block;
   height: 33px;
-  left: 10px;
+  left: 0;
   overflow: hidden;
   padding: 0;
   position: fixed;
   text-decoration: none;
-  top: 20px;
+  top: 0;
   width: 33px;
   z-index: 75;
 }
@@ -42,5 +42,10 @@
 
 .ghrc-flawless-logo-button svg,
 .ghrc-flawless-hidden-new-chat {
+  display: none !important;
+}
+
+/* Keep the native ChatGPT heading from showing behind the Flawless mascot. */
+.ghrc-flawless-hidden-wordmark {
   display: none !important;
 }

@@ -38,6 +38,7 @@
     if (initialCollapseFinished) return;
     initialCollapseFinished = true;
     observer?.disconnect();
+    reconcileHoverState();
   }
 
   function collapseOnLoad(observer) {
@@ -305,6 +306,9 @@
     if (!hoverRevealEnabled || !initialCollapseFinished) return;
     const toggle = sidebarToggleState();
     if (toggle?.state === "expanded") toggle.button.click();
+    // The pointer may already be below Library before storage finishes loading
+    // or while this preference is enabled. Do not require another mouse move.
+    reconcileHoverState();
   }
 
   function trackMouse(event) {
