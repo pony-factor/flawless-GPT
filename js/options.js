@@ -11,6 +11,7 @@ const githubAccountList = document.getElementById("github-accounts");
 const githubAccountTemplate = document.getElementById("github-account-template");
 const ownerGroupsPerPageInput = document.getElementById("owner-groups-per-page");
 const showRepositorySearchInput = document.getElementById("show-repository-search");
+const enableCustomRepositorySearchInput = document.getElementById("enable-custom-repository-search");
 const showRepositoryTotalInput = document.getElementById("show-repository-total");
 const showWootenLinkSearchInput = document.getElementById("show-wooten-link-search");
 const showYoutubeSearchInput = document.getElementById("show-youtube-search");
@@ -312,6 +313,7 @@ async function loadSettings() {
     hiddenOwners: DEFAULT_HIDDEN_OWNERS,
     ownerGroupsPerPage: DEFAULT_OWNER_GROUPS_PER_PAGE,
     showRepositorySearch: true,
+    enableCustomRepositorySearch: false,
     showRepositoryTotal: true,
     showWootenLinkSearch: false,
     showYoutubeSearch: true,
@@ -359,6 +361,7 @@ async function loadSettings() {
   renderGithubAccounts(storedOwnerOrder, settings.hiddenOwners);
   ownerGroupsPerPageInput.value = normalizedOwnerGroupsPerPage(settings.ownerGroupsPerPage);
   showRepositorySearchInput.checked = Boolean(settings.showRepositorySearch);
+  enableCustomRepositorySearchInput.checked = Boolean(settings.enableCustomRepositorySearch);
   showRepositoryTotalInput.checked = Boolean(settings.showRepositoryTotal);
   showWootenLinkSearchInput.checked = Boolean(settings.showWootenLinkSearch);
   showYoutubeSearchInput.checked = settings.showYoutubeSearch !== false;
@@ -451,6 +454,7 @@ async function saveSettings() {
       hiddenOwners,
       ownerGroupsPerPage,
       showRepositorySearch: showRepositorySearchInput.checked,
+      enableCustomRepositorySearch: enableCustomRepositorySearchInput.checked,
       showRepositoryTotal: showRepositoryTotalInput.checked,
       showWootenLinkSearch: showWootenLinkSearchInput.checked,
       showYoutubeSearch: showYoutubeSearchInput.checked,

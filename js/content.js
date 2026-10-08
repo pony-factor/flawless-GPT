@@ -12,6 +12,7 @@
   const HIDDEN_OWNERS_KEY = "hiddenOwners";
   const OWNER_GROUPS_PER_PAGE_KEY = "ownerGroupsPerPage";
   const SHOW_REPOSITORY_SEARCH_KEY = "showRepositorySearch";
+  const ENABLE_CUSTOM_REPOSITORIES_KEY = "enableCustomRepositorySearch";
   const CUSTOM_REPOSITORIES_KEY = "customRepositorySearchOverrides";
   const SHOW_REPOSITORY_TOTAL_KEY = "showRepositoryTotal";
   const PERSONAL_REPOSITORY_COLUMN_TITLE_KEY = "personalRepositoryColumnTitle";
@@ -523,6 +524,7 @@
     showRepositorySearch,
     showRepositoryTotal,
     customRepositories,
+    enableCustomRepositorySearch,
   ) {
     if (!showRepositorySearch && !showRepositoryTotal) return;
 
@@ -586,7 +588,8 @@
 
       const controls = document.createElement("div");
       controls.className = "ghrc-search-controls";
-      controls.append(searchLabel, overrideButton);
+      controls.append(searchLabel);
+      if (enableCustomRepositorySearch) controls.append(overrideButton);
 
       const form = document.createElement("form");
       form.className = "ghrc-search-override-form";
@@ -694,7 +697,9 @@
           search.blur();
         }
       });
-      searchArea.append(controls, form, results);
+      searchArea.append(controls);
+      if (enableCustomRepositorySearch) searchArea.append(form);
+      searchArea.append(results);
       search.value = repositorySearchQuery;
       renderSearchResults(results, searchRepositories, search.value, pinnedRepositories);
       widget.append(searchArea);
@@ -1089,6 +1094,7 @@
     personalRepositoryColumnTitle,
     showWootenLinkSearch,
     customRepositories,
+    enableCustomRepositorySearch,
   ) {
     widget.replaceChildren();
     const rankedRepositories = rankRepositories(
@@ -1100,7 +1106,7 @@
     const knownNames = new Set(knownSearchRepositories.map((repository) => repository.fullName.toLowerCase()));
     const rankedSearchRepositories = rankRepositories([
       ...knownSearchRepositories,
-      ...normalizedCustomRepositories(customRepositories).filter((repository) => (
+      ...normalizedCustomRepositories(enableCustomRepositorySearch ? customRepositories : []).filter((repository) => (
         !knownNames.has(repository.fullName.toLowerCase())
       )),
     ], usage, pinnedRepositories);
@@ -1113,6 +1119,7 @@
       showRepositorySearch,
       showRepositoryTotal,
       customRepositories,
+      enableCustomRepositorySearch,
     );
 
     const groups = groupRepositories(
@@ -1199,6 +1206,7 @@
           [OWNER_GROUPS_PER_PAGE_KEY]: DEFAULT_OWNER_GROUPS_PER_PAGE,
           [SHOW_REPOSITORY_SEARCH_KEY]: true,
           [CUSTOM_REPOSITORIES_KEY]: [],
+          [ENABLE_CUSTOM_REPOSITORIES_KEY]: false,
           [SHOW_REPOSITORY_TOTAL_KEY]: true,
           [PERSONAL_REPOSITORY_COLUMN_TITLE_KEY]: "Personal Repos",
           [SHOW_WOOTEN_LINK_SEARCH_KEY]: false,
@@ -1223,6 +1231,7 @@
           stored[PERSONAL_REPOSITORY_COLUMN_TITLE_KEY],
           Boolean(stored[SHOW_WOOTEN_LINK_SEARCH_KEY]),
           stored[CUSTOM_REPOSITORIES_KEY],
+          Boolean(stored[ENABLE_CUSTOM_REPOSITORIES_KEY]),
         );
       }
     } catch (error) {
@@ -1333,6 +1342,7 @@
       || changes.ownerOrder
       || changes.hiddenOwners
       || changes.ownerGroupsPerPage
+      || changes.enableCustomRepositorySearch
       || changes.customRepositorySearchOverrides
       || changes.showRepositorySearch
       || changes.showRepositoryTotal

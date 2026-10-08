@@ -17,6 +17,8 @@
     pointer-events: none;
   }
 
+  #github-repositories-for-chatgpt .ghrc-search-override-toggle,
+  #github-repositories-for-chatgpt .ghrc-search-override-form,
   #github-repositories-for-chatgpt .ghrc-search,
   #github-repositories-for-chatgpt .ghrc-search-results {
     pointer-events: auto;
