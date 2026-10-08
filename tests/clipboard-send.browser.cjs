@@ -48,6 +48,34 @@ test('clipboard URL button only appears on the New Chat route', async () => {
       ],
     );
 
+    // Dash's launcher lives outside the toolbar. Check visual placement, not
+    // just the order of toolbar buttons (the hat is a separate Send control).
+    await page.addStyleTag({ content: fs.readFileSync(path.join(__dirname, '../css/clipboard-send.css'), 'utf8') });
+    await page.addStyleTag({ content: fs.readFileSync(path.join(__dirname, '../css/spellcheck-launcher.css'), 'utf8') });
+    await page.evaluate(() => {
+      const host = document.createElement('form');
+      host.style.cssText = 'position:relative;margin:100px;width:500px;height:60px';
+      host.setAttribute('data-ghrc-spellcheck-launcher-host', 'true');
+      const launcher = document.createElement('button');
+      launcher.id = 'ghrc-spellcheck-gpt-launcher';
+      launcher.textContent = 'Dash';
+      document.querySelector('main').append(host);
+      host.append(launcher);
+    });
+    await page.waitForSelector('#ghrc-clipboard-open-url-button[data-ghrc-beside-spellcheck]');
+    for (const width of [1000, 600]) {
+      await page.setViewportSize({ width, height: 600 });
+      const link = await page.locator('#ghrc-clipboard-open-url-button').boundingBox();
+      const dash = await page.locator('#ghrc-spellcheck-gpt-launcher').boundingBox();
+      assert.equal(link.x + link.width + 8, dash.x);
+      assert.equal(link.y, dash.y);
+    }
+    await page.evaluate(() => document.querySelector('#ghrc-spellcheck-gpt-launcher').parentElement.remove());
+    await page.waitForFunction(() => {
+      const button = document.querySelector('#ghrc-clipboard-open-url-button');
+      return button && !button.hasAttribute('data-ghrc-beside-spellcheck');
+    });
+
     await page.evaluate(() => {
       history.pushState({}, '', '/c/example');
       window.dispatchEvent(new Event('ghrc:route-change'));

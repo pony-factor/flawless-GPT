@@ -176,8 +176,11 @@
     let urlButton = document.getElementById(URL_BUTTON_ID);
     if (isNewChatPage()) {
       if (!urlButton) urlButton = createUrlButton();
-      if (urlButton.parentElement !== anchor.parentElement || urlButton.nextElementSibling !== anchor) {
-        anchor.before(urlButton);
+      const launcher = document.getElementById("ghrc-spellcheck-gpt-launcher");
+      const urlAnchor = launcher?.parentElement ? launcher : anchor;
+      urlButton.toggleAttribute("data-ghrc-beside-spellcheck", Boolean(launcher?.parentElement));
+      if (urlButton.parentElement !== urlAnchor.parentElement || urlButton.nextElementSibling !== urlAnchor) {
+        urlAnchor.before(urlButton);
       }
     } else {
       removeUrlButton();
