@@ -210,3 +210,18 @@ test('Library button with both accessible label and text reveals below Library',
   assert.deepEqual(page.errors, []);
   await page.close();
 });
+
+test('hovering the sidebar toggle opens it without a click', async () => {
+  const page = await fixture();
+  await page.mouse.move(500, 20);
+  await page.mouse.move(20, 20);
+  await page.waitForFunction(() => document.querySelector('aside').dataset.expanded === 'true');
+  await page.mouse.move(200, 20);
+  await page.waitForTimeout(150);
+  assert.equal(await page.locator('aside').getAttribute('data-expanded'), 'true');
+  await page.mouse.move(500, 20);
+  await page.waitForFunction(() => document.querySelector('aside').dataset.expanded === 'false');
+  assert.equal(await page.evaluate(() => clicks), 2);
+  assert.deepEqual(page.errors, []);
+  await page.close();
+});

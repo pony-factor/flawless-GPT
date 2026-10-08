@@ -18,7 +18,7 @@ async function fixture() {
   const page = await browser.newPage({ viewport: { width: 1100, height: 800 } });
   page.errors = [];
   page.on('pageerror', error => page.errors.push(error.message));
-  await page.setContent('<style>body{margin:0}aside{position:fixed;left:0;top:0;width:260px;height:100vh;background:#eee}</style><aside><button aria-label="New chat">New chat</button><p>ChatGPT</p></aside><main></main>');
+  await page.setContent('<style>body{margin:0}aside{position:fixed;left:0;top:0;width:260px;height:100vh;background:#eee}svg{width:24px;height:24px}button{display:flex;align-items:center}</style><aside><button aria-label="Show sidebar"><svg></svg></button><button aria-label="New chat" onclick="window.newChats=(window.newChats||0)+1"><svg></svg><span>New chat</span></button><p>ChatGPT</p></aside><main></main>');
   await page.evaluate(() => {
     window.chrome = {
       runtime: { id: 'fixture', getURL: file => 'chrome-extension://fixture/' + file },
@@ -31,34 +31,35 @@ async function fixture() {
   return page;
 }
 
-test('mascot corner is a compact flush square and links to New chat', async () => {
+test('Flawless image replaces the New chat icon while preserving native actions', async () => {
   const page = await fixture();
-  const card = page.locator('#ghrc-flawless-corner');
-  assert.equal(await card.count(), 1);
-  assert.equal(await card.getAttribute('href'), '/');
-  assert.equal(await card.getAttribute('aria-label'), 'New chat');
-  assert.match(await card.locator('img').getAttribute('src'), /artwork\/squeaky-belle-full\.webp$/);
-  const bounds = await card.boundingBox();
-  assert.deepEqual(bounds, { x: 0, y: 0, width: 52, height: 52 });
-  assert.equal(await page.evaluate(() => getComputedStyle(document.getElementById('ghrc-flawless-corner')).borderTopLeftRadius), '0px');
-  await page.evaluate(() => document.getElementById('ghrc-flawless-corner').remove());
-  await page.waitForFunction(() => !!document.getElementById('ghrc-flawless-corner'));
-  assert.equal(await card.count(), 1);
+  const button = page.getByRole('button', { name: 'New chat', exact: true });
+  const image = button.locator('.ghrc-flawless-new-chat-image');
+  assert.equal(await image.count(), 1);
+  assert.match(await image.getAttribute('src'), /artwork\/squeaky-belle-full\.webp$/);
+  assert.equal(await button.locator('svg').isVisible(), false);
+  assert.equal(await button.locator('span').isVisible(), true);
+  assert.equal(await page.getByRole('button', { name: 'Show sidebar', exact: true }).locator('svg').isVisible(), true);
+  const bounds = await image.boundingBox();
+  assert.equal(bounds.width, 24);
+  assert.equal(bounds.height, 24);
+  await image.click();
+  assert.equal(await page.evaluate(() => window.newChats), 1);
+  await page.evaluate(() => document.querySelector('button[aria-label="New chat"]').innerHTML = '<svg></svg><span>New chat</span>');
+  await page.waitForFunction(() => !!document.querySelector('.ghrc-flawless-new-chat-image'));
+  assert.equal(await image.count(), 1);
   assert.deepEqual(page.errors, []);
   await page.close();
 });
 
-test('corner stays within narrow viewports and cleans up with extension', async () => {
+test('native icons return when the extension stops', async () => {
   const page = await fixture();
-  await page.setViewportSize({ width: 320, height: 600 });
-  const bounds = await page.locator('#ghrc-flawless-corner').boundingBox();
-  assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= 320);
-  assert.deepEqual(bounds, { x: 0, y: 0, width: 52, height: 52 });
   await page.evaluate(() => {
     chrome.runtime = undefined;
     __ghrcExtensionContext.active();
   });
-  assert.equal(await page.locator('#ghrc-flawless-corner').count(), 0);
+  assert.equal(await page.locator('.ghrc-flawless-new-chat-image').count(), 0);
+  assert.equal(await page.getByRole('button', { name: 'New chat', exact: true }).locator('svg').isVisible(), true);
   assert.deepEqual(page.errors, []);
   await page.close();
 });

@@ -1,27 +1,14 @@
-/* A compact New chat image sits flush with the viewport corner. */
-#ghrc-flawless-corner {
-  background: #292449;
-  box-sizing: border-box;
+/* Replace only the native New chat icon, preserving its button and label. */
+.ghrc-flawless-new-chat-image {
+  border-radius: 0;
   display: block;
-  height: 52px;
-  left: 0;
-  overflow: hidden;
-  position: fixed;
-  text-decoration: none;
-  top: 0;
-  width: 52px;
-  z-index: 75;
-}
-
-#ghrc-flawless-corner img {
-  display: block;
-  height: 100%;
+  flex-shrink: 0;
+  height: 24px;
   object-fit: cover;
   object-position: center 40%;
-  width: 100%;
+  width: 24px;
 }
 
-#ghrc-flawless-corner:focus-visible {
-  outline: 3px solid #a68df3;
-  outline-offset: -3px;
+.ghrc-flawless-new-chat-icon {
+  display: none !important;
 }

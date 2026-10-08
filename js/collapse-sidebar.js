@@ -147,6 +147,10 @@
 
   function pointerInRevealHotspot() {
     if (!pointer.inside || pointer.x > EDGE_HOTSPOT_WIDTH) return false;
+    const toggle = sidebarToggleState();
+    const toggleBounds = toggle?.state === "collapsed" ? visibleBounds(toggle.button) : null;
+    if (toggleBounds && pointer.x >= toggleBounds.left && pointer.x <= toggleBounds.right
+      && pointer.y >= toggleBounds.top && pointer.y <= toggleBounds.bottom) return true;
     const band = presetIconBounds();
     return Boolean(band && pointer.y >= band.top && pointer.y <= band.bottom);
   }
