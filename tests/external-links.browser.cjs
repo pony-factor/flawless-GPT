@@ -55,6 +55,7 @@ async function fixture(settings = {}, githubResponse = null) {
     };
   }, { settings, githubResponse });
   await page.addStyleTag({ content: read('css/external-links.css') });
+  await page.addScriptTag({ content: read('js/citation-links-main.js') });
   await page.addScriptTag({ content: read('js/external-links.js') });
   return page;
 }
@@ -102,6 +103,36 @@ test('sidebar mode adds only the sidebar action and preserves normal new-tab cli
   assert.ok(preview.width > 576);
   assert.ok(preview.x >= 1279 - preview.width);
   assert.equal(await page.locator('html').getAttribute('data-ghrc-link-preview'), 'right');
+  await page.close();
+});
+
+test('embedded citation buttons open the actual source beside chat without invoking native navigation', async () => {
+  const page = await fixture({ openExternalLinksInSplitView: true });
+  await page.evaluate(() => {
+    const popup = document.createElement('div');
+    popup.setAttribute('role', 'dialog');
+    const source = document.createElement('button');
+    source.id = 'citation-source';
+    source.setAttribute('data-d-component', 'pressable');
+    source.setAttribute('aria-label', 'Open example.org');
+    source.textContent = 'Embedded source';
+    source.__reactFiber$fixture = { memoizedProps: {}, return: {
+      memoizedProps: { __dilHostElement: { props: { children: { props: {
+        __dilHostElement: { props: { onVisibleKey: 'https://example.org/embedded' } },
+      } } } } },
+    } };
+    window.nativeCitationClicks = 0;
+    source.addEventListener('click', () => nativeCitationClicks++);
+    popup.append(source);
+    document.body.append(popup);
+  });
+  const action = page.locator('[role="dialog"] .ghrc-link-sidebar-button');
+  await action.waitFor();
+  assert.equal(await action.getAttribute('data-href'), 'https://example.org/embedded');
+  await action.click();
+  await page.frameLocator('#ghrc-link-preview iframe').frameLocator('iframe').locator('h1').waitFor();
+  assert.equal(await page.evaluate(() => nativeCitationClicks), 0);
+  assert.equal((await page.evaluate(() => openedLinks)).length, 0);
   await page.close();
 });
 
