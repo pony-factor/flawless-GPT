@@ -11,6 +11,52 @@ const githubAccountList = document.getElementById("github-accounts");
 const githubAccountTemplate = document.getElementById("github-account-template");
 const ownerGroupsPerPageInput = document.getElementById("owner-groups-per-page");
 const showRepositorySearchInput = document.getElementById("show-repository-search");
+const searchShortcutUtils = globalThis.__ghrcRepositorySearchShortcut;
+const searchShortcutButton = document.getElementById("repository-search-shortcut");
+const searchShortcutResetButton = document.getElementById("repository-search-shortcut-reset");
+const searchShortcutHelp = document.getElementById("repository-search-shortcut-help");
+let repositorySearchShortcut = searchShortcutUtils.normalize();
+let recordingRepositoryShortcut = false;
+
+function renderRepositorySearchShortcut() {
+  searchShortcutButton.textContent = recordingRepositoryShortcut
+    ? "Press a key…" : searchShortcutUtils.format(repositorySearchShortcut);
+  searchShortcutButton.setAttribute("aria-pressed", String(recordingRepositoryShortcut));
+  searchShortcutHelp.textContent = recordingRepositoryShortcut
+    ? "Press a non-modifier key with any modifiers, or click the button again to cancel."
+    : "Click the shortcut, then press any non-modifier key or key combination. Unmodified keys won't interrupt typing in a text field.";
+}
+
+searchShortcutButton.addEventListener("click", () => {
+  recordingRepositoryShortcut = !recordingRepositoryShortcut;
+  renderRepositorySearchShortcut();
+  if (recordingRepositoryShortcut) searchShortcutButton.focus();
+});
+
+searchShortcutButton.addEventListener("keydown", (event) => {
+  if (!recordingRepositoryShortcut) return;
+  event.preventDefault();
+  event.stopPropagation();
+  const recorded = searchShortcutUtils.fromEvent(event);
+  if (!recorded) return; // Wait for the actual key, not modifier-only presses.
+  repositorySearchShortcut = recorded;
+  recordingRepositoryShortcut = false;
+  renderRepositorySearchShortcut();
+  void queueSettingsSave();
+});
+
+searchShortcutButton.addEventListener("blur", () => {
+  if (!recordingRepositoryShortcut) return;
+  recordingRepositoryShortcut = false;
+  renderRepositorySearchShortcut();
+});
+
+searchShortcutResetButton.addEventListener("click", () => {
+  recordingRepositoryShortcut = false;
+  repositorySearchShortcut = searchShortcutUtils.normalize();
+  renderRepositorySearchShortcut();
+  void queueSettingsSave();
+});
 const enableCustomRepositorySearchInput = document.getElementById("enable-custom-repository-search");
 const showRepositoryTotalInput = document.getElementById("show-repository-total");
 const showWootenLinkSearchInput = document.getElementById("show-wooten-link-search");
@@ -314,6 +360,7 @@ async function loadSettings() {
     hiddenOwners: DEFAULT_HIDDEN_OWNERS,
     ownerGroupsPerPage: DEFAULT_OWNER_GROUPS_PER_PAGE,
     showRepositorySearch: true,
+    repositorySearchShortcut: searchShortcutUtils.DEFAULT,
     enableCustomRepositorySearch: false,
     showRepositoryTotal: true,
     showWootenLinkSearch: false,
@@ -363,6 +410,8 @@ async function loadSettings() {
   renderGithubAccounts(storedOwnerOrder, settings.hiddenOwners);
   ownerGroupsPerPageInput.value = normalizedOwnerGroupsPerPage(settings.ownerGroupsPerPage);
   showRepositorySearchInput.checked = Boolean(settings.showRepositorySearch);
+  repositorySearchShortcut = searchShortcutUtils.normalize(settings.repositorySearchShortcut);
+  renderRepositorySearchShortcut();
   enableCustomRepositorySearchInput.checked = Boolean(settings.enableCustomRepositorySearch);
   showRepositoryTotalInput.checked = Boolean(settings.showRepositoryTotal);
   showWootenLinkSearchInput.checked = Boolean(settings.showWootenLinkSearch);
@@ -457,6 +506,7 @@ async function saveSettings() {
       hiddenOwners,
       ownerGroupsPerPage,
       showRepositorySearch: showRepositorySearchInput.checked,
+      repositorySearchShortcut: searchShortcutUtils.normalize(repositorySearchShortcut),
       enableCustomRepositorySearch: enableCustomRepositorySearchInput.checked,
       showRepositoryTotal: showRepositoryTotalInput.checked,
       showWootenLinkSearch: showWootenLinkSearchInput.checked,
