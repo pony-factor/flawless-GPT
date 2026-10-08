@@ -80,7 +80,7 @@ function fixture({ clipboard = 'clipboard text', draft = '', suggestionAvailable
     focus() {},
     closest(selector) { return selector === 'form' ? container : null; },
     querySelectorAll(selector) {
-      return selector === '[app-mention-path]' && pluginSelected ? [mention] : [];
+      return selector === '[app-mention-path]' && pluginSelected && !externalAppChip ? [mention] : [];
     },
   };
 
