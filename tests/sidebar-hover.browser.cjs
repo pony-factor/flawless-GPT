@@ -108,7 +108,7 @@ test('hover entered before settings load reveals once they arrive without anothe
   assert.deepEqual(page.errors, []);
   await page.close();
 });
-test('collapsed reveal only uses the band below Library through preset icons',async()=>{
+test('collapsed reveal covers the entire left rail below Library, not the area above it',async()=>{
   const page=await fixture();
 
   await page.mouse.move(12,80);
@@ -120,14 +120,29 @@ test('collapsed reveal only uses the band below Library through preset icons',as
   await page.mouse.move(500,145);
   await page.waitForFunction(()=>document.querySelector('aside').dataset.expanded==='false');
 
-  await page.mouse.move(12,310);
+  await page.mouse.move(65,310);
   await page.waitForTimeout(500);
   assert.equal(await page.locator('aside').getAttribute('data-expanded'),'false');
-  assert.equal(await page.evaluate(()=>clicks),2);
+
+  // The former preset-icon cutoff must not leave a dead zone.
+  await page.mouse.move(12,310);
+  await page.waitForFunction(()=>document.querySelector('aside').dataset.expanded==='true');
+  await page.mouse.move(500,310);
+  await page.waitForFunction(()=>document.querySelector('aside').dataset.expanded==='false');
+
+  // The hotspot extends to the viewport bottom, including the right edge
+  // of the 64-pixel rail.
+  const bottom=page.viewportSize().height-8;
+  await page.mouse.move(63,bottom);
+  await page.waitForFunction(()=>document.querySelector('aside').dataset.expanded==='true');
+  await page.mouse.move(500,bottom);
+  await page.waitForFunction(()=>document.querySelector('aside').dataset.expanded==='false');
+
+  assert.equal(await page.evaluate(()=>clicks),6);
   assert.deepEqual(page.errors,[]);
   await page.close();
 });
-test('preset rail hover survives changed preset URL shapes',async()=>{
+test('rail hover survives changed preset URL shapes',async()=>{
   const page=await fixture();
   await page.evaluate(()=>{
     document.getElementById('preset-one').setAttribute('href','/preset/one');
@@ -140,7 +155,7 @@ test('preset rail hover survives changed preset URL shapes',async()=>{
   assert.deepEqual(page.errors,[]);
   await page.close();
 });
-test('rail without presets still reveals below Library and keeps Library clickable',async()=>{
+test('rail without presets still reveals to the viewport bottom and keeps Library clickable',async()=>{
   const page=await fixture();
   await page.evaluate(()=>document.querySelectorAll('[id^="preset-"]').forEach(element=>element.remove()));
   await page.mouse.move(12,115);
@@ -150,8 +165,27 @@ test('rail without presets still reveals below Library and keeps Library clickab
   await page.waitForFunction(()=>document.querySelector('aside').dataset.expanded==='true');
   await page.mouse.move(500,170);
   await page.waitForFunction(()=>document.querySelector('aside').dataset.expanded==='false');
-  await page.mouse.move(12,310);
+  await page.mouse.move(12,page.viewportSize().height-8);
+  await page.waitForFunction(()=>document.querySelector('aside').dataset.expanded==='true');
+  await page.mouse.move(500,page.viewportSize().height-8);
+  await page.waitForFunction(()=>document.querySelector('aside').dataset.expanded==='false');
+  assert.equal(await page.evaluate(()=>clicks),4);
+  assert.deepEqual(page.errors,[]);
+  await page.close();
+});
+test('moving Library updates the hover boundary without relying on presets',async()=>{
+  const page=await fixture();
+  await page.evaluate(()=>{
+    document.querySelectorAll('[id^="preset-"]').forEach(element=>element.remove());
+    document.getElementById('library').style.top='240px';
+  });
+  await page.mouse.move(12,220);
   await page.waitForTimeout(500);
+  assert.equal(await page.locator('aside').getAttribute('data-expanded'),'false');
+  await page.mouse.move(12,page.viewportSize().height-8);
+  await page.waitForFunction(()=>document.querySelector('aside').dataset.expanded==='true');
+  await page.mouse.move(500,page.viewportSize().height-8);
+  await page.waitForFunction(()=>document.querySelector('aside').dataset.expanded==='false');
   assert.equal(await page.evaluate(()=>clicks),2);
   assert.deepEqual(page.errors,[]);
   await page.close();
@@ -256,7 +290,7 @@ test('mouse hover reveals without pointer events or an activation click', async 
   await page.close();
 });
 
-test('only the area below Library opens the sidebar with one mascot', async () => {
+test('the full rail below Library opens the sidebar with one mascot', async () => {
   const page = await fixture();
   await page.evaluate(() => { chrome.runtime.getURL = file => 'chrome-extension://fixture/' + file; });
   await page.addStyleTag({ content: read('css/flawless-corner.css') });

@@ -48,7 +48,7 @@
       <input id="hover-reveal-sidebar" type="checkbox" />
       <span>
         <strong>Reveal sidebar on hover</strong>
-        <small>Hover over the left rail directly below Library to reveal the sidebar. It stays open while you use the sidebar or its menus, then collapses when you move away.</small>
+        <small>Hover anywhere along the left rail below Library, down to the bottom of the window, to reveal the sidebar. It stays open while you use the sidebar or its menus, then collapses when you move away.</small>
       </span>
     `;
     const dictationPreference = document.getElementById("hide-dictation-button")?.closest("label.preference");
