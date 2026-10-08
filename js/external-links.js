@@ -470,10 +470,6 @@
     actions.className = "ghrc-link-actions";
     actions.setAttribute("contenteditable", "false");
 
-    const mode = document.createElement("span");
-    mode.className = "ghrc-link-mode";
-    mode.setAttribute("aria-hidden", "true");
-
     const sidebar = document.createElement("button");
     sidebar.className = "ghrc-link-sidebar-button";
     sidebar.type = "button";
@@ -487,18 +483,15 @@
       if (href) showLinkPreview(href, link);
     });
 
-    actions.append(mode, sidebar);
+    actions.append(sidebar);
     linkActions.set(link, actions);
     updateLinkActions(link, url, actions);
     return actions;
   }
 
   function updateLinkActions(link, url, actions = linkActions.get(link)) {
-    const mode = actions?.querySelector(".ghrc-link-mode");
     const sidebar = actions?.querySelector(".ghrc-link-sidebar-button");
-    if (!mode || !sidebar) return;
-    mode.textContent = newTabsEnabled ? "↗" : "→";
-    mode.title = newTabsEnabled ? "Normal click opens in a new tab" : "Normal click opens in this tab";
+    if (!sidebar) return;
     sidebar.dataset.href = url.href;
   }
 

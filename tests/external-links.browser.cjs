@@ -68,12 +68,11 @@ test('normal link click keeps the configured new-tab behavior and sidebar contro
   await page.close();
 });
 
-test('sidebar mode adds a separate action while preserving the normal new-tab indicator', async () => {
+test('sidebar mode adds only the sidebar action and preserves normal new-tab clicks', async () => {
   const page = await fixture({ openExternalLinksInSplitView: true });
   const actions = page.locator('.ghrc-link-actions');
   await actions.waitFor();
-  assert.equal(await actions.locator('.ghrc-link-mode').textContent(), '↗');
-  assert.equal(await actions.locator('.ghrc-link-mode').getAttribute('title'), 'Normal click opens in a new tab');
+  assert.equal(await actions.locator('.ghrc-link-mode').count(), 0);
   assert.equal(await actions.locator('.ghrc-link-sidebar-button').getAttribute('aria-label'), 'Open link beside chat');
 
   await page.locator('#source').click();
@@ -146,12 +145,10 @@ test('left-side preview moves the panel, keeps controls ordered, and resizes fro
   await page.close();
 });
 
-test('current-tab mode is shown as the normal action while the sidebar remains separate', async () => {
+test('current-tab mode keeps only the separate sidebar action', async () => {
   const page = await fixture({ openExternalLinksInSplitView: true, openExternalLinksInNewTabs: false });
-  const mode = page.locator('.ghrc-link-mode');
-  await mode.waitFor();
-  assert.equal(await mode.textContent(), '→');
-  assert.equal(await mode.getAttribute('title'), 'Normal click opens in this tab');
+  await page.locator('.ghrc-link-actions').waitFor();
+  assert.equal(await page.locator('.ghrc-link-mode').count(), 0);
   assert.equal(await page.locator('.ghrc-link-sidebar-button').count(), 1);
   await page.close();
 });
