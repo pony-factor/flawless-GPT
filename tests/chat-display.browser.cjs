@@ -139,6 +139,62 @@ test('in-chat timestamps are hidden only when the setting is enabled', async () 
   await p.close();
 });
 
+
+test('assistant response wrapping defaults on for prose and code without affecting user messages', async () => {
+  const p = await fixture();
+  await p.evaluate(() => {
+    document.querySelector('main').insertAdjacentHTML('beforeend', `
+      <article data-message-author-role="assistant">
+        <div class="markdown" style="width:160px">
+          <p id="long-prose">averylongunbrokenresponsewordthatwouldnormallyoverflowitscontainercompletely</p>
+          <pre id="long-code" style="width:160px"><code>averylongunbrokencodelinethatwouldnormallyrequirehorizontalscrolling</code></pre>
+        </div>
+      </article>
+      <article data-message-author-role="user">
+        <pre id="user-code">leave this preformatted user message unchanged</pre>
+      </article>
+    `);
+  });
+  const result = await p.evaluate(() => {
+    const prose = document.getElementById('long-prose');
+    const code = document.getElementById('long-code');
+    return {
+      proseWrap: getComputedStyle(prose).overflowWrap,
+      codeWhiteSpace: getComputedStyle(code).whiteSpace,
+      codeWrap: getComputedStyle(code).overflowWrap,
+      proseFits: prose.scrollWidth <= prose.clientWidth,
+      codeFits: code.scrollWidth <= code.clientWidth,
+      userWhiteSpace: getComputedStyle(document.getElementById('user-code')).whiteSpace,
+    };
+  });
+  assert.equal(result.proseWrap, 'anywhere');
+  assert.equal(result.codeWhiteSpace, 'pre-wrap');
+  assert.equal(result.codeWrap, 'anywhere');
+  assert.equal(result.proseFits, true);
+  assert.equal(result.codeFits, true);
+  assert.equal(result.userWhiteSpace, 'pre');
+  assert.deepEqual(p.errors, []);
+  await p.close();
+});
+
+test('response wrap opt-out persists and can be switched live without reloading', async () => {
+  const p = await fixture({ stored: { wrapChatResponses: false } });
+  await p.evaluate(() => {
+    document.querySelector('main').insertAdjacentHTML('beforeend',
+      '<article data-message-author-role="assistant"><pre id="toggle-code">unbroken-code-line</pre></article>');
+  });
+  await p.waitForFunction(() => document.documentElement.hasAttribute('data-ghrc-disable-response-wrap'));
+  assert.equal(await p.locator('#toggle-code').evaluate(e => getComputedStyle(e).whiteSpace), 'pre');
+  await p.evaluate(() => chrome.storage.local.set({ wrapChatResponses: true }));
+  await p.waitForFunction(() => !document.documentElement.hasAttribute('data-ghrc-disable-response-wrap'));
+  assert.equal(await p.locator('#toggle-code').evaluate(e => getComputedStyle(e).whiteSpace), 'pre-wrap');
+  await p.evaluate(() => chrome.storage.local.set({ wrapChatResponses: false }));
+  await p.waitForFunction(() => document.documentElement.hasAttribute('data-ghrc-disable-response-wrap'));
+  assert.equal(await p.locator('#toggle-code').evaluate(e => getComputedStyle(e).whiteSpace), 'pre');
+  assert.deepEqual(p.errors, []);
+  await p.close();
+});
+
 test('conversation tail spacer follows the newest outer turn and creates real scroll range', async () => {
   const p = await fixture();
   await p.evaluate(() => {

@@ -46,3 +46,15 @@ html[data-ghrc-composer-placeholder] :is(#prompt-textarea, [data-composer-markdo
   min-height: clamp(10rem, 35vh, 28rem) !important;
   pointer-events: none !important;
 }
+
+/* Wrap assistant-rendered prose and preformatted code without changing the composer,
+   user messages, or other controls. CSS is enabled before preferences load. */
+html:not([data-ghrc-disable-response-wrap]) [data-message-author-role="assistant"] :is(.markdown, .prose, p, li, blockquote, td, th) {
+  overflow-wrap: anywhere !important;
+}
+
+html:not([data-ghrc-disable-response-wrap]) [data-message-author-role="assistant"] :is(pre, pre code) {
+  white-space: pre-wrap !important;
+  overflow-wrap: anywhere !important;
+  word-break: normal !important;
+}
