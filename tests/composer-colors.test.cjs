@@ -53,13 +53,10 @@ test("all independent composer colors have corresponding scoped CSS selectors", 
   assert.ok(css.includes("form:has(#prompt-textarea)"));
 });
 
-test("chat bar HEX fields sync with pickers and reject invalid edits", async () => {
+test("HEX or picker edits enable individual colors immediately without checkboxes", async () => {
   class Element {
     constructor() {
-      this.children = [];
-      this.events = {};
-      this.attributes = {};
-      this.value = "";
+      this.children = []; this.events = {}; this.attributes = {}; this.value = "";
     }
     append(...children) { this.children.push(...children); }
     setAttribute(name, value) { this.attributes[name] = value; }
@@ -91,31 +88,32 @@ test("chat bar HEX fields sync with pickers and reject invalid edits", async () 
   await Promise.resolve();
   assert.equal(grid.children.length, 19);
   const [label, controls] = grid.children[0].children;
-  const toggle = label.children[0], [picker, hex] = controls.children;
-  assert.equal(toggle.checked, true);
+  const [picker, hex, clear] = controls.children;
+  assert.equal(label.children.length, 0, "no redundant enable checkbox");
   assert.equal(picker.value, "#aabbcc");
   assert.equal(hex.value, "#aabbcc");
-  assert.equal(hex.disabled, false);
-  const otherControls = grid.children[1].children[1];
-  assert.equal(otherControls.children[1].disabled, true);
+  assert.equal(clear.hidden, false);
 
+  const [otherPicker, otherHex, otherClear] = grid.children[1].children[1].children;
+  assert.equal(otherClear.hidden, true, "untouched colors inherit native theme");
+  assert.equal(otherHex.disabled, undefined, "HEX editing starts enabled");
   const flush = () => new Promise(resolve => setImmediate(resolve));
-  hex.value = "00FF7f";
-  hex.emit("input");
+
+  otherHex.value = "00FF7f";
+  otherHex.emit("input");
   await flush();
-  assert.equal(picker.value, "#00ff7f");
-  assert.equal(stored.at(-1).surface, "#00ff7f");
+  assert.equal(otherPicker.value, "#00ff7f");
+  assert.equal(stored.at(-1)["surface-border"], "#00ff7f");
+  assert.equal(otherClear.hidden, false);
 
   const saves = stored.length;
-  hex.value = "#badcolor";
-  hex.emit("input");
+  otherHex.value = "#badcolor";
+  otherHex.emit("input");
   await flush();
-  assert.equal(hex.attributes["aria-invalid"], "true");
+  assert.equal(otherHex.attributes["aria-invalid"], "true");
   assert.equal(stored.length, saves);
-  assert.equal(picker.value, "#00ff7f");
-  hex.emit("change");
-  assert.equal(hex.value, "#00ff7f");
-  assert.equal(hex.attributes["aria-invalid"], undefined);
+  otherHex.emit("change");
+  assert.equal(otherHex.value, "#00ff7f");
 
   picker.value = "#123456";
   picker.emit("input");
@@ -123,21 +121,14 @@ test("chat bar HEX fields sync with pickers and reject invalid edits", async () 
   assert.equal(hex.value, "#123456");
   assert.equal(stored.at(-1).surface, "#123456");
 
-  toggle.checked = false;
-  toggle.emit("change");
+  clear.emit("click");
   await flush();
-  assert.equal(hex.disabled, true);
-  assert.equal(picker.disabled, true);
+  assert.equal(clear.hidden, true);
   assert.equal(stored.at(-1).surface, undefined);
-
-  toggle.checked = true;
-  toggle.emit("change");
-  await flush();
-  assert.equal(hex.disabled, false);
-  assert.equal(stored.at(-1).surface, "#123456");
+  assert.equal(hex.value, "#303030");
 
   reset.emit("click");
   await flush();
-  assert.equal(toggle.checked, false);
-  assert.equal(stored.at(-1).surface, undefined);
+  assert.equal(otherClear.hidden, true);
+  assert.equal(stored.at(-1)["surface-border"], undefined);
 });

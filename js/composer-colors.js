@@ -24,10 +24,9 @@
 
     function render(input) {
       colors = valid(input);
-      for (const [key, { toggle, picker, hex, preview }] of fields) {
-        toggle.checked = Boolean(colors[key]);
-        picker.disabled = hex.disabled = !toggle.checked;
+      for (const [key, { picker, hex, clear, preview }] of fields) {
         picker.value = hex.value = colors[key] || preview;
+        clear.hidden = !colors[key];
         hex.removeAttribute("aria-invalid");
       }
       reset.disabled = Object.keys(colors).length === 0;
@@ -41,21 +40,17 @@
     for (const [key, title, preview] of SPECS) {
       const row = document.createElement("div");
       row.className = "composer-color-row";
-      const label = document.createElement("label");
+      const label = document.createElement("span");
       label.className = "composer-color-label";
-      const toggle = document.createElement("input");
-      toggle.type = "checkbox";
-      toggle.setAttribute("aria-label", `Customize ${title}`);
-      const caption = document.createElement("span");
-      caption.textContent = title;
-      label.append(toggle, caption);
+      label.textContent = title;
+
+      const controls = document.createElement("div");
+      controls.className = "composer-color-controls";
       const picker = document.createElement("input");
       picker.type = "color";
       picker.value = preview;
-      picker.disabled = true;
-      picker.setAttribute("aria-label", `${title} color`);
-      const controls = document.createElement("div");
-      controls.className = "composer-color-controls";
+      picker.setAttribute("aria-label", `${title} color picker`);
+
       const hex = document.createElement("input");
       hex.type = "text";
       hex.className = "composer-color-hex";
@@ -64,47 +59,53 @@
       hex.placeholder = "#RRGGBB";
       hex.spellcheck = false;
       hex.autocomplete = "off";
-      hex.disabled = true;
       hex.setAttribute("aria-label", `${title} HEX color`);
-      controls.append(picker, hex);
+
+      // Unedited controls inherit ChatGPT's palette. The displayed swatch is
+      // only a preview until the user edits either field.
+      const clear = document.createElement("button");
+      clear.type = "button";
+      clear.className = "composer-color-clear";
+      clear.textContent = "Default";
+      clear.title = "Use ChatGPT's default color";
+      clear.setAttribute("aria-label", `Restore ChatGPT default for ${title}`);
+      clear.hidden = true;
+
+      controls.append(picker, hex, clear);
       row.append(label, controls);
       grid.append(row);
-      fields.set(key, { toggle, picker, hex, preview });
-      toggle.addEventListener("change", () => {
-        picker.disabled = hex.disabled = !toggle.checked;
-        if (toggle.checked) colors[key] = picker.value;
-        else delete colors[key];
-        hex.value = picker.value;
+      fields.set(key, { picker, hex, clear, preview });
+
+      const setColor = (value) => {
+        colors[key] = value;
+        picker.value = hex.value = value;
         hex.removeAttribute("aria-invalid");
+        clear.hidden = false;
         persist();
-      });
-      picker.addEventListener("input", () => {
-        if (!toggle.checked) return;
-        colors[key] = picker.value;
-        hex.value = picker.value;
-        hex.removeAttribute("aria-invalid");
-        persist();
-      });
+      };
+      picker.addEventListener("input", () => setColor(picker.value));
       hex.addEventListener("input", () => {
-        if (!toggle.checked) return;
         const value = normalizeHex(hex.value);
         if (!value) {
           hex.setAttribute("aria-invalid", "true");
           return;
         }
-        hex.removeAttribute("aria-invalid");
-        picker.value = colors[key] = value;
-        persist();
+        setColor(value);
       });
       hex.addEventListener("change", () => {
         const value = normalizeHex(hex.value);
-        if (toggle.checked && value && colors[key] !== value) {
-          picker.value = colors[key] = value;
-          persist();
+        if (value && colors[key] !== value) setColor(value);
+        else {
+          hex.value = colors[key] || preview;
+          hex.removeAttribute("aria-invalid");
         }
-        // An incomplete or invalid edit never replaces the last saved color.
-        hex.value = colors[key] || picker.value;
+      });
+      clear.addEventListener("click", () => {
+        delete colors[key];
+        picker.value = hex.value = preview;
         hex.removeAttribute("aria-invalid");
+        clear.hidden = true;
+        persist();
       });
     }
     // Keep changes out of the larger form's unrelated settings writer.

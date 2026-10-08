@@ -619,15 +619,14 @@ button.secondary {
 }
 
 
-/* Independent composer-color controls */
+/* Direct, opt-in-on-edit composer-color controls */
 #composer-color-settings .composer-color-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,330px),1fr)); gap:8px 16px; margin:12px 0; }
-#composer-color-settings .composer-color-row { display:flex; align-items:center; justify-content:space-between; gap:12px; }
-#composer-color-settings .composer-color-label { display:flex; align-items:center; gap:7px; font-size:13px; font-weight:400; margin:0; }
-#composer-color-settings .composer-color-label input { width:auto; margin:0; }
-#composer-color-settings .composer-color-controls { display:flex; flex:0 0 auto; align-items:center; gap:6px; }
+#composer-color-settings .composer-color-row { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px 12px; }
+#composer-color-settings .composer-color-label { font-size:13px; font-weight:400; margin:0; }
+#composer-color-settings .composer-color-controls { display:flex; flex:0 1 auto; align-items:center; gap:6px; }
 #composer-color-settings input[type="color"] { cursor:pointer; flex:0 0 42px; height:30px; width:42px; padding:2px; }
-#composer-color-settings input[type="color"]:disabled { cursor:default; opacity:0.4; }
 #composer-color-settings .composer-color-hex { width:92px; height:30px; padding:4px 7px; font-size:12px; }
-#composer-color-settings .composer-color-hex:disabled { opacity:0.5; }
 #composer-color-settings .composer-color-hex[aria-invalid="true"] { border-color:#c73737; box-shadow:0 0 0 1px #c73737; }
+#composer-color-settings .composer-color-clear { font-size:12px; padding:4px 6px; min-height:30px; }
+#composer-color-settings .composer-color-clear[hidden] { display:none; }
 #composer-color-reset:disabled { opacity:0.45; cursor:default; }
