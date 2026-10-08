@@ -34,11 +34,6 @@
       const bounds = control.getBoundingClientRect();
       return bounds.width && bounds.height && getComputedStyle(control).visibility !== "hidden";
     });
-    if (visible) {
-      const bounds = visible.getBoundingClientRect();
-      link.style.left = `${bounds.left}px`;
-      link.style.top = `${bounds.top}px`;
-    }
     for (const toggle of controls) {
       toggle.classList.add("ghrc-flawless-logo-button");
       toggles.add(toggle);

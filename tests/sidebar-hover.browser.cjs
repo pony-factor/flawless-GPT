@@ -216,21 +216,6 @@ test('Library button with both accessible label and text reveals below Library',
   await page.close();
 });
 
-test('hovering the sidebar toggle opens it without a click', async () => {
-  const page = await fixture();
-  await page.mouse.move(500, 20);
-  await page.mouse.move(20, 20);
-  await page.waitForFunction(() => document.querySelector('aside').dataset.expanded === 'true');
-  await page.mouse.move(200, 20);
-  await page.waitForTimeout(150);
-  assert.equal(await page.locator('aside').getAttribute('data-expanded'), 'true');
-  await page.mouse.move(500, 20);
-  await page.waitForFunction(() => document.querySelector('aside').dataset.expanded === 'false');
-  assert.equal(await page.evaluate(() => clicks), 2);
-  assert.deepEqual(page.errors, []);
-  await page.close();
-});
-
 test('mouse hover reveals without pointer events or an activation click', async () => {
   const page = await fixture({ mouseOnly: true });
   await page.mouse.move(500, 170);
@@ -246,13 +231,16 @@ test('mouse hover reveals without pointer events or an activation click', async 
   await page.close();
 });
 
-test('single mascot opens on hover and remains available while expanded', async () => {
+test('only the area below Library opens the sidebar with one mascot', async () => {
   const page = await fixture();
   await page.evaluate(() => { chrome.runtime.getURL = file => 'chrome-extension://fixture/' + file; });
   await page.addStyleTag({ content: read('css/flawless-corner.css') });
   await page.addScriptTag({ content: read('js/flawless-corner.js') });
   await page.mouse.move(500, 20);
   await page.locator('#ghrc-flawless-corner').hover();
+  await page.waitForTimeout(500);
+  assert.equal(await page.locator('aside').getAttribute('data-expanded'), 'false');
+  await page.mouse.move(12, 170);
   await page.waitForFunction(() => document.querySelector('aside').dataset.expanded === 'true');
   assert.equal(await page.locator('#ghrc-flawless-corner').isVisible(), true);
   await page.mouse.move(500, 20);

@@ -31,7 +31,7 @@ async function fixture() {
   return page;
 }
 
-test('one mascot combines sidebar hover and native New chat', async () => {
+test('one mascot starts native New chat without opening the sidebar', async () => {
   const page = await fixture();
   const mascot = page.locator('#ghrc-flawless-corner');
   assert.equal(await mascot.count(), 1);
