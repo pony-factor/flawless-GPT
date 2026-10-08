@@ -36,9 +36,12 @@ test('one mascot starts native New chat without opening the sidebar', async () =
   const mascot = page.locator('#ghrc-flawless-corner');
   assert.equal(await mascot.count(), 1);
   assert.equal(await mascot.getAttribute('aria-label'), 'New chat');
+  assert.match(await mascot.locator('img').getAttribute('src'), /artwork\/squeaky-belle-full\.webp$/);
   const bounds = await mascot.boundingBox();
   assert.equal(bounds.width, 33);
   assert.equal(bounds.height, 33);
+  assert.deepEqual(bounds, { x: 10, y: 20, width: 33, height: 33 });
+  assert.equal(await page.evaluate(() => getComputedStyle(document.getElementById('ghrc-flawless-corner')).borderTopLeftRadius), '4px');
   assert.equal(await page.getByRole('button', { name: 'New chat', exact: true }).count(), 0);
   await mascot.click();
   assert.equal(await page.evaluate(() => window.newChats), 1);
@@ -50,12 +53,18 @@ test('one mascot starts native New chat without opening the sidebar', async () =
   assert.equal(await mascot.count(), 1);
   await mascot.click();
   assert.equal(await page.evaluate(() => window.newChats), 2);
+  await page.evaluate(() => document.getElementById('ghrc-flawless-corner').remove());
+  await page.waitForFunction(() => !!document.getElementById('ghrc-flawless-corner'));
+  assert.equal(await mascot.count(), 1);
   assert.deepEqual(page.errors, []);
   await page.close();
 });
 
 test('native controls return when extension stops', async () => {
   const page = await fixture();
+  await page.setViewportSize({ width: 320, height: 600 });
+  const bounds = await page.locator('#ghrc-flawless-corner').boundingBox();
+  assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= 320);
   await page.evaluate(() => {
     chrome.runtime = undefined;
     __ghrcExtensionContext.active();

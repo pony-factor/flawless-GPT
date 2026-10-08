@@ -32,7 +32,7 @@ html[data-ghrc-hide-chat-timestamps] [data-ghrc-chat-timestamp] {
 
 html[data-ghrc-composer-placeholder] :is(#prompt-textarea, [data-composer-markdown]) [data-placeholder]::before,
 html[data-ghrc-composer-placeholder] :is(#prompt-textarea, [data-composer-markdown])[data-placeholder]::before {
-  content: var(--ghrc-composer-placeholder) !important;
+  content: var(--ghrc-composer-placeholder-text) !important;
 }
 
 

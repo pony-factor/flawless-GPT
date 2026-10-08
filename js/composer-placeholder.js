@@ -4,7 +4,7 @@
   if (!context?.active()) return;
   const SETTING_KEY = "composerPlaceholder";
   const CUSTOM_ATTR = "data-ghrc-composer-placeholder";
-  const TEXT_PROPERTY = "--ghrc-composer-placeholder";
+  const TEXT_PROPERTY = "--ghrc-composer-placeholder-text";
   const originals = new Map();
   let customText = "";
   let scheduled = false;
