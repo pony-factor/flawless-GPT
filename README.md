@@ -152,10 +152,11 @@ Automatic sending deliberately does **not** rely on a quiet DOM or the end of Ch
 **Deep research publisher** is off by default in both settings views. Enabling it
 adds an **Add to repo** icon immediately left of the download/export control on
 completed deep research reports, including the embedded report card. Clicking it
-opens an import launcher where you can choose an existing category, enter a new
-category (including nested folders), or leave it empty for the repository root.
-Only **Import report** captures the full report as Markdown and commits and
-pushes it to the chosen category in the linked repository. Cancel leaves the
+opens a compact folder picker. Click folders to browse, use the home/up controls
+to navigate, or type a new category (including nested folders). **Import to root**
+imports immediately to the repository root; **Import report** imports to the
+selected category. Both capture the full report as Markdown and commit and push
+it to the linked repository. Cancel leaves the
 repository unchanged. Report links open in a new browser tab, and expanding a
 report hides the chat composer until the report is collapsed.
 
@@ -180,7 +181,12 @@ Filenames include a stable suffix based on the conversation and report title;
 retrying an identical report produces no additional commit. Concurrent remote
 updates or branch restrictions cause a visible error, never a force-push. The
 button reports success only after Git confirms the push (or the same content is
-already on the remote). Failed attempts can be retried from the report.
+already on the remote). Failed attempts can be retried from the report. If an
+extension update disconnects an open report, the status asks you to reload the
+ChatGPT page before retrying. Research windows retain their import destination
+across extension updates and refresh automatically to reconnect. Interrupted
+imports resume automatically; temporary bridge or Git failures retry up to three
+times. A changed destination still requires choosing it again.
 
 The bridge uses Chrome's [native messaging protocol](https://developer.chrome.com/docs/extensions/develop/concepts/native-messaging).
 It accepts reports only from this extension's research-frame content script and

@@ -1049,6 +1049,40 @@ for (const active of [false, true]) {
   });
 }
 
+for (const assistantPresent of [false, true]) {
+  test(`clipboard waits for Work completion with an enabled Send control (assistant=${assistantPresent})`, async () => {
+    const p = await fixture({ active: true, clipboard: true, liveMarkup: true });
+    await p.locator('#ghrc-clipboard-send-button').waitFor();
+    await p.evaluate(assistantPresent => {
+      Object.defineProperty(navigator, 'clipboard', { value: { readText: async () => 'After Work finishes' } });
+      if (!assistantPresent) document.querySelector('[data-content-search-unit-key$=":assistant"]').remove();
+      // Native Work submission would steer the running task despite Send being
+      // enabled. There is no Stop control or streaming marker in this state.
+      window.active = false;
+      button.setAttribute('aria-label', 'Send');
+      button.disabled = false;
+    }, assistantPresent);
+    await p.locator('[data-composer-markdown]').fill('Keep my draft');
+    await p.locator('#ghrc-clipboard-send-button').click();
+    await p.locator('.ghrc-message-queue-editor').waitFor();
+    assert.equal(await p.locator('.ghrc-message-queue-editor').inputValue(), 'After Work finishes');
+    await p.waitForTimeout(2000);
+    assert.deepEqual(await p.evaluate(() => sent), []);
+    assert.equal(await p.evaluate(() => stops), 0);
+    assert.equal(await p.evaluate(() => read()), 'Keep my draft');
+    await p.evaluate(assistantPresent => {
+      if (!assistantPresent) addTurn('assistant');
+      finish();
+    }, assistantPresent);
+    await sentCount(p, 1);
+    await p.waitForFunction(() => read() === 'Keep my draft');
+    assert.deepEqual(await p.evaluate(() => sent), ['After Work finishes']);
+    assert.equal(await p.evaluate(() => stops), 0);
+    assert.deepEqual(p.errors, []);
+    await p.close();
+  });
+}
+
 test('idle clipboard joins an existing paused queue in FIFO order', async () => {
   const p = await fixture({ clipboard: true, stored: {
     queuedChatMessages: { 'conversation:test': [{ id: 'first', text: 'First prompt' }] },
