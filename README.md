@@ -79,6 +79,23 @@ Synchronization uses ChatGPT's own same-origin `/backend-api/user_system_message
 
 Existing guidance from the older `codexCustomInstructions` / `chatgptCustomInstructions` keys is migrated into `webCommitGuidance`. If the older Codex Web co-author preference was enabled, its trailer instruction is folded into the migrated guidance rather than kept as a separate setting. Personalization never writes `~/.codex/AGENTS.md`, inspects `CODEX_HOME`, imports PGP keys, or changes global Git configuration. Commit signing remains a separate feature.
 
+### Sidebar hover behavior
+
+The sidebar starts collapsed on page load. **ChatGPT → Reveal sidebar on hover**
+is off by default. Enable it to reveal the sidebar by holding the mouse in the
+leftmost 64 pixels, directly below **Library**, for 350 milliseconds.
+
+The reveal area covers the contiguous preset icons below Library. If there are
+no preset icons, it extends three Library-button heights below Library, bounded
+by the bottom of the viewport. Hovering Library itself or other parts of the
+left edge does not trigger the reveal.
+
+The sidebar stays open while the mouse is inside it or one of its open menus,
+including nested menus and a 12-pixel margin around those menus. It collapses
+90 milliseconds after the mouse leaves those areas. Hovering should work
+without clicking or giving the browser keyboard focus; moving keyboard focus
+away alone should not collapse it.
+
 ### Chat bar colors
 
 Under **ChatGPT → Chat bar colors**, choose independent opt-in colors for the composer background, border, focus ring, typed text, caret, placeholder, selection, toolbar, send/stop buttons, and attachments. Unchecked swatches use ChatGPT's own theme, including dark-mode changes. Colors are stored locally under `composerColors`, update live in open chats, and can all be reset with **Restore ChatGPT colors**.
