@@ -337,7 +337,6 @@
       frame.title = "Website preview: " + url.hostname;
       frame.setAttribute("sandbox", "allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox");
       frame.referrerPolicy = "no-referrer";
-      panel.append(frame);
       const watch = { id: `${Date.now()}:${nativeSplitRequest}`, href, link, panel };
       previewWatch = watch;
       void (async () => {
@@ -346,7 +345,13 @@
         } catch {
           // Keep usable embedded previews available if the worker is restarting.
         }
-        if (previewWatch === watch && panel.isConnected) frame.src = href;
+        if (previewWatch === watch && panel.isConnected) {
+          // Set the external destination before connecting the frame. Mounting
+          // about:blank first inherits ChatGPT's origin and triggers the
+          // allow-scripts/allow-same-origin sandbox warning.
+          frame.src = href;
+          panel.append(frame);
+        }
       })();
       frame.addEventListener("error", () => {
         if (previewWatch === watch) void openNativeSplitView(href, link);

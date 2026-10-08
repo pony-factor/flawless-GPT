@@ -90,6 +90,28 @@ test('sidebar mode adds a separate action while preserving the normal new-tab in
   await page.close();
 });
 
+test('preview waits for its navigation watch without mounting a same-origin blank frame', async () => {
+  const page = await fixture({ openExternalLinksInSplitView: true });
+  const warnings = [];
+  page.on('console', message => {
+    if (/both allow-scripts and allow-same-origin/.test(message.text())) warnings.push(message.text());
+  });
+  await page.evaluate(() => {
+    const send = chrome.runtime.sendMessage;
+    chrome.runtime.sendMessage = async message => {
+      if (message.type === 'watch-link-preview') await new Promise(resolve => { window.releaseWatch = resolve; });
+      return send(message);
+    };
+  });
+  await page.locator('.ghrc-link-sidebar-button').click();
+  await page.waitForFunction(() => Boolean(window.releaseWatch));
+  assert.equal(await page.locator('#ghrc-link-preview iframe').count(), 0);
+  await page.evaluate(() => releaseWatch());
+  await page.frameLocator('#ghrc-link-preview iframe').locator('h1').waitFor();
+  assert.deepEqual(warnings, []);
+  await page.close();
+});
+
 test('left-side preview moves the panel, keeps controls ordered, and resizes from its right edge', async () => {
   const page = await fixture({ openExternalLinksInSplitView: true, openExternalLinksInSplitViewOnLeft: true });
   const actions = page.locator('.ghrc-link-actions');
