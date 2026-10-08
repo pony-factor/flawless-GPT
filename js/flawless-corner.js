@@ -74,8 +74,11 @@
       });
       document.body.append(link);
     }
-    const controls = Array.from(document.querySelectorAll(TOGGLE_SELECTOR));
-    const headerControls = Array.from(document.querySelectorAll(HEADER_TOGGLE_SELECTOR));
+    // The rail also has an invisible, full-area resize button with the same
+    // label. Only the actual header control provides the mascot's row center.
+    const isHeaderControl = control => !control.matches('.absolute.inset-0');
+    const controls = Array.from(document.querySelectorAll(TOGGLE_SELECTOR)).filter(isHeaderControl);
+    const headerControls = Array.from(document.querySelectorAll(HEADER_TOGGLE_SELECTOR)).filter(isHeaderControl);
     const visibleControl = control => {
       const bounds = control.getBoundingClientRect();
       return bounds.width && bounds.height && getComputedStyle(control).visibility !== "hidden";
