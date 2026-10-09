@@ -75,3 +75,27 @@ test('recover original image URLs from image renderer metadata', async () => {
     assert.equal(await page.locator('#image').getAttribute('data-ghrc-original-image'), 'https://pictures.example/renderer.png');
   } finally { await browser.close(); }
 });
+
+test('recover DIL citations and catalog artwork after an original image fails', async () => {
+  const browser = await chromium.launch({ executablePath: '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser', headless: true });
+  const page = await browser.newPage();
+  try {
+    await page.route('https://pictures.example/broken.png', route => route.fulfill({ status: 404, body: '' }));
+    await page.route('https://pictures.example/pony.png', route => route.fulfill({ contentType: 'image/png', body: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=', 'base64') }));
+    await page.setContent('<div data-markdown-text-style="assistant-message"><div data-dil-message-id="image"><div data-d-component="row"><div id="image" role="img" aria-label="Image unavailable" data-original-src="https://pictures.example/broken.png"></div><span data-d-default-strong>End Zone</span></div></div><span id="citation" data-d-component="popover-trigger" role="button">Fandom</span></div>');
+    await page.evaluate(() => {
+      const trigger = document.querySelector('#citation');
+      trigger.__reactFiber$fixture = { memoizedProps: { __dilHostElement: { props: { content: { props: { children: [{ props: { onVisibleKey: 'https://catalog.example/ponies' } }] } } } } } };
+      window.__ghrcExtensionContext = { active: () => true, onStop: () => {} };
+      window.chrome = { runtime: { sendMessage: async message => {
+        window.sourceUrl = message.url;
+        return { ok: true, url: message.url, html: '<table><tr><td id="End_Zone">End Zone</td><td><img alt="earth" data-relevant="0" data-src="https://pictures.example/icon.png"></td><td><img alt="End Zone ID S8E1" data-relevant="1" data-src="https://pictures.example/pony.png"></td></tr></table>' };
+      } } };
+    });
+    for (const file of ['image-recovery-main.js', 'unavailable-images.js']) await page.addScriptTag({ content: fs.readFileSync(path.join(__dirname, '../js', file), 'utf8') });
+    await page.waitForFunction(() => document.querySelector('#image img')?.naturalWidth === 1);
+    assert.equal(await page.locator('#image img').getAttribute('src'), 'https://pictures.example/pony.png');
+    assert.equal(await page.evaluate(() => window.sourceUrl), 'https://catalog.example/ponies');
+    assert.equal(await page.locator('#image').getAttribute('aria-label'), 'End Zone');
+  } finally { await browser.close(); }
+});

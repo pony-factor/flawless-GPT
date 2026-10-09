@@ -29,13 +29,17 @@
         || img.getAttribute("data-original") || img.getAttribute("data-ghrc-src");
       const url = raw && publicUrl(raw, base);
       if (!url) continue;
+      const tableRow = img.closest("tr");
       let heading = "";
-      for (let parent = img.parentElement, depth = 0; parent && depth < 7; parent = parent.parentElement, depth++) {
+      for (let parent = img.parentElement, depth = 0; !tableRow && parent && depth < 7; parent = parent.parentElement, depth++) {
         const headings = parent.querySelectorAll("h1,h2,h3,h4,figcaption");
         if (headings.length === 1) { heading = headings[0].textContent; break; }
         if (headings.length > 1) break;
       }
-      result.push({ url, alt: normalize(img.getAttribute("alt") || img.getAttribute("title")), heading: normalize(heading), lazy: img.hasAttribute("data-src") || img.hasAttribute("data-lazy-src") });
+      const rowLabel = tableRow?.querySelector("td[id],th[scope=row]")?.textContent;
+      // Catalog tables contain decorative species/sex icons beside the artwork.
+      const artwork = img.getAttribute("data-relevant") !== "0";
+      result.push({ url, alt: normalize(img.getAttribute("alt") || img.getAttribute("title")), heading: normalize(heading), rowLabel: artwork ? normalize(rowLabel) : "", lazy: img.hasAttribute("data-src") || img.hasAttribute("data-lazy-src") });
     }
     return result;
   }
@@ -51,7 +55,7 @@
     return sources.get(url);
   }
 
-  async function candidates(element) {
+  function originalCandidates(element) {
     element.dispatchEvent(new Event("ghrc-resolve-image-source", { bubbles: true }));
     const urls = [];
     const add = value => { const url = value && publicUrl(value); if (url && !urls.includes(url)) urls.push(url); };
@@ -64,20 +68,30 @@
         add(src);
       }
     }
-    if (urls.length) return urls;
-    const root = element.closest(ROOT);
+    return urls;
+  }
+
+  async function sourceCandidates(element) {
+    const root = element.closest('[data-markdown-text-style="assistant-message"], [data-message-author-role="assistant"]') || element.closest(ROOT);
     if (!root) return [];
     const row = element.closest('[data-d-component="row"], figure');
-    const label = element.getAttribute("alt") || row?.querySelector("strong,b,h2,h3,figcaption")?.textContent
+    const label = element.getAttribute("alt") || row?.querySelector("strong,b,h2,h3,figcaption,[data-d-default-strong]")?.textContent
       || row?.textContent.split(/\s+[—–]\s+/)[0];
     const caption = normalize(label);
     if (!caption || caption.length < 3 || caption === "image unavailable") return [];
     const links = [...root.querySelectorAll("a[href]")].map(link => publicUrl(link.getAttribute("href")))
       .filter(url => url && new URL(url).hostname !== "chatgpt.com");
+    element.dispatchEvent(new Event("ghrc-resolve-image-citations", { bubbles: true }));
+    try {
+      for (const value of JSON.parse(element.getAttribute("data-ghrc-image-citations") || "[]")) {
+        const url = publicUrl(value);
+        if (url && new URL(url).hostname !== "chatgpt.com") links.push(url);
+      }
+    } catch { /* No recoverable citation metadata. */ }
     const unique = [...new Set(links)].slice(0, 6);
     const images = (await Promise.all(unique.map(loadSource))).flat();
     const ranked = images.map(image => {
-      let score = image.alt === caption ? 100 : image.heading === caption ? 80 : 0;
+      let score = image.alt === caption ? 100 : image.heading === caption || image.rowLabel === caption ? 80 : 0;
       if (!score && image.alt.includes(caption) && image.alt.length <= caption.length * 2) score = 60;
       // Lazy artwork wins over adjacent decorative symbols under the same heading.
       if (score && image.lazy) score++;
@@ -89,7 +103,9 @@
   }
 
   async function recover(element) {
-    const urls = await candidates(element);
+    let urls = originalCandidates(element);
+    let triedSources = !urls.length;
+    if (triedSources) urls = await sourceCandidates(element);
     if (!urls.length) { attempted.delete(element); return; }
     if (!context.active() || !element.isConnected) return;
     const native = element.tagName === "IMG";
@@ -99,7 +115,9 @@
     const oldVisibility = element.style.visibility;
     const children = [...element.children];
     const displays = children.map(child => child.style.display);
-    image.alt = element.getAttribute("alt") || element.closest('[data-d-component="row"], figure')?.textContent.split(/\s+[—–]\s+/)[0]?.trim() || "Recovered image";
+    const row = element.closest('[data-d-component="row"], figure');
+    image.alt = element.getAttribute("alt") || row?.querySelector("strong,b,h2,h3,figcaption,[data-d-default-strong]")?.textContent
+      || row?.textContent.split(/\s+[—–]\s+/)[0]?.trim() || "Recovered image";
     image.style.cssText = "position:absolute;inset:0;width:100%;height:100%;object-fit:contain;display:none";
     let wrapper;
     const restore = () => {
@@ -128,9 +146,19 @@
       }
       image.style.display = "block";
     };
-    image.onerror = () => {
-      if (context.active() && element.isConnected && ++index < urls.length) image.src = urls[index];
-      else { restore(); restorations.delete(element); }
+    image.onerror = async () => {
+      if (context.active() && element.isConnected && ++index < urls.length) { image.src = urls[index]; return; }
+      if (!triedSources && context.active() && element.isConnected) {
+        triedSources = true;
+        const fallback = (await sourceCandidates(element)).filter(url => !urls.includes(url));
+        if (context.active() && element.isConnected && fallback.length) {
+          urls = fallback;
+          index = 0;
+          image.src = urls[0];
+          return;
+        }
+      }
+      restore(); restorations.delete(element);
     };
     // Keep same-origin attachment authentication; omit cross-site referrers.
     image.referrerPolicy = "no-referrer";
