@@ -66,6 +66,7 @@
       ],
       "css": [
         "css/work-mode.css",
+        "css/disable-manual-web-search.css",
         "css/external-links.css",
         "css/compact-header.css",
         "css/flawless-corner.css",
@@ -90,6 +91,7 @@
         "js/sidebar-chat-dates.js",
         "js/dashboard-visibility.js",
         "js/disable-work-mode.js",
+        "js/disable-manual-web-search.js",
         "js/chat-display.js",
         "js/unavailable-images.js",
         "js/worked-duration.js",

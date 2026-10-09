@@ -1,0 +1,4 @@
+/* This only suppresses ChatGPT's manual Search tool, not automatic browsing. */
+html[data-ghrc-disable-manual-web-search] [data-ghrc-manual-web-search-control] {
+  display: none !important;
+}

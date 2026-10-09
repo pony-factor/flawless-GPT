@@ -69,7 +69,7 @@
   window.addEventListener("popstate", revealWhenReady);
   window.addEventListener("pageshow", revealWhenReady, { once: true });
 
-  chrome.storage.local.get({ [COMPACT_HEADER_SETTING_KEY]: false })
+  chrome.storage.local.get({ [COMPACT_HEADER_SETTING_KEY]: true })
     .then((settings) => {
       compactHeaderEnabled = Boolean(settings[COMPACT_HEADER_SETTING_KEY]);
       revealWhenReady();

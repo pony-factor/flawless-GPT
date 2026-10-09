@@ -12,8 +12,8 @@ The dashboard:
   user;
 - loads public repositories for any configured GitHub users or organizations;
 - can independently hide the repository search bar or repository total;
-- optionally hides the dictation microphone, compacts the new-chat heading, or
-  disables ChatGPT Work mode;
+- optionally hides the dictation microphone, compacts the new-chat heading (enabled
+  by default), or disables ChatGPT Work mode and manual web Search mode;
 - wraps long ChatGPT response text, links, and code by default, with a Display
   preference to restore native horizontal overflow;
 - strips UTM tracking parameters from links shown by ChatGPT by default;
@@ -146,8 +146,8 @@ updates.
 
 UTM tracking removal, the external-site warning bypass, history rate-limit
 modal dismissal, and **Hide usage remaining card** are separate settings enabled by default. **Hide dictation
-microphone**, **Compact new-chat header**, and **Disable Work mode** are disabled
-by default. UTM removal strips `utm_*` query parameters while preserving other
+microphone** and **Disable Work mode** are disabled by default; **Compact new-chat
+header** is enabled by default. UTM removal strips `utm_*` query parameters while preserving other
 query parameters and URL fragments. When Work mode is disabled, the extension
 switches an available Work selector back to Chat, hides Work controls, and blocks
 their selection. The external-site setting clicks ChatGPT's own **Open link**
@@ -165,14 +165,20 @@ listeners remain. Link previews load the destination in a sandboxed iframe.
 
 ### Inline Temporary Chat
 
-On the new-chat page, Flawless places a **Temporary** button directly in the
-composer toolbar, beside the other input actions. It uses ChatGPT's existing
+On the new-chat page, Flawless places an icon-only **Temporary Chat** button
+(a chat bubble with a lock) directly in the composer toolbar, beside the other
+input actions. Its accessible label and tooltip explain the action. It uses ChatGPT's existing
 Temporary Chat control rather than recreating the mode; any native
 **Personalized / Unpersonalized** choice still belongs to ChatGPT. The old
 control is hidden only when the inline button is ready. If ChatGPT changes or
 removes the native control, Flawless leaves its UI alone instead of claiming
 that the chat is temporary. The inline button is not shown in existing saved
 conversations, since changing a conversation to temporary is not supported.
+
+**Disable manual web browsing mode**, available in both settings views, hides
+ChatGPT's explicit Search tool in the composer and its tool menus. It is off by
+default and does not block automatic searches, network requests, or searches
+initiated by ChatGPT; it should not be treated as an offline or privacy guarantee.
 
 ## Queued messages
 

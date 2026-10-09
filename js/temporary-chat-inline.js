@@ -53,7 +53,7 @@
     const button = document.createElement("button");
     button.id = BUTTON_ID;
     button.type = "button";
-    button.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11.5a8 8 0 0 1-8 8 8.5 8.5 0 0 1-3-.5L4 20l1-5a8 8 0 1 1 15-3.5Z"/><path d="M9 10h6m-6 3h4"/></svg><span>Temporary</span>';
+    button.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11.5 3.5a8.5 8.5 0 0 0-7 13L4 20l3.6-1.4a8.5 8.5 0 0 0 3.5.8"/><rect x="13.5" y="13" width="7.5" height="7" rx="1.5"/><path d="M15 13v-2a2.25 2.25 0 0 1 4.5 0v2"/></svg>';
     button.addEventListener("mousedown", event => event.preventDefault());
     button.addEventListener("click", () => {
       const native = findNativeControl();

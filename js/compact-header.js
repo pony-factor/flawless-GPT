@@ -203,7 +203,7 @@
 
   applyCompactLayout();
   void context.run(async () => {
-    const settings = await chrome.storage.local.get({ compactNewChatHeader: false });
+    const settings = await chrome.storage.local.get({ compactNewChatHeader: true });
     if (!context.active()) return;
     document.documentElement.toggleAttribute(COMPACT_HEADER_ATTR, Boolean(settings.compactNewChatHeader));
     if (location.pathname === "/" && !document.querySelector('[data-message-author-role]')) {

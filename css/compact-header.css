@@ -17,7 +17,7 @@ html[data-ghrc-new-chat][data-ghrc-compact-header] .ghrc-compact-composer-stack 
   height: auto !important;
   justify-content: flex-start !important;
   min-height: 0 !important;
-  padding-top: 24px !important;
+  padding-top: 8px !important;
 }
 
 html[data-ghrc-new-chat][data-ghrc-compact-header]

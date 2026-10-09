@@ -14,13 +14,11 @@ html[data-ghrc-temporary-chat-inline-ready] [data-ghrc-temporary-chat-native] {
   display: inline-flex;
   flex: 0 0 auto;
   font: inherit;
-  font-size: 12px;
-  gap: 5px;
   height: 32px;
   justify-content: center;
   margin: 0 4px 0 0;
-  padding: 0 9px;
-  white-space: nowrap;
+  padding: 0;
+  width: 32px;
 }
 
 #ghrc-temporary-chat-inline:hover:not(:disabled),
@@ -40,21 +38,10 @@ html[data-ghrc-temporary-chat-inline-ready] [data-ghrc-temporary-chat-native] {
 
 #ghrc-temporary-chat-inline svg {
   fill: none;
-  height: 16px;
+  height: 20px;
   stroke: currentColor;
   stroke-linecap: round;
   stroke-linejoin: round;
   stroke-width: 1.8;
-  width: 16px;
-}
-
-@media (max-width: 640px) {
-  #ghrc-temporary-chat-inline {
-    padding: 0;
-    width: 32px;
-  }
-
-  #ghrc-temporary-chat-inline span {
-    display: none;
-  }
+  width: 20px;
 }

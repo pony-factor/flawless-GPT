@@ -52,6 +52,8 @@ test("places a working Temporary control in the composer without submitting the 
       "ghrc-temporary-chat-inline", "ghrc-message-queue-button", "ghrc-clipboard-send-button", "send",
     ]);
     assert.equal(await page.locator("#native-temp").evaluate(el => getComputedStyle(el).display), "none");
+    assert.equal(await page.locator("#ghrc-temporary-chat-inline").innerText(), "");
+    assert.equal(await page.locator("#ghrc-temporary-chat-inline svg rect").count(), 1);
     await page.getByRole("button", { name: "Start a temporary chat" }).click();
     assert.equal(await page.evaluate(() => window.nativeClicks), 1);
     assert.equal(await page.locator("#prompt-textarea").inputValue(), "Draft stays intact");
