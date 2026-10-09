@@ -124,6 +124,7 @@
         "css/wooten-link-zipp-placeholder.css",
         "css/spellcheck-launcher.css",
         "css/clipboard-send.css",
+        "css/temporary-chat-inline.css",
         "css/top-hat-send-button.css",
         "css/message-queue.css",
         "css/highlighted-pages.css",
@@ -136,6 +137,7 @@
         "js/2048.js",
         "js/clipboard-send.js",
         "js/message-queue.js",
+        "js/temporary-chat-inline.js",
         "js/highlighted-pages.js",
         "js/deep-research-tracker.js"
       ],
