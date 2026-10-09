@@ -2100,3 +2100,42 @@ test('app restoration failure keeps the message queued and pauses instead of sen
   assert.deepEqual(p.errors, []);
   await p.close();
 });
+
+test('inline edit reusing prompt-textarea cannot receive an automatic queued send', async () => {
+  const p = await fixture({ active: true });
+  await enqueue(p, 'Follow up after the response');
+  await p.evaluate(() => {
+    const editForm = document.createElement('form');
+    editForm.innerHTML = '<div id="prompt-textarea" data-composer-markdown contenteditable="true">Earlier prompt</div><button type="button" aria-label="Send edit">Send edit</button>';
+    document.getElementById('turns').prepend(editForm);
+    window.editSends = 0;
+    editForm.querySelector('button').addEventListener('click', () => { window.editSends++; });
+    finish();
+  });
+  await p.waitForFunction(() => editSends > 0 || sent.length > 0);
+  assert.equal(await p.evaluate(() => editSends), 0);
+  assert.equal(await p.locator('#prompt-textarea').innerText(), 'Earlier prompt');
+  assert.deepEqual(await p.evaluate(() => sent), ['Follow up after the response']);
+  assert.deepEqual(p.errors, []);
+  await p.close();
+});
+
+test('automatic queue send rechecks completion after restoring the composer', async () => {
+  const p = await fixture({ active: true });
+  await enqueue(p, 'Wait for all work to finish');
+  await p.evaluate(() => {
+    editor.addEventListener('input', () => {
+      if (read().trim() !== 'Wait for all work to finish' || window.changedDuringRestore) return;
+      window.changedDuringRestore = true;
+      addTurn('user'); addTurn('assistant');
+      window.active = false; update();
+    });
+    finish();
+  });
+  await p.waitForFunction(() => window.changedDuringRestore);
+  await p.waitForFunction(() => sent.length > 0 || storage.queuedChatMessagesPaused?.['conversation:test']);
+  assert.deepEqual(await p.evaluate(() => sent), []);
+  assert.equal(await p.locator('.ghrc-message-queue-editor').inputValue(), 'Wait for all work to finish');
+  assert.deepEqual(p.errors, []);
+  await p.close();
+});

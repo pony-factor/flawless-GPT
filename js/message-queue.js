@@ -26,6 +26,8 @@
   let pumpScheduleHandle = null;
   let pumpScheduleMode = null;
   let completionCandidateSince = null;
+  let completionCandidateUser = null;
+  let completionCandidateAssistant = null;
   let sendingItemId = null;
   let saveTimer = null;
   let interruptRunning = false;
@@ -314,14 +316,11 @@
   }
 
   function findComposerInput() {
-    const prompt = document.querySelector("#prompt-textarea");
-    if (isVisible(prompt)) return prompt;
-
     // Inline edits reuse ChatGPT's composer markup and can appear earlier in
     // the conversation DOM. The persistent bottom composer is the last visible
     // markdown editor; keeping queue hooks scoped to it prevents edit submits
     // (including app/plugin mentions) from being intercepted or reparented.
-    const editors = [...document.querySelectorAll('[data-composer-markdown][contenteditable="true"]')]
+    const editors = [...document.querySelectorAll('#prompt-textarea, [data-composer-markdown][contenteditable="true"]')]
       .filter(isVisible);
     return editors[editors.length - 1] || null;
   }
@@ -660,6 +659,8 @@
       latestUserAnswered,
       latestAssistantComplete: latestAssistantIsComplete(assistantTurns),
       roleStateKnown,
+      latestUser,
+      latestAssistant,
     };
   }
 
@@ -1336,6 +1337,9 @@
 
     const composer = findComposerInput();
     if (!composer || hasComposerContext(composer)) return;
+    const readySnapshot = lifecycleSnapshot();
+    if (!steer && (nativeSubmissionPending(composer)
+      || !queueCanAdvance(readySnapshot, COMPLETE_SETTLE_MS))) return;
     let draft = composerText(composer);
     let draftMentions = composerMentions(composer);
     let composerReplaced = false;
@@ -1405,6 +1409,15 @@
         || !textMatchesComposer(composer, item.text)
         || !mentionsMatch(composer, item.mentions || [])
         || !contextMatches(restoredContext, composer)) return;
+      if (!steer) {
+        // Restoring attachments/text yields to React. Work or a newer turn can
+        // appear during that gap, even while a Send button remains enabled.
+        const currentSnapshot = lifecycleSnapshot();
+        if (nativeSubmissionPending(composer)
+          || !queueCanAdvance(currentSnapshot, COMPLETE_SETTLE_MS)
+          || currentSnapshot.latestUser !== readySnapshot.latestUser
+          || currentSnapshot.latestAssistant !== readySnapshot.latestAssistant) return;
+      }
       sendButton.click();
 
       if (!await waitForSubmission(composer, item.text, beforeUserTurns)) return;
@@ -1469,8 +1482,12 @@
       return;
     }
 
-    if (completionCandidateSince === null) {
+    if (completionCandidateSince === null
+      || completionCandidateUser !== snapshot.latestUser
+      || completionCandidateAssistant !== snapshot.latestAssistant) {
       completionCandidateSince = Date.now();
+      completionCandidateUser = snapshot.latestUser;
+      completionCandidateAssistant = snapshot.latestAssistant;
       return;
     }
 
