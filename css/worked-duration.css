@@ -1,5 +1,5 @@
 /* Retain ChatGPT's native label and disclosure interaction, replacing only
-   the visual "Worked for ..." text with a compact Squeaky Belle minutes badge. */
+   the visual "Worked for ..." text with a compact cannon minutes badge. */
 [data-ghrc-worked-duration] {
   font-size: 0 !important;
   white-space: nowrap;
@@ -7,8 +7,7 @@
 
 [data-ghrc-worked-duration]::before {
   content: "";
-  background: url("../artwork/squeaky-belle-full.webp") center 40% / cover no-repeat;
-  border-radius: 50%;
+  background: var(--ghrc-worked-artwork) center / contain no-repeat;
   display: inline-block;
   height: 19px;
   width: 19px;
@@ -24,6 +23,11 @@
   font-weight: 500;
   line-height: 19px;
   vertical-align: middle;
+}
+
+[data-ghrc-worked-duration][data-ghrc-worked-minutes=""]::before,
+[data-ghrc-worked-duration][data-ghrc-worked-minutes=""]::after {
+  display: none;
 }
 
 @media (prefers-reduced-motion: no-preference) {

@@ -9,6 +9,7 @@ const style = fs.readFileSync(path.join(__dirname, "../css/worked-duration.css")
 
 function fixture(text = "Worked for 8m 41s", { excluded = false } = {}) {
   const attributes = new Map();
+  const properties = new Map();
   const frames = [];
   const textNode = { nodeValue: text, parentElement: null };
   let stop;
@@ -16,6 +17,11 @@ function fixture(text = "Worked for 8m 41s", { excluded = false } = {}) {
   let disconnected = false;
 
   const element = {
+    style: {
+      getPropertyValue(name) { return properties.get(name) ?? ""; },
+      setProperty(name, value) { properties.set(name, value); },
+      removeProperty(name) { properties.delete(name); },
+    },
     get textContent() { return textNode.nodeValue; },
     children: [],
     closest() { return excluded ? this : null; },
@@ -49,6 +55,7 @@ function fixture(text = "Worked for 8m 41s", { excluded = false } = {}) {
     disconnect() { disconnected = true; }
   }
   vm.runInNewContext(source, {
+    chrome: { runtime: { getURL: (resource) => `chrome-extension://fixture/${resource}` } },
     document,
     NodeFilter: { SHOW_TEXT: 4 },
     requestAnimationFrame(fn) { frames.push(fn); },
@@ -67,13 +74,14 @@ function fixture(text = "Worked for 8m 41s", { excluded = false } = {}) {
   };
 }
 
-test("completed worked-for timing becomes pony minutes while preserving its full text", () => {
+test("completed worked-for timing becomes cannon minutes while preserving its full text", () => {
   const f = fixture();
   f.flush();
   assert.equal(f.element.getAttribute("data-ghrc-worked-minutes"), "8m");
   assert.equal(f.element.getAttribute("title"), "Worked for 8m 41s");
   assert.equal(f.element.textContent, "Worked for 8m 41s");
   assert.equal(f.element.hasAttribute("data-ghrc-worked-duration"), true);
+  assert.equal(f.element.style.getPropertyValue("--ghrc-worked-artwork"), 'url("chrome-extension://fixture/artwork/searching-complete.png")');
   f.update("Worked for 10m 5s");
   assert.equal(f.element.getAttribute("data-ghrc-worked-minutes"), "10m");
   assert.equal(f.element.getAttribute("title"), "Worked for 10m 5s");
@@ -81,14 +89,21 @@ test("completed worked-for timing becomes pony minutes while preserving its full
   assert.equal(f.disconnected, true);
   assert.equal(f.element.hasAttribute("data-ghrc-worked-duration"), false);
   assert.equal(f.element.hasAttribute("title"), false);
+  assert.equal(f.element.style.getPropertyValue("--ghrc-worked-artwork"), "");
 });
 
-test("seconds and multi-hour values stay expressible in minutes", () => {
+test("sub-minute values hide the time and show minutes starting at one minute", () => {
   const f = fixture("Worked for 42s");
   f.flush();
-  assert.equal(f.element.getAttribute("data-ghrc-worked-minutes"), "<1m");
+  assert.equal(f.element.getAttribute("data-ghrc-worked-minutes"), "");
+  f.update("Worked for 59s");
+  assert.equal(f.element.getAttribute("data-ghrc-worked-minutes"), "");
+  f.update("Worked for 60s");
+  assert.equal(f.element.getAttribute("data-ghrc-worked-minutes"), "1m");
   f.update("Worked for 1h 3m 12s");
   assert.equal(f.element.getAttribute("data-ghrc-worked-minutes"), "63m");
+  f.update("Worked for 0m 30s");
+  assert.equal(f.element.getAttribute("data-ghrc-worked-minutes"), "");
 });
 
 test("unrelated messages and quoted prose are left unchanged", () => {
@@ -104,8 +119,9 @@ test("unrelated messages and quoted prose are left unchanged", () => {
   assert.equal(stale.element.hasAttribute("data-ghrc-worked-duration"), false);
 });
 
-test("badge uses bundled pony artwork without replacing the native label", () => {
-  assert.match(style, /squeaky-belle-full\.webp/);
+test("badge uses bundled cannon artwork without replacing the native label", () => {
+  assert.match(source, /chrome\.runtime\.getURL\("artwork\/searching-complete\.png"\)/);
+  assert.match(style, /var\(--ghrc-worked-artwork\)/);
   assert.match(style, /content:\s*attr\(data-ghrc-worked-minutes\)/);
   assert.doesNotMatch(source, /replaceChild|innerHTML\s*=/);
 });

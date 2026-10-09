@@ -37,6 +37,14 @@ from the provided [source post](https://x.com/Squeaky_Belle/status/1855267207577
 
 Spellcheck Only launcher artwork by Kiriya, from the [source image](https://derpibooru.org/images/3394656).
 
+Work-duration cannon artwork by Cerberus (`@fcolumnare`), from the
+[original artwork post](https://x.com/fcolumnare/status/1952740544443998252).
+The bundled `artwork/searching-complete.png` is an AI-assisted transparent cutout
+of the cannon, with obscured portions reconstructed, from `love-weapon.jpg`:
+https://github.com/JFWooten4/JFWooten4/blob/main/headshots/final-form/love-weapon.jpg
+Original artwork credits:
+https://github.com/JFWooten4/JFWooten4/blob/main/headshots/final-form/README.md
+
 ## Install
 
 1. Download or clone this repository.
