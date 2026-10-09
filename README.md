@@ -59,6 +59,11 @@ added, removed, or reordered at any time. Existing single-token settings are
 migrated automatically. Use a fine-grained token with read-only access to only
 the repository metadata the extension should display.
 
+The **Open clipboard URL** button on New Chat also supports local `file:///` links.
+For local files, enable **Allow access to file URLs** in Flawless ChatGPT's
+`chrome://extensions` or `brave://extensions` details. The local file opens in
+the current tab; this feature does not upload its contents.
+
 ### GitHub App login
 
 Connect GitHub opens the Flawless ChatGPT app's browser authorization page and returns to the extension automatically. Choose repositories to install the app on a personal account or organization and select its repository access.

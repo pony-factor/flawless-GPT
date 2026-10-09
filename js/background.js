@@ -3,6 +3,7 @@ importScripts(
   "image-recovery-worker.js",
   "highlighted-pages-worker.js",
   "service-worker.js",
+  "clipboard-url-navigation.js",
   "native-split-view.js",
   "github-link-preview.js",
   "github-app-auth.js",
