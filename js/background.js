@@ -2,6 +2,7 @@ importScripts(
   "avatar-cache.js",
   "image-recovery-worker.js",
   "highlighted-pages-worker.js",
+  "chatgpt-notification-settings.js",
   "service-worker.js",
   "native-split-view.js",
   "github-link-preview.js",

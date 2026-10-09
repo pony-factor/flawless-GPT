@@ -81,6 +81,7 @@ const openExternalLinksInSplitViewOnLeftInput = document.getElementById("open-ex
 const skipExternalSiteWarningInput = document.getElementById("skip-external-site-warning");
 const dismissHistoryRateLimitModalInput = document.getElementById("dismiss-history-rate-limit-modal");
 const hideUsageCardInput = document.getElementById("hide-usage-card");
+const blockChatgptDesktopNotificationsInput = document.getElementById("block-chatgpt-desktop-notifications");
 const hideHomeSuggestionsInput = document.getElementById("hide-home-suggestions");
 const hideModelControlsInput = document.getElementById("hide-model-controls");
 const hideConversationFeedbackPromptInput = document.getElementById("hide-conversation-feedback-prompt");
@@ -384,6 +385,7 @@ async function loadSettings() {
     openExternalLinksInSplitViewOnLeft: false,
     dismissHistoryRateLimitModal: true,
     hideUsageCard: true,
+    blockChatgptDesktopNotifications: true,
     hideCookiePreferences: false,
     showChatgptDisclaimer: false,
     hideHomeSuggestions: true,
@@ -434,6 +436,7 @@ async function loadSettings() {
   skipExternalSiteWarningInput.checked = Boolean(settings.skipExternalSiteWarning);
   dismissHistoryRateLimitModalInput.checked = Boolean(settings.dismissHistoryRateLimitModal);
   hideUsageCardInput.checked = settings.hideUsageCard !== false;
+  blockChatgptDesktopNotificationsInput.checked = settings.blockChatgptDesktopNotifications !== false;
   hideHomeSuggestionsInput.checked = settings.hideHomeSuggestions !== false;
   hideModelControlsInput.checked = settings.hideModelControls !== false;
   hideConversationFeedbackPromptInput.checked = settings.hideConversationFeedbackPrompt !== false;
@@ -530,6 +533,7 @@ async function saveSettings() {
       openExternalLinksInSplitViewOnLeft: openExternalLinksInSplitViewOnLeftInput.checked,
       dismissHistoryRateLimitModal: dismissHistoryRateLimitModalInput.checked,
       hideUsageCard: hideUsageCardInput.checked,
+      blockChatgptDesktopNotifications: blockChatgptDesktopNotificationsInput.checked,
       hideCookiePreferences: hideCookiePreferencesInput.checked,
       showChatgptDisclaimer: !hideChatgptDisclaimerInput.checked,
       hideHomeSuggestions: hideHomeSuggestionsInput.checked,
