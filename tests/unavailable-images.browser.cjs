@@ -9,7 +9,7 @@ test('recover only source-backed mascot images; retain failed placeholders and r
   const page = await browser.newPage();
   try {
     await page.route('https://mascots.pone.voyage/**', route => {
-      if (route.request().url().includes('image07')) return route.abort();
+      if (route.request().url().includes('image01')) return route.abort();
       return route.fulfill({ contentType: 'image/png', body: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=', 'base64') });
     });
     const row = (id, name) => `<div data-d-component="row"><div id="${id}" role="img" aria-label="Image unavailable" style="width:112px;height:112px"><svg></svg></div><p>${name} — Description</p></div>`;

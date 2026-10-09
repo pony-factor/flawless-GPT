@@ -6,9 +6,9 @@
   // Verified on https://mascots.pone.voyage/. ChatGPT's DIL response
   // sometimes retains only imageObservation: "unavailable", with no URL.
   const mascots = new Map([
-    ["Clipper Ship", "image06.png?v=166c56bc"],
-    ["Treasure Trove", "image07.png?v=166c56bc"],
-    ["Sunkissed", "image03.png?v=166c56bc"],
+    ["Clipper Ship", "image02.png?v=166c56bc"],
+    ["Treasure Trove", "image01.png?v=166c56bc"],
+    ["Sunkissed", "image05.png?v=166c56bc"],
   ]);
   const attempted = new WeakSet();
   const restorations = new Map();
