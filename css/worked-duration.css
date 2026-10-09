@@ -7,7 +7,7 @@
 
 [data-ghrc-worked-duration]::before {
   content: "";
-  background: url("../artwork/squeaky-belle-full.webp") center 40% / cover no-repeat;
+  background: var(--ghrc-worked-artwork) center 40% / cover no-repeat;
   border-radius: 50%;
   display: inline-block;
   height: 19px;
