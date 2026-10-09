@@ -30,6 +30,11 @@ function githubPreviewRoute(value) {
   if (type === "commit" && /^[a-f\d]{7,40}$/i.test(id || "") && parts.length === 4) {
     return { endpoint: base + "/commits/" + id, kind: "commit", subtitle: owner + "/" + repo + " · " + id.slice(0, 7) };
   }
+  if (type === "discussions" && (parts.length === 3
+      || (parts.length === 4 && /^\d+$/.test(id || "")))) {
+    return { kind: parts.length === 3 ? "discussions-list" : "discussion",
+      owner, repo, id, subtitle: owner + "/" + repo };
+  }
   if (parts.length === 3) {
     const endpoints = {
       issues: ["/issues?state=all&per_page=50", "issues-list"],
@@ -77,6 +82,50 @@ async function loadGitHubLinkPreview(value) {
   }
 
   const result = { ok: true, kind: route.kind, subtitle: route.subtitle || "", files: [] };
+  if (["discussion", "discussions-list"].includes(route.kind)) {
+    // GitHub Discussions use GraphQL rather than REST; only authenticated tokens work.
+    if (!tokens.length) {
+      throw new Error("Connect a GitHub account with Discussions read access to preview this page.");
+    }
+    const query = route.kind === "discussion"
+      ? "query($owner:String!,$repo:String!,$number:Int!){repository(owner:$owner,name:$repo){discussion(number:$number){title body url author{login} comments(first:30){nodes{body url author{login}}}}}}"
+      : "query($owner:String!,$repo:String!){repository(owner:$owner,name:$repo){discussions(first:30){nodes{number title url category{name}}}}}";
+    const variables = { owner: route.owner, repo: route.repo };
+    if (route.kind === "discussion") variables.number = Number(route.id);
+    let payload, lastError;
+    for (const entry of tokens) {
+      try {
+        const response = await fetch("https://api.github.com/graphql", {
+          method: "POST",
+          headers: githubHeaders(entry.token),
+          body: JSON.stringify({ query, variables }),
+        });
+        if (!response.ok) throw new Error("GitHub GraphQL returned " + response.status);
+        const answer = await response.json();
+        if (answer.errors?.length) throw new Error("GitHub did not authorize this discussion.");
+        payload = answer.data?.repository;
+        if (!payload) throw new Error("Discussion or repository unavailable.");
+        break;
+      } catch (error) { lastError = error; }
+    }
+    if (!payload) throw lastError || new Error("Discussion unavailable.");
+    if (route.kind === "discussion") {
+      const discussion = payload.discussion;
+      if (!discussion) throw new Error("Discussion not found.");
+      result.title = discussion.title;
+      result.body = discussion.body || "";
+      result.details = "GitHub Discussion · " + (discussion.author?.login || "Unknown author");
+      result.comments = (discussion.comments?.nodes || []).map(item => ({
+        author: item.author?.login || "Unknown", body: item.body || "", url: item.url,
+      }));
+    } else {
+      result.title = "Discussions";
+      result.entries = (payload.discussions?.nodes || []).map(item => ({
+        title: "#" + item.number + " " + item.title, detail: item.category?.name || "Discussion", url: item.url,
+      }));
+    }
+    return result;
+  }
   if (route.kind === "path") {
     // GitHub's /blob/ and /tree/ URLs don't delimit ref names containing slashes.
     // Resolve the first successful ref/path split instead of assuming one segment.
