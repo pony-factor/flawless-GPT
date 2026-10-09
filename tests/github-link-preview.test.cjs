@@ -5,7 +5,7 @@ const vm = require('node:vm');
 function fixture(fetchGitHub, tokens = []) {
   let listener;
   const context = vm.createContext({
-    URL, TokenVault: { loadTokens: async () => tokens }, fetchGitHub,
+    URL, atob, TextDecoder, TokenVault: { loadTokens: async () => tokens }, fetchGitHub,
     chrome: { runtime: { id: 'extension', onMessage: { addListener(fn) { listener = fn; } } } },
   });
   vm.runInContext(fs.readFileSync(require.resolve('../js/github-link-preview.js'), 'utf8'), context);
@@ -55,4 +55,63 @@ test('message listener rejects callers outside the ChatGPT content script', () =
   const accepted = f.listener({ type: 'load-github-link-preview', url: 'https://github.com/owner/repo' }, { id: 'extension', url: 'https://evil.test/' }, value => { response = value; });
   assert.equal(accepted, false);
   assert.equal(response.ok, false);
+});
+
+
+test('previews source files and navigable directories through the Contents API', async () => {
+  const f = fixture(async url => {
+    const route = new URL(url);
+    if (route.pathname.endsWith('/contents/scripts/branch_name_packs.json')) {
+      return { type: 'file', name: 'branch_name_packs.json', size: 13, encoding: 'base64',
+        content: Buffer.from('{"version":1}', 'utf8').toString('base64') };
+    }
+    if (route.pathname.endsWith('/contents/scripts')) {
+      return [{ name: 'branch_name_packs.json', path: 'scripts/branch_name_packs.json', type: 'file' }];
+    }
+    throw new Error('GitHub returned 404');
+  });
+  const blob = await f.context.loadGitHubLinkPreview(
+    'https://github.com/owner/repo/blob/main/scripts/branch_name_packs.json'
+  );
+  assert.equal(blob.kind, 'file');
+  assert.equal(blob.text, '{"version":1}');
+  assert.equal(blob.parentUrl, 'https://github.com/owner/repo/tree/main/scripts');
+  const directory = await f.context.loadGitHubLinkPreview('https://github.com/owner/repo/tree/main/scripts');
+  assert.equal(directory.kind, 'directory');
+  assert.equal(directory.entries[0].url,
+    'https://github.com/owner/repo/blob/main/scripts/branch_name_packs.json');
+});
+
+test('finds references that contain slashes and preserves markdown display', async () => {
+  const requests = [];
+  const f = fixture(async url => {
+    const parsed = new URL(url);
+    requests.push(parsed.pathname + parsed.search);
+    if (parsed.pathname.endsWith('/contents/docs/guide.md')
+        && parsed.searchParams.get('ref') === 'feature/preview') {
+      return { type: 'file', name: 'guide.md', size: 6, encoding: 'base64',
+        content: Buffer.from('# Test', 'utf8').toString('base64') };
+    }
+    throw new Error('GitHub returned 404');
+  });
+  const result = await f.context.loadGitHubLinkPreview(
+    'https://github.com/owner/repo/blob/feature/preview/docs/guide.md'
+  );
+  assert.equal(result.ref, 'feature/preview');
+  assert.equal(result.markdown, true);
+  assert.equal(result.text, '# Test');
+  assert.ok(requests.some(route => route.includes('feature%2Fpreview')));
+});
+
+test('lists common GitHub page types with navigable links', async () => {
+  const f = fixture(async url => {
+    if (url.endsWith('/repos/owner/repo/releases?per_page=50')) {
+      return [{ name: 'Version one', tag_name: 'v1', html_url: 'https://github.com/owner/repo/releases/tag/v1' }];
+    }
+    throw new Error('Unexpected endpoint');
+  });
+  const result = await f.context.loadGitHubLinkPreview('https://github.com/owner/repo/releases');
+  assert.equal(result.entries[0].url, 'https://github.com/owner/repo/releases/tag/v1');
+  assert.equal(f.context.githubPreviewRoute('https://github.com/owner/repo/actions').kind, 'actions');
+  assert.equal(f.context.githubPreviewRoute('https://github.com/owner/repo/branches').kind, 'branches');
 });
