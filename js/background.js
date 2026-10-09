@@ -1,5 +1,6 @@
 importScripts(
   "avatar-cache.js",
+  "image-recovery-worker.js",
   "highlighted-pages-worker.js",
   "service-worker.js",
   "native-split-view.js",
