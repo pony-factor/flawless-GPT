@@ -68,6 +68,7 @@ const preserveScrollPositionOnSendInput = document.getElementById("preserve-scro
 const hideShareLabelInput = document.getElementById("hide-share-label");
 const compactNewChatHeaderInput = document.getElementById("compact-new-chat-header");
 const disableWorkModeInput = document.getElementById("disable-work-mode");
+const disableManualWebSearchInput = document.getElementById("disable-manual-web-search");
 const showSpellcheckGptLauncherInput = document.getElementById("show-spellcheck-gpt-launcher");
 const show2048LauncherInput = document.getElementById("show-2048-launcher");
 const showDeepResearchTrackerInput = document.getElementById("show-deep-research-tracker");
@@ -369,7 +370,8 @@ async function loadSettings() {
     hideDictationButton: false,
     preserveScrollPositionOnSend: false,
     hideShareLabel: false,
-    compactNewChatHeader: false,
+    compactNewChatHeader: true,
+    disableManualWebSearch: false,
     disableWorkMode: false,
     showSpellcheckGptLauncher: false,
     show2048Launcher: false,
@@ -421,6 +423,7 @@ async function loadSettings() {
   hideShareLabelInput.checked = Boolean(settings.hideShareLabel);
   compactNewChatHeaderInput.checked = Boolean(settings.compactNewChatHeader);
   disableWorkModeInput.checked = Boolean(settings.disableWorkMode);
+  disableManualWebSearchInput.checked = Boolean(settings.disableManualWebSearch);
   showSpellcheckGptLauncherInput.checked = Boolean(settings.showSpellcheckGptLauncher);
   show2048LauncherInput.checked = Boolean(settings.show2048Launcher);
   showDeepResearchTrackerInput.checked = settings.showDeepResearchTracker !== false;
@@ -517,6 +520,7 @@ async function saveSettings() {
       hideShareLabel: hideShareLabelInput.checked,
       compactNewChatHeader: compactNewChatHeaderInput.checked,
       disableWorkMode: disableWorkModeInput.checked,
+      disableManualWebSearch: disableManualWebSearchInput.checked,
       showSpellcheckGptLauncher: showSpellcheckGptLauncherInput.checked,
       show2048Launcher: show2048LauncherInput.checked,
       showDeepResearchTracker: showDeepResearchTrackerInput.checked,
