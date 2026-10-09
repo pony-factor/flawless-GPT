@@ -89,6 +89,7 @@
         "js/dashboard-visibility.js",
         "js/disable-work-mode.js",
         "js/chat-display.js",
+        "js/unavailable-images.js",
         "js/worked-duration.js",
         "js/hide-share-label.js",
         "js/composer-placeholder.js",
