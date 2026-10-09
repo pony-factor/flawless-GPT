@@ -7,7 +7,7 @@
   const EDGE_HOTSPOT_WIDTH = 64;
   const FALLBACK_SIDEBAR_WIDTH = 320;
   const COLLAPSE_DELAY_MS = 90;
-  const REVEAL_DELAY_MS = 350;
+  const REVEAL_DELAY_MS = 650;
   const REVEAL_RETRY_MS = 750;
   const MENU_HOVER_PADDING = 12;
   let initialCollapseFinished = false;

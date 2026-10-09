@@ -2120,6 +2120,40 @@ test('inline edit reusing prompt-textarea cannot receive an automatic queued sen
   await p.close();
 });
 
+test('queued sends preserve typing in an independent draft overlay', async () => {
+  const p = await fixture({ active: true });
+  await enqueue(p, 'Send queued payload');
+  const composer = p.locator('[data-composer-markdown]');
+  await composer.fill('Unsent draft');
+  await composer.focus();
+  await p.evaluate(() => {
+    button.addEventListener('click', event => {
+      if (window.active) return;
+      event.stopImmediatePropagation();
+      const payload = read().trim();
+      window.setTimeout(() => {
+        sent.push(payload);
+        addTurn('user'); addTurn('assistant');
+        clear(); window.active = true; update();
+      }, 800);
+    }, true);
+    finish();
+  });
+
+  const overlay = p.locator('.ghrc-queue-live-draft');
+  await overlay.waitFor({ timeout: 7000 });
+  assert.equal(await overlay.inputValue(), 'Unsent draft');
+  assert.equal(await overlay.evaluate(el => document.activeElement === el), true);
+  await overlay.fill('This remains an independent draft while sending');
+  await sentCount(p, 1);
+  await p.waitForFunction(() => read() === 'This remains an independent draft while sending');
+  assert.deepEqual(await p.evaluate(() => sent), ['Send queued payload']);
+  assert.equal(await overlay.count(), 0);
+  assert.equal(await composer.evaluate(el => document.activeElement === el), true);
+  assert.deepEqual(p.errors, []);
+  await p.close();
+});
+
 test('automatic queue send rechecks completion after restoring the composer', async () => {
   const p = await fixture({ active: true });
   await enqueue(p, 'Wait for all work to finish');
@@ -2136,6 +2170,39 @@ test('automatic queue send rechecks completion after restoring the composer', as
   await p.waitForFunction(() => sent.length > 0 || storage.queuedChatMessagesPaused?.['conversation:test']);
   assert.deepEqual(await p.evaluate(() => sent), []);
   assert.equal(await p.locator('.ghrc-message-queue-editor').inputValue(), 'Wait for all work to finish');
+  assert.deepEqual(p.errors, []);
+  await p.close();
+});
+
+test('Enter during queued delivery queues the overlay text without losing newer typing', async () => {
+  const p = await fixture({ active: true });
+  await enqueue(p, 'Send first');
+  const composer = p.locator('[data-composer-markdown]');
+  await composer.fill('Working draft');
+  await composer.focus();
+  await p.evaluate(() => {
+    button.addEventListener('click', event => {
+      if (window.active) return;
+      event.stopImmediatePropagation();
+      const payload = read().trim();
+      window.setTimeout(() => {
+        sent.push(payload);
+        addTurn('user'); addTurn('assistant');
+        clear(); window.active = true; update();
+      }, 800);
+    }, true);
+    finish();
+  });
+  const overlay = p.locator('.ghrc-queue-live-draft');
+  await overlay.waitFor({ timeout: 7000 });
+  await overlay.fill('Queue me second');
+  await overlay.press('Enter');
+  await overlay.fill('New unfinished draft');
+  await sentCount(p, 1);
+  await p.waitForFunction(() => read() === 'New unfinished draft');
+  await p.waitForFunction(() => storage.queuedChatMessages?.['conversation:test']?.some(item => item.text === 'Queue me second'));
+  assert.deepEqual(await p.evaluate(() => sent), ['Send first']);
+  assert.equal(await p.locator('.ghrc-message-queue-editor').inputValue(), 'Queue me second');
   assert.deepEqual(p.errors, []);
   await p.close();
 });
