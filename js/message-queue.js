@@ -1382,20 +1382,30 @@
       }
       field.focus({ preventScroll: true });
     }
+    const pendingEntries = new Set();
     field.addEventListener("keydown", event => {
       if (!shouldQueueComposerEnter(event)) return;
       event.preventDefault();
       event.stopPropagation();
       if (event.repeat || !field.value.trim()) return;
       const entered = field.value;
-      void context.run(async () => {
-        if (await enqueueText(entered) && field.isConnected && field.value === entered) {
-          field.value = "";
-        }
-      });
+      // Reset immediately so subsequent typing is a distinct message, but
+      // recover the text if persistence fails before this overlay is closed.
+      field.value = "";
+      const request = Promise.resolve().then(() => context.run(() => enqueueText(entered)))
+        .then(saved => {
+          if (!saved && field.isConnected) {
+            field.value = entered + (field.value ? `\n${field.value}` : "");
+          }
+        }, () => {
+          if (field.isConnected) field.value = entered + (field.value ? `\n${field.value}` : "");
+        });
+      pendingEntries.add(request);
+      void request.finally(() => pendingEntries.delete(request));
     });
     return {
       field,
+      async whenQuiescent() { await Promise.allSettled([...pendingEntries]); },
       get focused() { return activeDraft; },
       resume() {
         if (activeDraft && field.isConnected && document.activeElement !== field) {
@@ -1527,6 +1537,8 @@
         }
       }
       try {
+        // Never restore a draft while an overlay Enter is still persisting.
+        await sendingDraft?.whenQuiescent();
         if (composerReplaced && sameConversation && conversationKey() === activeKey
           && composer === findComposerInput()) {
           const current = composerText(composer);
