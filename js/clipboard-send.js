@@ -70,8 +70,15 @@
         return;
       }
 
+      if (url.protocol === "file:") {
+        // Local file navigation must be initiated by the extension, not this web page.
+        const result = await chrome.runtime.sendMessage({ type: "open-local-clipboard-url", url: url.href });
+        if (!result?.ok) setButtonMessage(button, result?.error || "Local file could not be opened");
+        return;
+      }
+
       if (url.protocol !== "http:" && url.protocol !== "https:") {
-        setButtonMessage(button, "Clipboard URL must use http or https");
+        setButtonMessage(button, "Clipboard URL must use http, https or file");
         return;
       }
 

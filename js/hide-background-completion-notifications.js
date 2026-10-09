@@ -4,14 +4,18 @@
   const TOAST_SELECTOR = [
     '[role="status"]',
     '[role="alert"]',
+    '[role="alertdialog"]',
     '[data-sonner-toast]',
     '[data-radix-toast-root]',
     '[data-testid*="toast" i]',
+    '[data-testid*="notification" i]',
     '[class*="toast" i]',
   ].join(',');
 
   const COMPLETION_TEXT = /\b(?:complete|completed|finished|ready|done)\b/i;
   const CROSS_CHAT_TEXT = /\b(?:another|other)\s+(?:chat|conversation)\b/i;
+  // Some ChatGPT completion toasts identify the task rather than linking to a chat.
+  const CHAT_COMPLETION_TEXT = /\b(?:your\s+)?(?:(?:other|another|background|thinking|reasoning|deep\s+research|research|agent)\s+){0,2}(?:session|task|chat|conversation|response|research|thinking|reasoning)\s+(?:(?:has|is|was)\s+)?(?:finished|completed|complete|ready|done)\b/i;
 
   function conversationIdFromPath(pathname) {
     const match = String(pathname || '').match(/^\/c\/([^/?#]+)/i);
@@ -34,9 +38,13 @@
   }
 
   function isBackgroundCompletionNotice(toast) {
-    if (!toast || !COMPLETION_TEXT.test(toast.textContent || '')) return false;
+    if (!toast) return false;
+    const text = toast.textContent || '';
+    if (!COMPLETION_TEXT.test(text)) return false;
 
-    if (CROSS_CHAT_TEXT.test(toast.textContent || '')) return true;
+    // Completion notifications do not always mention another conversation or
+    // include a conversation link (e.g. "Your thinking session has finished").
+    if (CHAT_COMPLETION_TEXT.test(text) || CROSS_CHAT_TEXT.test(text)) return true;
 
     const links = toast.querySelectorAll ? toast.querySelectorAll('a[href]') : [];
     return Array.from(links).some((link) =>
@@ -51,12 +59,19 @@
   }
 
   function candidateToasts(node) {
-    if (!(node instanceof Element)) return [];
+    // ChatGPT can add text inside an existing toast, including by modifying a
+    // text node. In that case the mutation target is not the toast itself.
+    const element = node instanceof Element ? node : node?.parentElement;
+    if (!element) return [];
 
-    const candidates = [];
-    if (node.matches(TOAST_SELECTOR)) candidates.push(node);
-    candidates.push(...node.querySelectorAll(TOAST_SELECTOR));
-    return candidates;
+    const candidates = new Set();
+    const ancestor = element.closest(TOAST_SELECTOR);
+    if (ancestor) candidates.add(ancestor);
+    if (element.matches(TOAST_SELECTOR)) candidates.add(element);
+    for (const descendant of element.querySelectorAll(TOAST_SELECTOR)) {
+      candidates.add(descendant);
+    }
+    return Array.from(candidates);
   }
 
   function scan(node) {
@@ -69,6 +84,7 @@
     conversationIdFromPath,
     isDifferentConversationHref,
     isBackgroundCompletionNotice,
+    candidateToasts,
   };
 
   if (globalThis.__GHRC_TEST__) {
@@ -88,11 +104,21 @@
 
     const observer = new MutationObserver((records) => {
       for (const record of records) {
-        for (const node of record.addedNodes) scan(node);
+        if (record.type === 'childList') {
+          for (const node of record.addedNodes) scan(node);
+        } else {
+          scan(record.target);
+        }
       }
     });
 
-    observer.observe(document.documentElement, { childList: true, subtree: true });
+    observer.observe(document.documentElement, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+      attributes: true,
+      attributeFilter: ['href', 'role', 'data-testid', 'data-sonner-toast', 'data-radix-toast-root'],
+    });
   }
 
   if (document.documentElement) start();

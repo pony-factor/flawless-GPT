@@ -37,6 +37,14 @@ from the provided [source post](https://x.com/Squeaky_Belle/status/1855267207577
 
 Spellcheck Only launcher artwork by Kiriya, from the [source image](https://derpibooru.org/images/3394656).
 
+Work-duration cannon artwork by Cerberus (`@fcolumnare`), from the
+[original artwork post](https://x.com/fcolumnare/status/1952740544443998252).
+The bundled `artwork/searching-complete.png` is an AI-assisted transparent cutout
+of the cannon, with obscured portions reconstructed, from `love-weapon.jpg`:
+https://github.com/JFWooten4/JFWooten4/blob/main/headshots/final-form/love-weapon.jpg
+Original artwork credits:
+https://github.com/JFWooten4/JFWooten4/blob/main/headshots/final-form/README.md
+
 ## Install
 
 1. Download or clone this repository.
@@ -58,6 +66,11 @@ comes from each token's GitHub settings. Tokens and GitHub accounts can be
 added, removed, or reordered at any time. Existing single-token settings are
 migrated automatically. Use a fine-grained token with read-only access to only
 the repository metadata the extension should display.
+
+The **Open clipboard URL** button on New Chat also supports local `file:///` links.
+For local files, enable **Allow access to file URLs** in Flawless ChatGPT's
+`chrome://extensions` or `brave://extensions` details. The local file opens in
+the current tab; this feature does not upload its contents.
 
 ### GitHub App login
 
