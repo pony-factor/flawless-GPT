@@ -11,6 +11,7 @@
   },
   "permissions": [
     "storage",
+    "contentSettings",
     "webNavigation",
     "identity",
     "clipboardRead",

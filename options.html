@@ -390,6 +390,13 @@
         <fieldset id="chatgpt-hidden-ui-settings" aria-label="Hidden and dismissed ChatGPT interface settings">
           <legend>Hide &amp; dismiss</legend>
           <label class="preference">
+            <input id="block-chatgpt-desktop-notifications" type="checkbox" checked />
+            <span>
+              <strong>Block ChatGPT desktop notifications</strong>
+              <small>Prevents browser and macOS popups from chatgpt.com (such as “Your response is ready”). Blocks all ChatGPT website notifications, not just completions. Enabled by default; turn off to restore your existing browser notification preference. Does not control the native ChatGPT app.</small>
+            </span>
+          </label>
+          <label class="preference">
             <input id="dismiss-history-rate-limit-modal" type="checkbox" />
             <span>
               <strong>Dismiss history rate-limit modal</strong>
