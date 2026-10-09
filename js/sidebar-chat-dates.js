@@ -51,6 +51,7 @@
     if (!date || Number.isNaN(date.getTime())) return "";
 
     const days = Math.max(0, Math.floor((Date.now() - date.getTime()) / 86_400_000));
+    if (days === 0) return "🆕";
     if (days < 30) return `${days}d`;
     if (days < 365) return `${Math.floor(days / 30)}mo`;
     return `${Math.floor(days / 365)}y`;
@@ -72,6 +73,7 @@
       link.prepend(badge);
     }
     if (badge.textContent !== label) badge.textContent = label;
+    badge.classList.toggle("ghrc-chat-date--new", label === "🆕");
     badge.title = "Created " + formatAbsoluteDate(createTime);
   }
 
