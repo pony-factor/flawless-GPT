@@ -120,11 +120,33 @@
     }
     throw new Error('ChatGPT was not ready. Continue in the research window.');
   }
+  function researchPromptReady(input, prompt) {
+    if (input !== composer()) return false;
+    const mentions = input.querySelectorAll('[app-mention-path="app://connector_openai_deep_research"]');
+    if (mentions.length !== 1) return false;
+    const text = composerText(input).replace(/\r\n/g, '\n').trimEnd();
+    const exactPrompt = prompt.replace(/\r\n/g, '\n').trimEnd();
+    return text.endsWith(exactPrompt) && text.slice(0, -exactPrompt.length).trim() === 'Deep research';
+  }
   async function launchPrompt(job) {
     const input = await waitUntil(() => visible(composer()) && composer());
-    if (location.pathname !== '/' || userTurns() || composerText(input).trim())
-      throw new Error('The research window already has a draft or conversation; it was preserved.');
+    if (location.pathname !== '/' || userTurns())
+      throw new Error('The research window contains an existing conversation; it was preserved.');
     input.focus();
+    // Only this newly created research window is eligible. ChatGPT may restore
+    // a stale composer draft into a new tab; replace it before using the prompt.
+    if (composerText(input).trim() || input.querySelector('[app-mention-path]')) {
+      const selection = getSelection();
+      const range = document.createRange();
+      range.selectNodeContents(input);
+      selection.removeAllRanges();
+      selection.addRange(range);
+      document.execCommand('delete', false);
+      await waitUntil(() => input === composer() && !composerText(input).trim()
+        && !input.querySelector('[app-mention-path]'), 2000).catch(() => {
+          throw new Error('The restored research draft could not be cleared. Nothing was sent.');
+        });
+    }
     const transfer = new DataTransfer();
     transfer.setData('text/plain', 'Deep research');
     transfer.setData('text/html', '<p><span app-mention-name="deep-research" app-mention-display-name="Deep research" app-mention-path="app://connector_openai_deep_research" app-mention-icon="/images/ecosystem/apps/deep_research_app/icon.png" app-mention-brand-color="" data-prompt-link-href="app://connector_openai_deep_research" data-prompt-link-label="$deep-research" contenteditable="false">Deep research</span> </p>');
@@ -138,18 +160,16 @@
     selection.addRange(range);
     document.execCommand('insertText', false, '\n' + job.prompt);
     await pause(100);
-    if (input !== composer() || !composerText(input).replace(/\r\n/g, '\n').trimEnd().endsWith(job.prompt.trimEnd())
-      || !input.querySelector('[app-mention-path="app://connector_openai_deep_research"]'))
-      throw new Error('The full research prompt could not be restored. It was not sent.');
+    if (!researchPromptReady(input, job.prompt))
+      throw new Error('The full research prompt could not be restored cleanly. It was not sent.');
     const send = await waitUntil(() => {
       const form = input.closest('form') || input.closest('[data-type="unified-composer"]');
       return [...(form?.querySelectorAll('button[data-testid="send-button"],button[aria-label="Send" i],button[aria-label="Send prompt" i]') || [])]
         .find(button => visible(button) && !button.disabled && button.getAttribute('aria-disabled') !== 'true');
     });
     await request({ type: 'research-launch-sending', id: job.id });
-    if (input !== composer() || !composerText(input).trimEnd().endsWith(job.prompt.trimEnd())
-      || !input.querySelector('[app-mention-path="app://connector_openai_deep_research"]'))
-      throw new Error('The research draft changed before sending. Your changes were preserved.');
+    if (!researchPromptReady(input, job.prompt))
+      throw new Error('The research draft changed before sending. It was not sent.');
     send.click();
     await waitUntil(() => userTurns() > 0, 10_000);
     await request({ type: 'research-launch-submitted', id: job.id });
