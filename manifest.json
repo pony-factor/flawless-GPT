@@ -17,6 +17,7 @@
     "nativeMessaging"
   ],
   "host_permissions": [
+    "https://*/*",
     "https://api.github.com/*",
     "https://avatars.githubusercontent.com/*",
     "https://github.com/*",
@@ -49,6 +50,7 @@
       "js": [
         "js/clipboard-utm-sanitizer.js",
         "js/citation-links-main.js",
+        "js/image-recovery-main.js",
         "js/sidebar-chat-dates-main.js",
         "js/chatgpt-route-events.js",
         "js/sidebar-tab-state.js",
