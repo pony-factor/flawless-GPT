@@ -163,6 +163,17 @@ The history setting hides the known conversation-history rate-limit modal, clear
 leaves behind, and preserves native wheel and touch scrolling if stale modal
 listeners remain. Link previews load the destination in a sandboxed iframe.
 
+### Inline Temporary Chat
+
+On the new-chat page, Flawless places a **Temporary** button directly in the
+composer toolbar, beside the other input actions. It uses ChatGPT's existing
+Temporary Chat control rather than recreating the mode; any native
+**Personalized / Unpersonalized** choice still belongs to ChatGPT. The old
+control is hidden only when the inline button is ready. If ChatGPT changes or
+removes the native control, Flawless leaves its UI alone instead of claiming
+that the chat is temporary. The inline button is not shown in existing saved
+conversations, since changing a conversation to temporary is not supported.
+
 ## Queued messages
 
 Use the stack-plus button beside ChatGPT's composer to queue the current draft. While ChatGPT is already responding, pressing **Enter** also adds the draft to the queue instead of interrupting the active response; **Shift+Enter** still inserts a newline. Pending messages appear directly above the composer and can be edited, reordered, or removed before they are sent.
