@@ -2,10 +2,12 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
-function fixture(fetchGitHub, tokens = []) {
+function fixture(fetchGitHub, tokens = [], graphqlFetch = null) {
   let listener;
   const context = vm.createContext({
     URL, atob, TextDecoder, TokenVault: { loadTokens: async () => tokens }, fetchGitHub,
+    fetch: graphqlFetch,
+    githubHeaders: token => ({ Authorization: 'Bearer ' + token }),
     chrome: { runtime: { id: 'extension', onMessage: { addListener(fn) { listener = fn; } } } },
   });
   vm.runInContext(fs.readFileSync(require.resolve('../js/github-link-preview.js'), 'utf8'), context);
@@ -114,4 +116,34 @@ test('lists common GitHub page types with navigable links', async () => {
   assert.equal(result.entries[0].url, 'https://github.com/owner/repo/releases/tag/v1');
   assert.equal(f.context.githubPreviewRoute('https://github.com/owner/repo/actions').kind, 'actions');
   assert.equal(f.context.githubPreviewRoute('https://github.com/owner/repo/branches').kind, 'branches');
+});
+
+
+test('GitHub Discussions use authenticated GraphQL and preserve comments', async () => {
+  const fetchGraphQL = async (url, options) => {
+    assert.equal(url, 'https://api.github.com/graphql');
+    assert.equal(options.method, 'POST');
+    assert.equal(options.headers.Authorization, 'Bearer discussion-token');
+    const body = JSON.parse(options.body);
+    assert.equal(body.variables.number, 5);
+    return { ok: true, json: async () => ({ data: { repository: { discussion: {
+      title: 'Discussion topic', body: 'Details', author: { login: 'writer' },
+      comments: { nodes: [{ body: 'Reply', url: 'https://github.com/owner/repo/discussions/5#comment-1',
+        author: { login: 'commenter' } }] },
+    } } } }) };
+  };
+  const f = fixture(() => { throw new Error('REST should not be used'); },
+    [{ token: 'discussion-token' }], fetchGraphQL);
+  const result = await f.context.loadGitHubLinkPreview('https://github.com/owner/repo/discussions/5');
+  assert.equal(result.title, 'Discussion topic');
+  assert.equal(result.comments[0].author, 'commenter');
+  assert.equal(JSON.stringify(result).includes('discussion-token'), false);
+});
+
+test('Discussions report the missing access rather than leaking credentials', async () => {
+  const f = fixture(() => null);
+  await assert.rejects(
+    f.context.loadGitHubLinkPreview('https://github.com/owner/repo/discussions'),
+    /Connect a GitHub account with Discussions read access/
+  );
 });
