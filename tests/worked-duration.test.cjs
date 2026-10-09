@@ -7,13 +7,14 @@ const vm = require("node:vm");
 const source = fs.readFileSync(path.join(__dirname, "../js/worked-duration.js"), "utf8");
 const style = fs.readFileSync(path.join(__dirname, "../css/worked-duration.css"), "utf8");
 
-function fixture(text = "Worked for 8m 41s", { excluded = false } = {}) {
+function fixture(text = "Worked for 8m 41s", { excluded = false, dotsEnabled = false } = {}) {
   const attributes = new Map();
   const properties = new Map();
   const frames = [];
   const textNode = { nodeValue: text, parentElement: null };
   let stop;
   let notify;
+  let storageChangeListener;
   let disconnected = false;
 
   const element = {
@@ -55,7 +56,16 @@ function fixture(text = "Worked for 8m 41s", { excluded = false } = {}) {
     disconnect() { disconnected = true; }
   }
   vm.runInNewContext(source, {
-    chrome: { runtime: { getURL: (resource) => `chrome-extension://fixture/${resource}` } },
+    chrome: {
+      runtime: { getURL: (resource) => `chrome-extension://fixture/${resource}` },
+      storage: {
+        local: { async get(defaults) { return { ...defaults, workedDurationDots: dotsEnabled }; } },
+        onChanged: {
+          addListener(fn) { storageChangeListener = fn; },
+          removeListener(fn) { if (storageChangeListener === fn) storageChangeListener = null; },
+        },
+      },
+    },
     document,
     NodeFilter: { SHOW_TEXT: 4 },
     requestAnimationFrame(fn) { frames.push(fn); },
@@ -68,6 +78,14 @@ function fixture(text = "Worked for 8m 41s", { excluded = false } = {}) {
   const flush = () => { while (frames.length) frames.shift()(); };
   return {
     element, attributes, flush,
+    async ready() { await Promise.resolve(); flush(); },
+    toggleDots(enabled) {
+      dotsEnabled = enabled;
+      if (!storageChangeListener) throw new Error("Storage listener missing");
+      storageChangeListener({ workedDurationDots: { newValue: enabled } }, "local");
+      flush();
+    },
+    get listening() { return Boolean(storageChangeListener); },
     update(text) { textNode.nodeValue = text; notify(); flush(); },
     stop() { stop(); },
     get disconnected() { return disconnected; },
@@ -124,4 +142,48 @@ test("badge uses bundled cannon artwork without replacing the native label", () 
   assert.match(style, /var\(--ghrc-worked-artwork\)/);
   assert.match(style, /content:\s*attr\(data-ghrc-worked-minutes\)/);
   assert.doesNotMatch(source, /replaceChild|innerHTML\s*=/);
+});
+
+test("opt-in dots render one per minute beneath the cannon and switch live", async () => {
+  const f = fixture("Worked for 8m 41s", { dotsEnabled: true });
+  await f.ready();
+  assert.equal(f.element.hasAttribute("data-ghrc-worked-dots-mode"), true);
+  assert.equal(f.element.getAttribute("data-ghrc-worked-dots").split("•").length - 1, 8);
+  assert.equal(f.element.getAttribute("data-ghrc-worked-minutes"), "8m");
+  assert.equal(f.element.getAttribute("title"), "Worked for 8m 41s");
+
+  f.update("Worked for 1h 3m 12s");
+  const dots = f.element.getAttribute("data-ghrc-worked-dots");
+  assert.equal(dots.split("•").length - 1, 63);
+  assert.equal(dots.split("\n").length, 6);
+  assert.equal(dots.split("\n")[0].split("•").length - 1, 12);
+
+  f.toggleDots(false);
+  assert.equal(f.element.hasAttribute("data-ghrc-worked-dots-mode"), false);
+  assert.equal(f.element.hasAttribute("data-ghrc-worked-dots"), false);
+  assert.equal(f.element.getAttribute("data-ghrc-worked-minutes"), "63m");
+
+  f.toggleDots(true);
+  f.update("Worked for 59s");
+  assert.equal(f.element.getAttribute("data-ghrc-worked-minutes"), "");
+  assert.equal(f.element.hasAttribute("data-ghrc-worked-dots-mode"), false);
+  assert.equal(f.element.hasAttribute("data-ghrc-worked-dots"), false);
+
+  f.update("Worked for 1m");
+  assert.equal(f.element.getAttribute("data-ghrc-worked-dots"), "•");
+  f.stop();
+  assert.equal(f.element.hasAttribute("data-ghrc-worked-dots"), false);
+  assert.equal(f.listening, false);
+});
+
+test("dot display is an opt-in preference exposed in both settings pages", () => {
+  const js = fs.readFileSync(path.join(__dirname, "../js/options.js"), "utf8");
+  for (const htmlFile of ["options.html", "popup.html"]) {
+    const html = fs.readFileSync(path.join(__dirname, "..", htmlFile), "utf8");
+    assert.match(html, /id="worked-duration-dots"/);
+  }
+  assert.match(js, /workedDurationDots: false/);
+  assert.match(js, /workedDurationDots: workedDurationDotsInput\.checked/);
+  assert.match(style, /content:\s*attr\(data-ghrc-worked-dots\)/);
+  assert.match(style, /\[data-ghrc-worked-duration\]\[data-ghrc-worked-dots-mode\]::after/);
 });

@@ -87,6 +87,7 @@ const hideHomeSuggestionsInput = document.getElementById("hide-home-suggestions"
 const hideModelControlsInput = document.getElementById("hide-model-controls");
 const hideConversationFeedbackPromptInput = document.getElementById("hide-conversation-feedback-prompt");
 const hideChatTimestampsInput = document.getElementById("hide-chat-timestamps");
+const workedDurationDotsInput = document.getElementById("worked-duration-dots");
 const wrapChatResponsesInput = document.getElementById("wrap-chat-responses");
 const composerPlaceholderInput = document.getElementById("composer-placeholder");
 const hideChatgptDisclaimerInput = document.getElementById("hide-chatgpt-disclaimer");
@@ -394,6 +395,7 @@ async function loadSettings() {
     hideModelControls: true,
     hideConversationFeedbackPrompt: true,
     hideChatTimestamps: false,
+    workedDurationDots: false,
     wrapChatResponses: true,
     composerPlaceholder: "",
   });
@@ -445,6 +447,7 @@ async function loadSettings() {
   hideConversationFeedbackPromptInput.checked = settings.hideConversationFeedbackPrompt !== false;
   wrapChatResponsesInput.checked = settings.wrapChatResponses !== false;
   hideChatTimestampsInput.checked = Boolean(settings.hideChatTimestamps);
+  workedDurationDotsInput.checked = Boolean(settings.workedDurationDots);
   composerPlaceholderInput.value = typeof settings.composerPlaceholder === "string" ? settings.composerPlaceholder : "";
   hideChatgptDisclaimerInput.checked = !Boolean(settings.showChatgptDisclaimer);
   hideCookiePreferencesInput.checked = Boolean(settings.hideCookiePreferences);
@@ -544,6 +547,7 @@ async function saveSettings() {
       hideModelControls: hideModelControlsInput.checked,
       hideConversationFeedbackPrompt: hideConversationFeedbackPromptInput.checked,
       hideChatTimestamps: hideChatTimestampsInput.checked,
+      workedDurationDots: workedDurationDotsInput.checked,
       wrapChatResponses: wrapChatResponsesInput.checked,
       composerPlaceholder: composerPlaceholderInput.value.trim(),
     });
