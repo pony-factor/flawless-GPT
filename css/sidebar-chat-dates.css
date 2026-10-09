@@ -10,3 +10,8 @@ a[href*="/c/"] > .ghrc-chat-date {
   pointer-events: none;
   white-space: nowrap;
 }
+
+a[href*="/c/"] > .ghrc-chat-date.ghrc-chat-date--new {
+  font-size: 12px;
+  opacity: 0.85;
+}
