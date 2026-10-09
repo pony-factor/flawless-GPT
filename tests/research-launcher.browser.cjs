@@ -30,7 +30,7 @@ test('startup waits for body before reading and displaying a research handoff', 
   await page.close();
 });
 
-async function fixture({ handoff = false, draft = '' } = {}) {
+async function fixture({ handoff = false, draft = '', path = '/' } = {}) {
   const page = await browser.newPage();
   page.errors = [];
   page.on('pageerror', error => page.errors.push(error.message));
@@ -42,7 +42,7 @@ async function fixture({ handoff = false, draft = '' } = {}) {
     </section><div class="unrelated"><button aria-label="Copy">Copy response</button></div></main>
     <form><div data-composer-markdown contenteditable="true"><p></p></div><button type="button" aria-label="Send">Send</button></form>
   ` }));
-  await page.goto('https://chatgpt.com/');
+  await page.goto('https://chatgpt.com' + path);
   await page.evaluate(({ handoff, draft }) => {
     window.calls = [];
     window.sent = [];
@@ -121,10 +121,25 @@ test('popup inserts a real app mention and full prompt, submits once, and acknow
   await p.close();
 });
 
-test('popup preserves an existing draft and does not submit it', async () => {
-  const p = await fixture({ handoff: true, draft: 'Preserve this draft' });
+test('popup replaces a restored draft with the research app mention and exact prompt', async () => {
+  const p = await fixture({ handoff: true, draft: 'Old restored composer content' });
+  await p.waitForFunction(() => ['submitted', 'error'].includes(job.state));
+  assert.equal(await p.evaluate(() => job.state), 'submitted', JSON.stringify(await p.evaluate(() => ({ job, calls }))));
+  const sent = await p.evaluate(() => window.sent);
+  assert.equal(sent.length, 1);
+  assert.deepEqual(sent[0].apps, ['app://connector_openai_deep_research']);
+  assert.equal(sent[0].text.includes('Old restored composer content'), false);
+  assert.ok(sent[0].text.endsWith('# Exact wording\n\nInvestigate A & B; preserve every line.'));
+  await p.waitForTimeout(1200);
+  assert.equal(await p.evaluate(() => window.sent.length), 1);
+  assert.deepEqual(p.errors, []);
+  await p.close();
+});
+
+test('popup does not overwrite a draft in an existing conversation', async () => {
+  const p = await fixture({ handoff: true, draft: 'Preserve conversation draft', path: '/c/existing' });
   await p.waitForFunction(() => job.state === 'error');
-  assert.equal(await p.locator('[data-composer-markdown]').innerText(), 'Preserve this draft');
+  assert.equal(await p.locator('[data-composer-markdown]').innerText(), 'Preserve conversation draft');
   assert.equal(await p.evaluate(() => sent.length), 0);
   assert.deepEqual(p.errors, []);
   await p.close();
