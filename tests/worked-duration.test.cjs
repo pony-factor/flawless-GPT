@@ -74,14 +74,14 @@ function fixture(text = "Worked for 8m 41s", { excluded = false } = {}) {
   };
 }
 
-test("completed worked-for timing becomes pony minutes while preserving its full text", () => {
+test("completed worked-for timing becomes cannon minutes while preserving its full text", () => {
   const f = fixture();
   f.flush();
   assert.equal(f.element.getAttribute("data-ghrc-worked-minutes"), "8m");
   assert.equal(f.element.getAttribute("title"), "Worked for 8m 41s");
   assert.equal(f.element.textContent, "Worked for 8m 41s");
   assert.equal(f.element.hasAttribute("data-ghrc-worked-duration"), true);
-  assert.equal(f.element.style.getPropertyValue("--ghrc-worked-artwork"), 'url("chrome-extension://fixture/artwork/squeaky-belle-full.webp")');
+  assert.equal(f.element.style.getPropertyValue("--ghrc-worked-artwork"), 'url("chrome-extension://fixture/artwork/searching-complete.png")');
   f.update("Worked for 10m 5s");
   assert.equal(f.element.getAttribute("data-ghrc-worked-minutes"), "10m");
   assert.equal(f.element.getAttribute("title"), "Worked for 10m 5s");
@@ -119,8 +119,8 @@ test("unrelated messages and quoted prose are left unchanged", () => {
   assert.equal(stale.element.hasAttribute("data-ghrc-worked-duration"), false);
 });
 
-test("badge uses bundled pony artwork without replacing the native label", () => {
-  assert.match(source, /chrome\.runtime\.getURL\("artwork\/squeaky-belle-full\.webp"\)/);
+test("badge uses bundled cannon artwork without replacing the native label", () => {
+  assert.match(source, /chrome\.runtime\.getURL\("artwork\/searching-complete\.png"\)/);
   assert.match(style, /var\(--ghrc-worked-artwork\)/);
   assert.match(style, /content:\s*attr\(data-ghrc-worked-minutes\)/);
   assert.doesNotMatch(source, /replaceChild|innerHTML\s*=/);

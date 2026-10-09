@@ -178,7 +178,8 @@
         "artwork/spellcheck-only.png",
         "artwork/calligraphy-initials.png",
         "artwork/research-telescope.png",
-        "artwork/squeaky-belle-full.webp"
+        "artwork/squeaky-belle-full.webp",
+        "artwork/searching-complete.png"
       ],
       "matches": [
         "https://chatgpt.com/*"

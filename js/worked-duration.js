@@ -8,7 +8,7 @@
   const MINUTES = "data-ghrc-worked-minutes";
   const OWNED_TITLE = "data-ghrc-worked-added-title";
   const ARTWORK = "--ghrc-worked-artwork";
-  const artworkURL = `url("${chrome.runtime.getURL("artwork/squeaky-belle-full.webp")}")`;
+  const artworkURL = `url("${chrome.runtime.getURL("artwork/searching-complete.png")}")`;
   const PREFIX = /^Worked\s+for\s+(.+)$/i;
   const PART = /(\d+)\s*(hours?|hrs?|h|minutes?|mins?|m|seconds?|secs?|s)\s*/gi;
   const EXCLUDED = 'pre, code, blockquote, textarea, input, [contenteditable="true"], [data-message-author-role="user"], .markdown, .prose';
