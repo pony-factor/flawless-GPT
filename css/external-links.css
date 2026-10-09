@@ -226,3 +226,96 @@ html[data-ghrc-link-preview="left"] #ghrc-link-preview .ghrc-preview-resizer {
   cursor: pointer;
   margin-top: 16px;
 }
+
+
+/* Structured GitHub API previews (the GitHub site itself cannot be framed). */
+#ghrc-link-preview .ghrc-preview-navigation {
+  display: flex;
+  gap: 8px;
+  padding: 4px 12px 8px;
+  border-bottom: 1px solid color-mix(in srgb, CanvasText 15%, transparent);
+}
+
+#ghrc-link-preview .ghrc-preview-navigation .ghrc-preview-control {
+  width: auto;
+  padding: 4px 8px;
+  border-radius: 5px;
+}
+
+#ghrc-link-preview .ghrc-preview-control:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+#ghrc-link-preview .ghrc-preview-entries {
+  margin: 16px 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid color-mix(in srgb, CanvasText 16%, transparent);
+}
+
+#ghrc-link-preview .ghrc-preview-entries li {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  padding: 8px 4px;
+  border-bottom: 1px solid color-mix(in srgb, CanvasText 12%, transparent);
+}
+
+#ghrc-link-preview .ghrc-preview-entries a {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: LinkText;
+  text-decoration: none;
+}
+
+#ghrc-link-preview .ghrc-preview-entries a:hover,
+#ghrc-link-preview .ghrc-preview-markdown a:hover {
+  text-decoration: underline;
+}
+
+#ghrc-link-preview .ghrc-preview-entries small {
+  flex-shrink: 0;
+  opacity: 0.65;
+}
+
+#ghrc-link-preview .ghrc-preview-image {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin-block: 16px;
+}
+
+#ghrc-link-preview .ghrc-preview-markdown {
+  margin-block: 12px;
+  overflow-wrap: anywhere;
+}
+
+#ghrc-link-preview .ghrc-preview-markdown p {
+  margin-block: 0.5em;
+  white-space: pre-wrap;
+}
+
+#ghrc-link-preview .ghrc-preview-markdown h2,
+#ghrc-link-preview .ghrc-preview-markdown h3,
+#ghrc-link-preview .ghrc-preview-markdown h4 {
+  margin-block: 1em 0.35em;
+}
+
+#ghrc-link-preview .ghrc-preview-markdown pre,
+#ghrc-link-preview .ghrc-preview-code {
+  white-space: pre;
+  tab-size: 2;
+  overflow-x: auto;
+  max-width: 100%;
+}
+
+#ghrc-link-preview .ghrc-preview-comment {
+  padding-block: 12px;
+  border-top: 1px solid color-mix(in srgb, CanvasText 16%, transparent);
+}
+
+#ghrc-link-preview .ghrc-preview-parent {
+  margin-block: 8px;
+}
