@@ -83,12 +83,18 @@ test("completed worked-for timing becomes pony minutes while preserving its full
   assert.equal(f.element.hasAttribute("title"), false);
 });
 
-test("seconds and multi-hour values stay expressible in minutes", () => {
+test("sub-minute values hide the time and show minutes starting at one minute", () => {
   const f = fixture("Worked for 42s");
   f.flush();
-  assert.equal(f.element.getAttribute("data-ghrc-worked-minutes"), "<1m");
+  assert.equal(f.element.getAttribute("data-ghrc-worked-minutes"), "");
+  f.update("Worked for 59s");
+  assert.equal(f.element.getAttribute("data-ghrc-worked-minutes"), "");
+  f.update("Worked for 60s");
+  assert.equal(f.element.getAttribute("data-ghrc-worked-minutes"), "1m");
   f.update("Worked for 1h 3m 12s");
   assert.equal(f.element.getAttribute("data-ghrc-worked-minutes"), "63m");
+  f.update("Worked for 0m 30s");
+  assert.equal(f.element.getAttribute("data-ghrc-worked-minutes"), "");
 });
 
 test("unrelated messages and quoted prose are left unchanged", () => {

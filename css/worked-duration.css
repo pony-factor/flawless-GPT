@@ -26,6 +26,14 @@
   vertical-align: middle;
 }
 
+[data-ghrc-worked-duration][data-ghrc-worked-minutes=""]::before {
+  margin-right: 0;
+}
+
+[data-ghrc-worked-duration][data-ghrc-worked-minutes=""]::after {
+  display: none;
+}
+
 @media (prefers-reduced-motion: no-preference) {
   [data-ghrc-worked-duration]::before {
     transition: filter 120ms ease;

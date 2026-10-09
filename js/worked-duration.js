@@ -30,7 +30,7 @@
     if (!tokens || extra.trim() || !Number.isSafeInteger(totalSeconds)) return null;
     return {
       full: label,
-      minutes: totalSeconds < 60 ? "<1m" : `${Math.floor(totalSeconds / 60)}m`,
+      minutes: totalSeconds < 60 ? "" : `${Math.floor(totalSeconds / 60)}m`,
     };
   }
 
