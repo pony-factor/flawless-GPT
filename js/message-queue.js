@@ -498,14 +498,16 @@
     return control.value === text;
   }
 
-  async function replaceComposerText(composer, text, mentions = []) {
+  async function replaceComposerText(composer, text, mentions = [], resumeDraft = null) {
     if (!composer) return false;
     if (textMatchesComposer(composer, text) && mentionsMatch(composer, mentions)) return true;
 
     composer.focus({ preventScroll: true });
 
     if (composer instanceof HTMLTextAreaElement || composer instanceof HTMLInputElement) {
-      return replaceTextControlValue(composer, text);
+      const result = replaceTextControlValue(composer, text);
+      resumeDraft?.();
+      return result;
     }
 
     if (!composer.isContentEditable) return false;
@@ -520,6 +522,7 @@
 
     if (!text) {
       document.execCommand("delete");
+      resumeDraft?.();
       composer.dispatchEvent(new InputEvent("input", {
         bubbles: true,
         inputType: "deleteContentBackward",
@@ -534,6 +537,7 @@
       // Never fall back to plain text when that would silently lose the selected app.
       try {
         document.execCommand("delete");
+        resumeDraft?.();
         await new Promise(resolve => window.setTimeout(resolve, 40));
         const clipboardData = new DataTransfer();
         clipboardData.setData("text/plain", text);
@@ -549,9 +553,11 @@
     // Native text insertion keeps large queued prompts as text. ChatGPT's
     // paste handler converts long clipboard text into a file attachment.
     document.execCommand("insertText", false, text);
+    resumeDraft?.();
     await new Promise((resolve) => window.setTimeout(resolve, 50));
     if (textMatchesComposer(composer, text)) return true;
 
+    if (resumeDraft) composer.focus({ preventScroll: true });
     range.selectNodeContents(composer);
     selection.removeAllRanges();
     selection.addRange(range);
@@ -563,6 +569,7 @@
         cancelable: true,
         clipboardData,
       }));
+      resumeDraft?.();
       if (!unhandled) {
         await new Promise((resolve) => window.setTimeout(resolve, 60));
         if (textMatchesComposer(composer, text)) return true;
@@ -571,10 +578,12 @@
       // Fall through to insertText for browsers that reject synthetic clipboard data.
     }
 
+    if (resumeDraft) composer.focus({ preventScroll: true });
     range.selectNodeContents(composer);
     selection.removeAllRanges();
     selection.addRange(range);
     document.execCommand("insertText", false, text);
+    resumeDraft?.();
     await new Promise((resolve) => window.setTimeout(resolve, 50));
     return textMatchesComposer(composer, text);
   }
@@ -1318,6 +1327,100 @@
     return false;
   }
 
+
+  // No supported background submission API exists for ChatGPT. Keep the live
+  // draft independent while queued prompts briefly use the native editor.
+  function createSendingDraft(composer) {
+    const focused = document.activeElement === composer || composer.contains(document.activeElement);
+    const value = composerText(composer);
+    if (!focused && !value.trim()) return null;
+    const field = document.createElement("textarea");
+    field.className = "ghrc-queue-live-draft";
+    field.setAttribute("aria-label", "Draft while queued message sends");
+    field.value = value;
+    field.spellcheck = composer.spellcheck;
+    field.style.cssText = "position:fixed;z-index:2147483000;box-sizing:border-box;margin:0;border:0;resize:none;outline:none;overflow-y:auto;white-space:pre-wrap;overflow-wrap:anywhere;caret-color:currentColor";
+    const appearance = getComputedStyle(composer);
+    for (const property of ["fontFamily", "fontSize", "fontWeight", "lineHeight", "letterSpacing",
+      "textAlign", "paddingTop", "paddingRight", "paddingBottom", "paddingLeft"]) {
+      field.style[property] = appearance[property];
+    }
+    field.style.color = appearance.color;
+    const surface = getComputedStyle(findComposerForm(composer) || composer).backgroundColor;
+    field.style.backgroundColor = surface && surface !== "rgba(0, 0, 0, 0)"
+      ? surface : "var(--main-surface-primary, #fff)";
+    const position = () => {
+      if (!composer.isConnected) return;
+      const rect = composer.getBoundingClientRect();
+      field.style.left = `${rect.left}px`;
+      field.style.top = `${rect.top}px`;
+      field.style.width = `${rect.width}px`;
+      field.style.height = `${rect.height}px`;
+    };
+    document.body.append(field);
+    position();
+    const resize = typeof ResizeObserver === "function" ? new ResizeObserver(position) : null;
+    resize?.observe(composer);
+    window.addEventListener("resize", position);
+    window.addEventListener("scroll", position, true);
+    let activeDraft = focused;
+    field.addEventListener("focus", () => { activeDraft = true; });
+    if (focused) {
+      const selection = window.getSelection();
+      const range = selection?.rangeCount ? selection.getRangeAt(0) : null;
+      if (range && composer.contains(range.startContainer) && composer.contains(range.endContainer)) {
+        const prefix = range.cloneRange();
+        prefix.selectNodeContents(composer);
+        prefix.setEnd(range.startContainer, range.startOffset);
+        const start = Math.min(prefix.toString().length, field.value.length);
+        prefix.setEnd(range.endContainer, range.endOffset);
+        field.setSelectionRange(start, Math.min(prefix.toString().length, field.value.length));
+      } else if (composer instanceof HTMLTextAreaElement) {
+        field.setSelectionRange(composer.selectionStart, composer.selectionEnd);
+      } else {
+        field.setSelectionRange(field.value.length, field.value.length);
+      }
+      field.focus({ preventScroll: true });
+    }
+    const pendingEntries = new Set();
+    field.addEventListener("keydown", event => {
+      if (!shouldQueueComposerEnter(event)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (event.repeat || !field.value.trim()) return;
+      const entered = field.value;
+      // Reset immediately so subsequent typing is a distinct message, but
+      // recover the text if persistence fails before this overlay is closed.
+      field.value = "";
+      const request = Promise.resolve().then(() => context.run(() => enqueueText(entered)))
+        .then(saved => {
+          if (!saved && field.isConnected) {
+            field.value = entered + (field.value ? `\n${field.value}` : "");
+          }
+        }, () => {
+          if (field.isConnected) field.value = entered + (field.value ? `\n${field.value}` : "");
+        });
+      pendingEntries.add(request);
+      void request.finally(() => pendingEntries.delete(request));
+    });
+    return {
+      field,
+      async whenQuiescent() { await Promise.allSettled([...pendingEntries]); },
+      get focused() { return activeDraft; },
+      resume() {
+        if (activeDraft && field.isConnected && document.activeElement !== field) {
+          field.focus({ preventScroll: true });
+        }
+      },
+      close() {
+        resize?.disconnect();
+        window.removeEventListener("resize", position);
+        window.removeEventListener("scroll", position, true);
+        field.remove();
+      },
+    };
+  }
+
   async function sendQueueHead(id = queue[0]?.id, steer = false) {
     if (!context.active()) return false;
     if (!stateLoaded || sendingItemId || enqueueRunning || interruptRunning
@@ -1336,6 +1439,11 @@
 
     const composer = findComposerInput();
     if (!composer || hasComposerContext(composer)) return;
+    // A focused app mention contains structured editor nodes; wait for blur
+    // rather than flattening it into a temporary plain-text draft field.
+    if (composerMentions(composer).length && (document.activeElement === composer
+      || composer.contains(document.activeElement))) return;
+    let sendingDraft = null;
     let draft = composerText(composer);
     let draftMentions = composerMentions(composer);
     let composerReplaced = false;
@@ -1372,10 +1480,11 @@
       draftMentions = composerMentions(composer);
       const beforeUserTurns = roleTurns("user").length;
       if (hasComposerContext(composer)) return;
+      sendingDraft = createSendingDraft(composer);
       composerReplaced = true;
       if (!await restoreAttachments(item, composer)) return;
       restoredContext = composerContext(composer);
-      if (!await replaceComposerText(composer, item.text, item.mentions || [])) return;
+      if (!await replaceComposerText(composer, item.text, item.mentions || [], () => sendingDraft?.resume())) return;
       restoredContext.mentions = item.mentions || [];
 
       const deadline = Date.now() + SUBMIT_TIMEOUT_MS;
@@ -1427,13 +1536,30 @@
           if (button.isConnected) button.click();
         }
       }
-      if (composerReplaced && sameConversation && conversationKey() === activeKey
-        && composer === findComposerInput()) {
-        const current = composerText(composer);
-        const restored = !current.trim() || textMatchesComposer(composer, item.text)
-          ? draft : (draft ? `${draft}\n${current}` : current);
-        await replaceComposerText(composer, restored, moveMentions(draftMentions, draft, restored));
-        if (focused?.isConnected) focused.focus({ preventScroll: true });
+      try {
+        // Never restore a draft while an overlay Enter is still persisting.
+        await sendingDraft?.whenQuiescent();
+        if (composerReplaced && sameConversation && conversationKey() === activeKey
+          && composer === findComposerInput()) {
+          const current = composerText(composer);
+          const extra = current.trim() && !textMatchesComposer(composer, item.text) ? current : "";
+          // An overlay's text is authoritative; retry restoration if the user
+          // typed another character while the native editor was being updated.
+          for (let attempt = 0; attempt < 12; attempt++) {
+            const latest = sendingDraft?.field.value ?? draft;
+            const restored = extra ? (latest ? `${latest}\n${extra}` : extra) : latest;
+            await replaceComposerText(composer, restored, moveMentions(draftMentions, draft, restored),
+              () => sendingDraft?.resume());
+            if (!sendingDraft || latest === sendingDraft.field.value) break;
+          }
+          if (sendingDraft?.focused || focused === composer) {
+            composer.focus({ preventScroll: true });
+          } else if (focused?.isConnected && focused !== sendingDraft?.field) {
+            focused.focus({ preventScroll: true });
+          }
+        }
+      } finally {
+        sendingDraft?.close();
       }
       if (sameConversation && queue.some((candidate) => candidate.id === item.id)) {
         // An unconfirmed send must require a deliberate retry, even if the
