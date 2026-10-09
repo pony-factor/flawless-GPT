@@ -31,10 +31,11 @@ test('sidebar conversations show compact relative creation ages before the title
         body: JSON.stringify({
           items: [
             { id: 'alpha', title: 'Alpha', create_time: new Date(now - (2 * day)).toISOString() },
+            { id: 'today', title: 'Today', create_time: new Date(now - (60 * 60 * 1000)).toISOString() },
             { id: 'beta', title: 'Beta', create_time: new Date(now - (62 * day)).toISOString() },
             { id: 'gamma', title: 'Gamma', create_time: new Date(now - (800 * day)).toISOString() },
           ],
-          total: 3,
+          total: 4,
           offset: 0,
           limit: 100,
         }),
@@ -65,7 +66,7 @@ test('sidebar conversations show compact relative creation ages before the title
   assert.equal(await alpha.locator(':scope > .ghrc-chat-date').getAttribute('title'), 'Created 5 Oct');
 
   await page.evaluate(() => {
-    for (const [id, title] of [['beta', 'Beta'], ['gamma', 'Gamma']]) {
+    for (const [id, title] of [['today', 'Today'], ['beta', 'Beta'], ['gamma', 'Gamma']]) {
       const link = document.createElement('a');
       link.href = `/c/${id}`;
       link.innerHTML = `<span>${title}</span>`;
@@ -73,6 +74,9 @@ test('sidebar conversations show compact relative creation ages before the title
     }
   });
   await page.waitForFunction(() => document.querySelector('a[href="/c/gamma"] > .ghrc-chat-date'));
+  assert.equal(await page.locator('a[href="/c/today"] > .ghrc-chat-date').textContent(), '🆕');
+  assert.equal(await page.locator('a[href="/c/today"] > .ghrc-chat-date').getAttribute('title'), 'Created 7 Oct');
+  assert.equal(await page.locator('a[href="/c/today"] > .ghrc-chat-date').evaluate(el => el.classList.contains('ghrc-chat-date--new')), true);
   assert.equal(await page.locator('a[href="/c/beta"] > .ghrc-chat-date').textContent(), '2mo');
   assert.equal(await page.locator('a[href="/c/gamma"] > .ghrc-chat-date').textContent(), '2y');
   assert.deepEqual(errors, []);
