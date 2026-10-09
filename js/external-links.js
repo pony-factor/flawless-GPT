@@ -21,6 +21,7 @@
   let nativeSplitRequest = 0;
   let previewWatch = null;
   let previewWidthPx = null;
+  let githubPreviewGeneration = 0;
   const linkActions = new WeakMap();
 
   async function savePreviewWidth() {
@@ -170,6 +171,7 @@
 
   function closeLinkPreview(restoreFocus = true) {
     nativeSplitRequest += 1;
+    githubPreviewGeneration += 1;
     if (previewWatch) {
       void unwatchLinkPreview(previewWatch.id);
       previewWatch = null;
@@ -277,6 +279,7 @@
     const resizer = createPreviewResizer();
     const header = document.createElement("header");
     const url = new URL(href);
+    let currentPreviewHref = href;
     const destination = document.createElement("a");
     destination.className = "ghrc-preview-destination";
     destination.href = href;
@@ -301,7 +304,7 @@
     copy.innerHTML = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M15 9V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h3"/></svg>';
     copy.addEventListener("click", async () => {
       try {
-        await navigator.clipboard.writeText(href);
+        await navigator.clipboard.writeText(currentPreviewHref);
       } catch {
         // Leave the preview open if clipboard access is unavailable.
       }
@@ -319,7 +322,7 @@
         if (!isPlainPrimaryActivation(event)) return;
         event.preventDefault();
         event.stopImmediatePropagation();
-        window.open(href, "_blank", "noopener,noreferrer");
+        window.open(currentPreviewHref, "_blank", "noopener,noreferrer");
       });
     }
     const close = document.createElement("button");
@@ -338,6 +341,51 @@
       content.setAttribute("aria-live", "polite");
       panel.append(content);
       showNativeSplitGuide(href, content);
+    } else if (["github.com", "www.github.com"].includes(url.hostname)) {
+      // GitHub blocks iframes; use its API immediately rather than waiting for a failed embed.
+      const history = [];
+      let index = -1;
+      const navigation = document.createElement("nav");
+      navigation.className = "ghrc-preview-navigation";
+      const back = document.createElement("button");
+      const forward = document.createElement("button");
+      for (const [button, label] of [[back, "Back"], [forward, "Forward"]]) {
+        button.type = "button";
+        button.className = "ghrc-preview-control";
+        button.textContent = label;
+        button.setAttribute("aria-label", label);
+        navigation.append(button);
+      }
+      const content = document.createElement("div");
+      content.className = "ghrc-preview-content";
+      content.setAttribute("aria-live", "polite");
+      panel.append(navigation, content);
+      const visit = (nextHref, delta = 0) => {
+        if (delta) {
+          const target = index + delta;
+          if (target < 0 || target >= history.length) return;
+          index = target;
+          nextHref = history[index];
+        } else {
+          const target = new URL(nextHref);
+          if (target.protocol !== "https:" || !["github.com", "www.github.com"].includes(target.hostname)) return;
+          history.splice(index + 1);
+          history.push(target.href);
+          index = history.length - 1;
+        }
+        currentPreviewHref = nextHref;
+        destination.href = nextHref;
+        destination.title = nextHref;
+        open.href = nextHref;
+        const target = new URL(nextHref);
+        urlLabel.textContent = target.hostname.replace(/^www\./i, "") + target.pathname + target.hash;
+        back.disabled = index === 0;
+        forward.disabled = index >= history.length - 1;
+        void loadGitHubPreview(nextHref, content, next => visit(next));
+      };
+      back.addEventListener("click", () => visit(null, -1));
+      forward.addEventListener("click", () => visit(null, 1));
+      visit(href);
     } else {
       const frame = document.createElement("iframe");
       frame.title = "Website preview: " + url.hostname;
@@ -395,44 +443,151 @@
     void loadGitHubPreview(href, content);
   }
 
-  async function loadGitHubPreview(href, content) {
+  function githubPreviewLink(parent, title, href, navigate) {
+    try {
+      const url = new URL(href);
+      if (!["http:", "https:"].includes(url.protocol)) return false;
+      const anchor = document.createElement("a");
+      anchor.href = url.href;
+      anchor.textContent = title;
+      anchor.rel = "noopener noreferrer";
+      if (navigate && ["github.com", "www.github.com"].includes(url.hostname)) {
+        anchor.addEventListener("click", event => {
+          if (!isPlainPrimaryActivation(event)) return;
+          event.preventDefault();
+          navigate(url.href);
+        });
+      } else anchor.target = "_blank";
+      parent.append(anchor);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  // Treat all remote Markdown and code as text, never injectable HTML.
+  function githubPreviewMarkdown(parent, body, href, navigate) {
+    const block = document.createElement("div");
+    block.className = "ghrc-preview-markdown";
+    parent.append(block);
+    let code = null;
+    for (const line of body.split(/\r?\n/).slice(0, 1800)) {
+      if (/^\s*(\x60{3}|~~~)/.test(line)) {
+        if (code) code = null;
+        else {
+          code = document.createElement("pre");
+          block.append(code);
+        }
+        continue;
+      }
+      if (code) {
+        code.append(document.createTextNode(line + "\n"));
+        continue;
+      }
+      if (!line.trim()) continue;
+      const heading = /^(#{1,6})\s+(.*)/.exec(line);
+      const tag = heading ? "h" + Math.min(6, heading[1].length + 1) : "p";
+      const element = document.createElement(tag);
+      const value = heading ? heading[2] : line.replace(/^\s*[-*+]\s+/, "• ")
+        .replace(/^\s*\d+\.\s+/, "• ").replace(/^>\s*/, "❯ ");
+      // Linkify Markdown links; leave embedded HTML and images inert.
+      const links = /(?<!!)\[([^\]]+)\]\((https?:\/\/[^)\s]+|(?:\.\.?\/)?[^)\s]+)\)/g;
+      let position = 0;
+      for (const match of value.matchAll(links)) {
+        element.append(document.createTextNode(value.slice(position, match.index)));
+        try {
+          const target = new URL(match[2], href);
+          if (!githubPreviewLink(element, match[1], target.href, navigate)) {
+            element.append(document.createTextNode(match[0]));
+          }
+        } catch {
+          element.append(document.createTextNode(match[0]));
+        }
+        position = match.index + match[0].length;
+      }
+      element.append(document.createTextNode(value.slice(position)));
+      block.append(element);
+    }
+    if (body.split(/\r?\n/).length > 1800) {
+      const note = document.createElement("p");
+      note.textContent = "Markdown preview truncated. Open the full page for remaining lines.";
+      block.append(note);
+    }
+  }
+
+  async function loadGitHubPreview(href, content, navigate = null) {
+    const generation = ++githubPreviewGeneration;
+    content.textContent = "Loading GitHub preview…";
     try {
       const result = await chrome.runtime.sendMessage({ type: "load-github-link-preview", url: href });
-      if (!content.isConnected) return;
+      if (!content.isConnected || generation !== githubPreviewGeneration) return;
       if (!result?.ok) throw new Error(result?.error || "GitHub preview is unavailable.");
       content.replaceChildren();
-      const appendText = (tag, text, parent = content) => {
+      const appendText = (tag, value, parent = content) => {
         const element = document.createElement(tag);
-        element.textContent = text;
+        element.textContent = value;
         parent.append(element);
         return element;
       };
-      appendText("p", result.subtitle).className = "ghrc-preview-meta";
-      appendText("h2", result.title);
+      if (result.subtitle) appendText("p", result.subtitle).className = "ghrc-preview-meta";
+      if (result.title) appendText("h2", result.title);
       if (result.details) appendText("p", result.details);
-      if (result.body) appendText("pre", result.body).className = "ghrc-preview-body";
+      if (result.parentUrl) {
+        const parent = document.createElement("p");
+        githubPreviewLink(parent, "← Parent directory", result.parentUrl, navigate);
+        content.append(parent);
+      }
+      if (result.body) githubPreviewMarkdown(content, result.body, href, navigate);
+      if (result.image) {
+        const image = document.createElement("img");
+        image.src = result.image;
+        image.alt = result.title || "GitHub image";
+        image.className = "ghrc-preview-image";
+        content.append(image);
+      } else if (typeof result.text === "string") {
+        if (result.markdown) githubPreviewMarkdown(content, result.text, href, navigate);
+        else appendText("pre", result.text).className = "ghrc-preview-code";
+      }
+      if (result.entries?.length) {
+        const entries = document.createElement("ul");
+        entries.className = "ghrc-preview-entries";
+        for (const entry of result.entries) {
+          const item = document.createElement("li");
+          if (!githubPreviewLink(item, entry.title, entry.url, navigate)) appendText("span", entry.title, item);
+          if (entry.detail) appendText("small", entry.detail, item);
+          entries.append(item);
+        }
+        content.append(entries);
+      }
       for (const file of result.files || []) {
         const section = document.createElement("details");
         section.open = true;
-        appendText("summary", `${file.filename} (+${file.additions} −${file.deletions})`, section);
+        appendText("summary", file.filename + " (+" + file.additions + " −" + file.deletions + ")", section);
         appendText("pre", file.patch || "Diff unavailable. Open the full page to view this file.", section);
+        content.append(section);
+      }
+      for (const comment of result.comments || []) {
+        const section = document.createElement("section");
+        section.className = "ghrc-preview-comment";
+        githubPreviewLink(section, "@" + comment.author, comment.url, navigate);
+        githubPreviewMarkdown(section, comment.body, href, navigate);
         content.append(section);
       }
       if (result.note) appendText("p", result.note);
     } catch (error) {
-      if (!content.isConnected) return;
+      if (!content.isConnected || generation !== githubPreviewGeneration) return;
       content.replaceChildren();
-      const message = document.createElement("p");
-      message.textContent = `${error.message} Use Open in new tab to view the full GitHub page.`;
-      content.append(message);
-      const retry = document.createElement("button");
-      retry.type = "button";
-      retry.textContent = "Retry preview";
-      retry.addEventListener("click", () => {
-        content.textContent = "Loading GitHub preview…";
-        void loadGitHubPreview(href, content);
-      });
-      content.append(retry);
+      appendError();
+      function appendError() {
+        const message = document.createElement("p");
+        message.textContent = error.message + " Use Open in new tab to view the full GitHub page.";
+        content.append(message);
+        const retry = document.createElement("button");
+        retry.type = "button";
+        retry.textContent = "Retry preview";
+        retry.addEventListener("click", () => { void loadGitHubPreview(href, content, navigate); });
+        content.append(retry);
+      }
     }
   }
 

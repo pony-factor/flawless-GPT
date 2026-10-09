@@ -182,6 +182,27 @@ The history setting hides the known conversation-history rate-limit modal, clear
 leaves behind, and preserves native wheel and touch scrolling if stale modal
 listeners remain. Link previews load the destination in a sandboxed iframe.
 
+### Browsing GitHub pages inside the sidebar
+
+GitHub prevents other sites from embedding its pages. With **Open links beside the response**
+enabled, Flawless instead loads GitHub pages through the GitHub API immediately. It can
+display repositories and their root files, individual files (including JSON, Markdown,
+source code, and small images), directories, branches, tags, issues, pull requests,
+commits, releases, workflow runs, and Discussions. The existing pull-request diff
+viewer remains available, with issue/PR comments where GitHub permits access.
+
+GitHub directories and lists include links you can follow **inside the same panel**.
+The GitHub pane has Back and Forward controls, a parent-directory link when applicable,
+and its usual Copy link and Open in new tab actions for the currently viewed page.
+Paths are loaded for the branch or tag in the URL, including ref names containing slashes.
+
+Private pages require a configured GitHub token with appropriate read permissions.
+Discussions require authenticated GraphQL access, and some GitHub page types
+(such as account settings, interactive Projects interfaces, and unsupported routes)
+still require **Open in new tab**. Large or unavailable files give a readable message
+instead of displaying corrupt content. File rendering is read-only and treats
+remote Markdown as untrusted text; no repository changes are made by this viewer.
+
 ### Inline Temporary Chat
 
 On the new-chat page, Flawless places an icon-only **Temporary Chat** button
