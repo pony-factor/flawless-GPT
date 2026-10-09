@@ -1,0 +1,60 @@
+/* Place the native Temporary Chat action in the composer without moving
+   React-owned elements. Hide the old trigger only while the proxy is mounted. */
+html[data-ghrc-temporary-chat-inline-ready] [data-ghrc-temporary-chat-native] {
+  display: none !important;
+}
+
+#ghrc-temporary-chat-inline {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 999px;
+  color: inherit;
+  cursor: pointer;
+  display: inline-flex;
+  flex: 0 0 auto;
+  font: inherit;
+  font-size: 12px;
+  gap: 5px;
+  height: 32px;
+  justify-content: center;
+  margin: 0 4px 0 0;
+  padding: 0 9px;
+  white-space: nowrap;
+}
+
+#ghrc-temporary-chat-inline:hover:not(:disabled),
+#ghrc-temporary-chat-inline[aria-pressed="true"] {
+  background: color-mix(in srgb, currentColor 10%, transparent);
+}
+
+#ghrc-temporary-chat-inline:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+
+#ghrc-temporary-chat-inline:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+#ghrc-temporary-chat-inline svg {
+  fill: none;
+  height: 16px;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+  width: 16px;
+}
+
+@media (max-width: 640px) {
+  #ghrc-temporary-chat-inline {
+    padding: 0;
+    width: 32px;
+  }
+
+  #ghrc-temporary-chat-inline span {
+    display: none;
+  }
+}
