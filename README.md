@@ -89,7 +89,7 @@ Existing guidance from the older `codexCustomInstructions` / `chatgptCustomInstr
 The sidebar starts collapsed on page load. **ChatGPT → Reveal sidebar on hover**
 is off by default. Enable it to reveal the sidebar by holding the mouse in the
 leftmost 64 pixels, anywhere from directly below **Library** to the bottom
-of the viewport, for 350 milliseconds.
+of the viewport, for 650 milliseconds.
 
 The reveal area covers the entire remaining left rail, even below the last
 preset icon or when no preset icons exist. Hovering Library itself or the
@@ -102,6 +102,12 @@ without clicking or giving the browser keyboard focus; moving keyboard focus
 away alone should not collapse it. The hover delay also works in visible but
 unfocused browser windows when animation frames pause; hidden/background tabs
 cannot respond to mouse hover because they are not visible.
+
+### Chat creation ages
+
+Chat history entries show compact creation ages (such as `2d`, `2mo`, or `2y`).
+Conversations less than a day old show a small 🆕 icon rather than `0d`.
+Hovering the age or icon still reveals the absolute creation date.
 
 ### Chat bar colors
 
