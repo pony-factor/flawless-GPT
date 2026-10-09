@@ -108,7 +108,7 @@ async function loadGitHubLinkPreview(value) {
     const directoryUrl = (directory) => route.browser + "/tree/" + refUrl
       + (directory ? "/" + githubPreviewPath(directory.split("/")) : "");
     const parent = path.split("/").slice(0, -1).join("/");
-    result.parentUrl = route.pageKind === "tree" ? directoryUrl(parent) : directoryUrl(parent);
+    result.parentUrl = route.pageKind === "tree" && !path ? null : directoryUrl(parent);
     if (Array.isArray(data)) {
       result.kind = "directory";
       result.title = path || ref;
@@ -132,7 +132,9 @@ async function loadGitHubLinkPreview(value) {
         const encoded = data.content.replace(/\s/g, "");
         if (imageMime[extension] && data.size <= 1000000) {
           result.image = "data:" + imageMime[extension] + ";base64," + encoded;
-        } else if (!imageMime[extension]) {
+        } else if (imageMime[extension]) {
+          result.note = "This image is too large for an inline preview. Open it in a new tab.";
+        } else {
           const binary = atob(encoded);
           if (binary.length > 250000) {
             result.note = "File is too large for a sidebar preview. Open it in a new tab.";
