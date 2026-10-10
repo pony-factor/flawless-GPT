@@ -7,7 +7,7 @@ const read = file => fs.readFileSync(path.join(__dirname, '..', file), 'utf8');
 let browser;
 before(async () => { browser = await chromium.launch({executablePath:'/Applications/Brave Browser.app/Contents/MacOS/Brave Browser',headless:true}); });
 after(async () => { await browser?.close(); });
-async function fixture({labels=['Show sidebar','Hide sidebar'], enabled=true, expanded=false, delay=0, storageDelay=0, duplicate=false, mouseOnly=false, pausedFrames=false}={}) {
+async function fixture({labels=['Show sidebar','Hide sidebar'], enabled=true, expanded=false, delay=0, storageDelay=0, duplicate=false, mouseOnly=false, pausedFrames=false, ignoreExitOutEvents=false}={}) {
   const page = await browser.newPage();
   page.errors=[];
   page.on('pageerror', error => page.errors.push(error.message));
@@ -45,6 +45,15 @@ async function fixture({labels=['Show sidebar','Hide sidebar'], enabled=true, ex
       document.addEventListener(type, event => event.stopImmediatePropagation(), true);
     }
   });
+  if (ignoreExitOutEvents) await page.evaluate(() => {
+    // Some window-edge transitions never deliver a usable out event to
+    // trackMouseExit. Ensure root-level leave handling works independently.
+    for (const type of ['pointerout', 'mouseout']) {
+      window.addEventListener(type, event => {
+        if (event.relatedTarget === null) event.stopImmediatePropagation();
+      }, true);
+    }
+  });
   if (pausedFrames) await page.evaluate(() => {
     // Model a visible, unfocused window where animation frames are suspended.
     window.requestAnimationFrame = () => 0;
@@ -70,7 +79,7 @@ for(const labels of [['Show sidebar','Hide sidebar'],['Open sidebar','Close side
   });
 }
 test('moving left outside the browser viewport collapses a hover-open sidebar',async()=>{
-  const page=await fixture();
+  const page=await fixture({ ignoreExitOutEvents: true });
   await page.mouse.move(12,250);
   await page.waitForFunction(()=>document.querySelector('aside').dataset.expanded==='true');
 
@@ -87,7 +96,7 @@ test('moving left outside the browser viewport collapses a hover-open sidebar',a
   await page.close();
 });
 test('leaving the viewport to the left cancels an in-progress hover reveal',async()=>{
-  const page=await fixture();
+  const page=await fixture({ ignoreExitOutEvents: true });
   await page.mouse.move(12,250);
   await page.waitForTimeout(120);
   await page.mouse.move(-25,250);
