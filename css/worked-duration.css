@@ -30,6 +30,33 @@
   display: none;
 }
 
+/* Optional one-dot-per-minute display, stacked beneath the cannon. */
+[data-ghrc-worked-duration][data-ghrc-worked-dots-mode] {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
+  vertical-align: middle;
+}
+
+[data-ghrc-worked-duration][data-ghrc-worked-dots-mode]::before {
+  margin-right: 0;
+  flex: none;
+}
+
+[data-ghrc-worked-duration][data-ghrc-worked-dots-mode]::after {
+  content: attr(data-ghrc-worked-dots);
+  display: block;
+  font-size: 6px;
+  font-weight: 400;
+  line-height: 7px;
+  letter-spacing: 0;
+  margin-top: 2px;
+  text-align: center;
+  white-space: pre;
+}
+
 @media (prefers-reduced-motion: no-preference) {
   [data-ghrc-worked-duration]::before {
     transition: filter 120ms ease;

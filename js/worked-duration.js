@@ -6,6 +6,8 @@
 
   const BADGE = "data-ghrc-worked-duration";
   const MINUTES = "data-ghrc-worked-minutes";
+  const DOTS_MODE = "data-ghrc-worked-dots-mode";
+  const DOTS = "data-ghrc-worked-dots";
   const OWNED_TITLE = "data-ghrc-worked-added-title";
   const ARTWORK = "--ghrc-worked-artwork";
   const artworkURL = `url("${chrome.runtime.getURL("artwork/searching-complete.png")}")`;
@@ -13,6 +15,9 @@
   const PART = /(\d+)\s*(hours?|hrs?|h|minutes?|mins?|m|seconds?|secs?|s)\s*/gi;
   const EXCLUDED = 'pre, code, blockquote, textarea, input, [contenteditable="true"], [data-message-author-role="user"], .markdown, .prose';
   let scheduled = false;
+  let dotMode = false;
+  let preferenceUpdated = false;
+  let stopped = false;
 
   function durationFrom(text) {
     const label = (text || "").replace(/\s+/g, " ").trim();
@@ -30,16 +35,30 @@
       return "";
     });
     if (!tokens || extra.trim() || !Number.isSafeInteger(totalSeconds)) return null;
+    const minuteCount = Math.floor(totalSeconds / 60);
     return {
       full: label,
-      minutes: totalSeconds < 60 ? "" : `${Math.floor(totalSeconds / 60)}m`,
+      minuteCount,
+      minutes: minuteCount ? `${minuteCount}m` : "",
     };
+  }
+
+  // Rows of twelve dots keep long durations readable without changing the
+  // original accessible label, tooltip, or disclosure-click target.
+  function dotsFor(minuteCount) {
+    const rows = [];
+    for (let start = 0; start < minuteCount; start += 12) {
+      rows.push(Array(Math.min(12, minuteCount - start)).fill("•").join(" "));
+    }
+    return rows.join("\n");
   }
 
   function restore(element) {
     element.style.removeProperty(ARTWORK);
     element.removeAttribute(BADGE);
     element.removeAttribute(MINUTES);
+    element.removeAttribute(DOTS_MODE);
+    element.removeAttribute(DOTS);
     if (element.hasAttribute(OWNED_TITLE)) {
       element.removeAttribute("title");
       element.removeAttribute(OWNED_TITLE);
@@ -52,6 +71,14 @@
     }
     if (element.getAttribute(MINUTES) !== value.minutes) {
       element.setAttribute(MINUTES, value.minutes);
+    }
+    if (dotMode && value.minuteCount > 0) {
+      if (!element.hasAttribute(DOTS_MODE)) element.setAttribute(DOTS_MODE, "");
+      const dots = dotsFor(value.minuteCount);
+      if (element.getAttribute(DOTS) !== dots) element.setAttribute(DOTS, dots);
+    } else {
+      if (element.hasAttribute(DOTS_MODE)) element.removeAttribute(DOTS_MODE);
+      if (element.hasAttribute(DOTS)) element.removeAttribute(DOTS);
     }
     if (!element.hasAttribute(BADGE)) element.setAttribute(BADGE, "");
     // The original, precise timing remains available on hover and as text
@@ -97,10 +124,29 @@
     requestAnimationFrame(scan);
   }
 
+  function updateDotMode(enabled) {
+    if (stopped || !context.active() || dotMode === (enabled === true)) return;
+    dotMode = enabled === true;
+    scheduleScan();
+  }
+
+  const onSettingsChanged = (changes, areaName) => {
+    if (areaName !== "local" || !changes.workedDurationDots) return;
+    preferenceUpdated = true;
+    updateDotMode(changes.workedDurationDots.newValue);
+  };
+  chrome.storage.onChanged.addListener(onSettingsChanged);
+  // An intervening change event takes precedence over an earlier settings read.
+  chrome.storage.local.get({ workedDurationDots: false }).then((settings) => {
+    if (!preferenceUpdated) updateDotMode(settings.workedDurationDots);
+  }).catch(() => { /* Keep the default counter if storage is unavailable. */ });
+
   const observer = new MutationObserver(scheduleScan);
   observer.observe(document, { childList: true, subtree: true, characterData: true });
   context.onStop(() => {
+    stopped = true;
     observer.disconnect();
+    chrome.storage.onChanged.removeListener(onSettingsChanged);
     for (const element of document.querySelectorAll(`[${BADGE}]`)) restore(element);
   });
   scheduleScan();

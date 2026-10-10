@@ -16,6 +16,7 @@ The dashboard:
   by default), or disables ChatGPT Work mode and manual web Search mode;
 - wraps long ChatGPT response text, links, and code by default, with a Display
   preference to restore native horizontal overflow;
+- optionally displays one dot per completed minute beneath the work-duration cannon instead of its minute counter (ChatGPT settings; off by default);
 - strips UTM tracking parameters from links shown by ChatGPT by default;
 - can skip ChatGPT's external-site warning and dismiss its history rate-limit
   modal independently;
