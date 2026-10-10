@@ -25,8 +25,7 @@
     "http://127.0.0.1/*"
   ],
   "optional_host_permissions": [
-    "http://*/*",
-    "https://*/*"
+    "http://*/*"
   ],
   "background": {
     "service_worker": "js/background.js"
