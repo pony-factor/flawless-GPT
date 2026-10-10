@@ -145,6 +145,13 @@
               <p id="repository-search-shortcut-help" class="help" role="status">Click the shortcut, then press any non-modifier key or key combination. Unmodified keys won't interrupt typing in a text field.</p>
             </div>
             <label class="preference">
+              <input id="enable-custom-repository-search" type="checkbox" />
+              <span>
+                <strong>Enable custom repository search overrides</strong>
+                <small>Shows the + Custom repo button so you can add repositories missing from search. Off by default.</small>
+              </span>
+            </label>
+            <label class="preference">
               <input id="show-repository-total" type="checkbox" checked />
               <span>
                 <strong>Show repository total</strong>
@@ -381,6 +388,13 @@
               </span>
             </label>
             <label class="preference">
+              <input id="block-chatgpt-desktop-notifications" type="checkbox" checked />
+              <span>
+                <strong>Block ChatGPT desktop notifications</strong>
+                <small>Prevents browser and macOS popups from chatgpt.com (such as “Your response is ready”). Blocks all ChatGPT website notifications, not just completions. Enabled by default; turn off to restore your existing browser notification preference. Does not control the native ChatGPT app.</small>
+              </span>
+            </label>
+            <label class="preference">
               <input id="hide-home-suggestions" type="checkbox" />
               <span>
                 <strong>Hide new-chat suggestions</strong>
@@ -392,6 +406,13 @@
               <span>
                 <strong>Hide model and thinking controls</strong>
                 <small>Hides model selection and reasoning controls. Enabled by default; Maximize thinking still works.</small>
+              </span>
+            </label>
+            <label class="preference">
+              <input id="wrap-chat-responses" type="checkbox" checked />
+              <span>
+                <strong>Wrap long responses</strong>
+                <small>Wraps long text and code blocks within ChatGPT responses instead of making them scroll horizontally. Enabled by default.</small>
               </span>
             </label>
             <label class="preference">
