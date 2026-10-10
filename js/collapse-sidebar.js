@@ -285,12 +285,27 @@
     reconcileHoverState();
   }
 
+  function trackViewportExit(event) {
+    if (!event.isTrusted || (event.pointerType && event.pointerType !== "mouse")) return;
+    // A leftward exit can leave a non-null relatedTarget on the preceding
+    // pointerout/mouseout event. A leave of the document root still means the
+    // cursor is no longer over the sidebar, regardless of that target.
+    if (event.target !== window && event.target !== document
+      && event.target !== document.documentElement) return;
+    pointer.inside = false;
+    reconcileHoverState();
+  }
+
   // Listen for trusted mouse entry as well as movement. A visible but
   // unfocused window should not require a click before its hover is detected.
   const mouseEntryEvents = ["pointermove", "pointerover", "pointerenter", "mousemove", "mouseover", "mouseenter"];
   const mouseExitEvents = ["pointerout", "mouseout"];
+  const viewportExitEvents = ["pointerleave", "mouseleave"];
   mouseEntryEvents.forEach(type => document.addEventListener(type, trackMouse, true));
   mouseExitEvents.forEach(type => window.addEventListener(type, trackMouseExit, true));
+  // Capture root/window leave events without treating child-to-child exits as
+  // leaving the window (e.g., sidebar menus rendered in a document portal).
+  viewportExitEvents.forEach(type => window.addEventListener(type, trackViewportExit, true));
 
   // Keyboard focus can leave a visible window while the mouse remains over
   // the rail. Collapse on mouse exit, never on window blur. Hidden tabs do not
@@ -324,6 +339,7 @@
     clearRevealRetry();
     mouseEntryEvents.forEach(type => document.removeEventListener(type, trackMouse, true));
     mouseExitEvents.forEach(type => window.removeEventListener(type, trackMouseExit, true));
+    viewportExitEvents.forEach(type => window.removeEventListener(type, trackViewportExit, true));
     document.removeEventListener("visibilitychange", trackVisibility);
   });
 

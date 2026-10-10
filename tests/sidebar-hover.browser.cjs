@@ -69,6 +69,34 @@ for(const labels of [['Show sidebar','Hide sidebar'],['Open sidebar','Close side
     await page.close();
   });
 }
+test('moving left outside the browser viewport collapses a hover-open sidebar',async()=>{
+  const page=await fixture();
+  await page.mouse.move(12,250);
+  await page.waitForFunction(()=>document.querySelector('aside').dataset.expanded==='true');
+
+  // Moving past x=0 should close just like moving to the right of the sidebar.
+  await page.mouse.move(-25,250);
+  await page.waitForFunction(()=>document.querySelector('aside').dataset.expanded==='false');
+  await page.waitForTimeout(750);
+  assert.equal(await page.locator('aside').getAttribute('data-expanded'),'false');
+
+  await page.mouse.move(12,250);
+  await page.waitForFunction(()=>document.querySelector('aside').dataset.expanded==='true');
+  assert.equal(await page.evaluate(()=>clicks),3);
+  assert.deepEqual(page.errors,[]);
+  await page.close();
+});
+test('leaving the viewport to the left cancels an in-progress hover reveal',async()=>{
+  const page=await fixture();
+  await page.mouse.move(12,250);
+  await page.waitForTimeout(120);
+  await page.mouse.move(-25,250);
+  await page.waitForTimeout(750);
+  assert.equal(await page.locator('aside').getAttribute('data-expanded'),'false');
+  assert.equal(await page.evaluate(()=>clicks),0);
+  assert.deepEqual(page.errors,[]);
+  await page.close();
+});
 test('hidden duplicate toggles are ignored and initial expansion collapses',async()=>{
   const page=await fixture({duplicate:true,expanded:true});
   await page.waitForFunction(()=>document.querySelector('aside').dataset.expanded==='false');
