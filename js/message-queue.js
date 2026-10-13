@@ -1329,6 +1329,32 @@
   }
 
 
+  // A temporary draft textarea sits above the native editor while a queued
+  // message is submitted. Match the visible composer surface instead of using
+  // the primary page surface (white in some dark/colored themes).
+  function sendingDraftSurface(composer) {
+    const form = findComposerForm(composer);
+    const parent = composer.closest(".composer-parent") || form?.closest(".composer-parent");
+    const backdrop = (parent || form)?.querySelector("#composer-background");
+    const layers = [];
+    for (let element = composer; element && element !== document.body; element = element.parentElement) {
+      // ChatGPT sometimes paints the composer on a sibling backdrop rather
+      // than the form; inspect that layer before its enclosing parent.
+      if (backdrop && (element === parent || (!parent && element === form))) layers.push(backdrop);
+      layers.push(element);
+    }
+    for (const element of layers) {
+      const color = getComputedStyle(element).backgroundColor;
+      if (color && color !== "transparent" && !/^rgba\\([^)]*,\\s*0(?:\\.0+)?\\)$/.test(color)) return color;
+    }
+    const root = document.documentElement;
+    if (root.hasAttribute("data-ghrc-color-surface")) {
+      const custom = getComputedStyle(root).getPropertyValue("--ghrc-composer-surface").trim();
+      if (custom) return custom;
+    }
+    return root.matches(".dark, [data-theme='dark']") ? "#303030" : "#f7f7f8";
+  }
+
   // No supported background submission API exists for ChatGPT. Keep the live
   // draft independent while queued prompts briefly use the native editor.
   function createSendingDraft(composer) {
@@ -1347,9 +1373,7 @@
       field.style[property] = appearance[property];
     }
     field.style.color = appearance.color;
-    const surface = getComputedStyle(findComposerForm(composer) || composer).backgroundColor;
-    field.style.backgroundColor = surface && surface !== "rgba(0, 0, 0, 0)"
-      ? surface : "var(--main-surface-primary, #fff)";
+    field.style.backgroundColor = sendingDraftSurface(composer);
     const position = () => {
       if (!composer.isConnected) return;
       const rect = composer.getBoundingClientRect();
