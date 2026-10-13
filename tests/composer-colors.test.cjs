@@ -48,7 +48,7 @@ test("composer color overrides validate, update live and clean up", async () => 
 
 test("all independent composer colors have corresponding scoped CSS selectors", () => {
   const swatches = [...source.matchAll(/\["([a-z-]+)","[^"]+","#[0-9a-f]{6}"\]/g)].map(match => match[1]);
-  assert.equal(swatches.length, 22);
+  assert.equal(swatches.length, 25);
   for (const name of swatches) assert.ok(css.includes(`html[data-ghrc-color-${name}]`));
   assert.ok(css.includes("form:has(#prompt-textarea)"));
   for (const key of ["selection-background", "selection-text"]) {
@@ -63,6 +63,14 @@ test("all independent composer colors have corresponding scoped CSS selectors", 
   }
   assert.equal(css.split('[data-testid="composer-plus-btn"], #composer-plus-btn').length - 1, 3,
     "all toolbar declarations exclude the plus button");
+  for (const kind of ["background", "icon", "hover"]) {
+    assert.ok(css.includes(`html[data-ghrc-color-clipboard-${kind}] #ghrc-clipboard-send-button`),
+      `dedicated clipboard ${kind} override works outside the form`);
+    assert.ok(css.includes(`html[data-ghrc-color-toolbar-${kind}]:not([data-ghrc-color-clipboard-${kind}]) #ghrc-clipboard-send-button`),
+      `clipboard ${kind} falls back to toolbar choice`);
+  }
+  assert.equal(css.split("#ghrc-clipboard-send-button]))").length - 1, 3,
+    "generic toolbar styling excludes the clipboard button to avoid conflicting specificity");
 });
 
 test("HEX or picker edits enable individual colors immediately without checkboxes", async () => {
@@ -82,7 +90,7 @@ test("HEX or picker edits enable individual colors immediately without checkboxe
   const stored = [];
   const chrome = { storage: {
     local: {
-      get: async () => ({ composerColors: { surface: "#AABBCC" }, composerColorSource: { "stop-background": "#008844", "stop-icon": "#ffffff", "plus-background": "#203040", "plus-icon": "#efefef", "selection-background": "#4070a0", "selection-text": "#ffffff" } }),
+      get: async () => ({ composerColors: { surface: "#AABBCC", "toolbar-background": "#223344", "toolbar-icon": "#cccccc", "toolbar-hover": "#445566" }, composerColorSource: { "stop-background": "#008844", "stop-icon": "#ffffff", "plus-background": "#203040", "plus-icon": "#efefef", "selection-background": "#4070a0", "selection-text": "#ffffff" } }),
       set: async value => { stored.push(value.composerColors); },
     },
   }};
@@ -98,7 +106,7 @@ test("HEX or picker edits enable individual colors immediately without checkboxe
     },
   });
   await Promise.resolve();
-  assert.equal(grid.children.length, 22);
+  assert.equal(grid.children.length, 25);
   const [label, controls] = grid.children[0].children;
   const [picker, hex, clear] = controls.children;
   assert.equal(label.children.length, 0, "no redundant enable checkbox");
@@ -118,13 +126,23 @@ test("HEX or picker edits enable individual colors immediately without checkboxe
   const plusRow = grid.children[16];
   const plusMarker = plusRow.children[0].children[0];
   const [plusPicker, plusHex, plusClear] = plusRow.children[1].children;
-  assert.equal(grid.children.length, 22);
+  assert.equal(grid.children.length, 25);
   assert.equal(plusPicker.value, "#203040");
   assert.equal(plusHex.value, "#203040");
   assert.equal(plusClear.hidden, true);
   assert.equal(plusMarker.hidden, false, "native plus preview is marked as sourced");
   assert.equal(grid.children[17].children[1].children[1].value, "#efefef");
   assert.equal(grid.children[18].children[0].children.length, 0, "hover has no fabricated source marker");
+  const clipboardRow = grid.children[19];
+  const clipboardMarker = clipboardRow.children[0].children[0];
+  const [clipboardPicker, clipboardHex, clipboardClear] = clipboardRow.children[1].children;
+  assert.equal(clipboardHex.value, "#223344");
+  assert.equal(clipboardPicker.value, "#223344");
+  assert.equal(clipboardClear.hidden, true, "inherited color is not a custom override");
+  assert.equal(clipboardMarker.hidden, false);
+  assert.equal(clipboardMarker.title, "Inherited from your toolbar button colors");
+  assert.equal(grid.children[20].children[1].children[1].value, "#cccccc");
+  assert.equal(grid.children[21].children[1].children[1].value, "#445566");
   const selectionRow = grid.children[6];
   const selectionMarker = selectionRow.children[0].children[0];
   const [selectionPicker, selectionHex, selectionClear] = selectionRow.children[1].children;
@@ -178,6 +196,28 @@ test("HEX or picker edits enable individual colors immediately without checkboxe
   assert.equal(selectionHex.value, "#4070a0", "Default restores ChatGPT selection preview");
   assert.equal(selectionMarker.hidden, false);
   assert.equal(stored.at(-1)["selection-background"], undefined);
+
+  // Clipboard colors follow toolbar edits live until customized separately.
+  const toolbarHex = grid.children[8].children[1].children[1];
+  toolbarHex.value = "#334455";
+  toolbarHex.emit("input");
+  await flush();
+  assert.equal(clipboardHex.value, "#334455");
+  assert.equal(clipboardClear.hidden, true);
+  clipboardHex.value = "#abcdef";
+  clipboardHex.emit("input");
+  await flush();
+  assert.equal(stored.at(-1)["clipboard-background"], "#abcdef");
+  assert.equal(clipboardMarker.hidden, true);
+  toolbarHex.value = "#112233";
+  toolbarHex.emit("input");
+  await flush();
+  assert.equal(clipboardHex.value, "#abcdef", "custom clipboard color wins over later toolbar edits");
+  clipboardClear.emit("click");
+  await flush();
+  assert.equal(clipboardHex.value, "#112233", "Default restores current toolbar colors");
+  assert.equal(clipboardMarker.hidden, false);
+  assert.equal(stored.at(-1)["clipboard-background"], undefined);
 
   plusHex.value = "#abcdef";
   plusHex.emit("input");

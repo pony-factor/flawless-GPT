@@ -2,7 +2,7 @@
   "use strict";
   const STORAGE_KEY = "composerColors";
   const SOURCE_KEY = "composerColorSource";
-  const SPECS = [["surface","Bar background","#303030"],["surface-border","Bar border","#666666"],["focus-ring","Focus border and ring","#a97dee"],["text","Typed text","#ffffff"],["caret","Typing cursor","#a97dee"],["placeholder","Placeholder text","#a1a1aa"],["selection-background","Selected text background","#8556c6"],["selection-text","Selected text","#ffffff"],["toolbar-background","Toolbar button backgrounds","#444444"],["toolbar-icon","Toolbar icons and labels","#ffffff"],["toolbar-hover","Toolbar hover","#555555"],["send-background","Send button background","#ffffff"],["send-icon","Send button icon","#202020"],["send-hover","Send button hover","#dadada"],["stop-background","Stop button background","#ffffff"],["stop-icon","Stop button icon","#202020"],["plus-background","+ button background","#444444"],["plus-icon","+ button icon","#ffffff"],["plus-hover","+ button hover","#555555"],["attachment-background","Attachment background","#404040"],["attachment-text","Attachment text","#ffffff"],["attachment-border","Attachment border","#747474"]];
+  const SPECS = [["surface","Bar background","#303030"],["surface-border","Bar border","#666666"],["focus-ring","Focus border and ring","#a97dee"],["text","Typed text","#ffffff"],["caret","Typing cursor","#a97dee"],["placeholder","Placeholder text","#a1a1aa"],["selection-background","Selected text background","#8556c6"],["selection-text","Selected text","#ffffff"],["toolbar-background","Toolbar button backgrounds","#444444"],["toolbar-icon","Toolbar icons and labels","#ffffff"],["toolbar-hover","Toolbar hover","#555555"],["send-background","Send button background","#ffffff"],["send-icon","Send button icon","#202020"],["send-hover","Send button hover","#dadada"],["stop-background","Stop button background","#ffffff"],["stop-icon","Stop button icon","#202020"],["plus-background","+ button background","#444444"],["plus-icon","+ button icon","#ffffff"],["plus-hover","+ button hover","#555555"],["clipboard-background","Clipboard paste background","#444444"],["clipboard-icon","Clipboard paste icon","#ffffff"],["clipboard-hover","Clipboard paste hover","#555555"],["attachment-background","Attachment background","#404040"],["attachment-text","Attachment text","#ffffff"],["attachment-border","Attachment border","#747474"]];
   const HEX = /^#[0-9a-f]{6}$/i;
   const normalizeHex = input => {
     const text = typeof input === "string" ? input.trim() : "";
@@ -24,13 +24,21 @@
     let loaded = false;
     let pending = Promise.resolve();
 
+    function inheritedColor(key) {
+      // This extension-owned paste button follows the custom toolbar palette
+      // until its own individual color is explicitly edited.
+      const toolbarKey = key.startsWith("clipboard-")
+        ? `toolbar-${key.slice("clipboard-".length)}`
+        : null;
+      return (toolbarKey && colors[toolbarKey]) || sourceColors[key] || null;
+    }
     function render(input) {
       colors = valid(input);
       for (const [key, { picker, hex, clear, preview, sourceMarker }] of fields) {
-        // Inherited ChatGPT colors are previews, not saved overrides.
-        picker.value = hex.value = colors[key] || sourceColors[key] || preview;
+        const inherited = inheritedColor(key);
+        picker.value = hex.value = colors[key] || inherited || preview;
         clear.hidden = !colors[key];
-        if (sourceMarker) sourceMarker.hidden = !!colors[key] || !sourceColors[key];
+        if (sourceMarker) sourceMarker.hidden = !!colors[key] || !inherited;
         hex.removeAttribute("aria-invalid");
       }
       reset.disabled = Object.keys(colors).length === 0;
@@ -47,12 +55,16 @@
       const label = document.createElement("span");
       label.className = "composer-color-label";
       label.textContent = title;
-      const sourceMarker = (key.startsWith("stop-") || key === "plus-background" || key === "plus-icon" || key.startsWith("selection-")) ? document.createElement("span") : null;
+      const sourceMarker = (key.startsWith("stop-") || key === "plus-background" || key === "plus-icon" || key.startsWith("selection-") || key.startsWith("clipboard-")) ? document.createElement("span") : null;
       if (sourceMarker) {
         sourceMarker.className = "composer-color-source";
         sourceMarker.textContent = "*";
-        sourceMarker.title = "Inherited from ChatGPT's active theme";
-        sourceMarker.setAttribute("aria-label", "Inherited from ChatGPT settings");
+        sourceMarker.title = key.startsWith("clipboard-")
+          ? "Inherited from your toolbar button colors"
+          : "Inherited from ChatGPT's active theme";
+        sourceMarker.setAttribute("aria-label", key.startsWith("clipboard-")
+          ? "Inherited from toolbar colors"
+          : "Inherited from ChatGPT settings");
         sourceMarker.hidden = true;
         label.append(sourceMarker);
       }
@@ -91,10 +103,7 @@
 
       const setColor = (value) => {
         colors[key] = value;
-        picker.value = hex.value = value;
-        hex.removeAttribute("aria-invalid");
-        clear.hidden = false;
-        if (sourceMarker) sourceMarker.hidden = true;
+        render(colors);
         persist();
       };
       picker.addEventListener("input", () => setColor(picker.value));
@@ -110,16 +119,13 @@
         const value = normalizeHex(hex.value);
         if (value && colors[key] !== value) setColor(value);
         else {
-          hex.value = colors[key] || sourceColors[key] || preview;
+          hex.value = colors[key] || inheritedColor(key) || preview;
           hex.removeAttribute("aria-invalid");
         }
       });
       clear.addEventListener("click", () => {
         delete colors[key];
-        picker.value = hex.value = sourceColors[key] || preview;
-        if (sourceMarker) sourceMarker.hidden = !sourceColors[key];
-        hex.removeAttribute("aria-invalid");
-        clear.hidden = true;
+        render(colors);
         persist();
       });
     }
