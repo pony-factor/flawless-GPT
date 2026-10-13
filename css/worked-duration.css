@@ -30,12 +30,13 @@
   display: none;
 }
 
-/* Optional one-dot-per-minute display, stacked beneath the cannon. */
+/* Optional one-dot-per-minute display, placed to the left of the cannon. */
 [data-ghrc-worked-duration][data-ghrc-worked-dots-mode] {
   display: inline-flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
   justify-content: center;
+  gap: 6px;
   line-height: 0;
   vertical-align: middle;
 }
@@ -48,11 +49,11 @@
 [data-ghrc-worked-duration][data-ghrc-worked-dots-mode]::after {
   content: attr(data-ghrc-worked-dots);
   display: block;
-  font-size: 6px;
+  order: -1;
+  font-size: 24px;
   font-weight: 400;
-  line-height: 7px;
+  line-height: 19px;
   letter-spacing: 0;
-  margin-top: 2px;
   text-align: center;
   white-space: pre;
 }

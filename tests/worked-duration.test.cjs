@@ -144,7 +144,7 @@ test("badge uses bundled cannon artwork without replacing the native label", () 
   assert.doesNotMatch(source, /replaceChild|innerHTML\s*=/);
 });
 
-test("opt-in dots render one per minute beneath the cannon and switch live", async () => {
+test("opt-in dots render one per minute and switch live", async () => {
   const f = fixture("Worked for 8m 41s", { dotsEnabled: true });
   await f.ready();
   assert.equal(f.element.hasAttribute("data-ghrc-worked-dots-mode"), true);
