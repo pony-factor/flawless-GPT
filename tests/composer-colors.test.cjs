@@ -33,11 +33,11 @@ test("composer color overrides validate, update live and clean up", async () => 
   });
   await Promise.resolve();
   assert.equal(attrs.size, 0);
-  listeners[0]({ composerColors: { surface: "#AABBCC", "send-icon": "#123456", text: "red" } }, "local");
+  listeners[0]({ composerColors: { newValue: { surface: "#AABBCC", "send-icon": "#123456", text: "red" } } }, "local");
   assert.equal(props.get("--ghrc-composer-surface"), "#aabbcc");
   assert.equal(props.get("--ghrc-composer-send-icon"), "#123456");
   assert.equal(attrs.has("data-ghrc-color-text"), false);
-  listeners[0]({ composerColors: { "surface-border": "#ffffff" } }, "local");
+  listeners[0]({ composerColors: { newValue: { "surface-border": "#ffffff" } } }, "local");
   assert.equal(attrs.has("data-ghrc-color-surface"), false);
   assert.equal(attrs.has("data-ghrc-color-surface-border"), true);
   cleanup();
@@ -51,6 +51,13 @@ test("all independent composer colors have corresponding scoped CSS selectors", 
   assert.equal(swatches.length, 22);
   for (const name of swatches) assert.ok(css.includes(`html[data-ghrc-color-${name}]`));
   assert.ok(css.includes("form:has(#prompt-textarea)"));
+  for (const key of ["selection-background", "selection-text"]) {
+    const rule = css.split(`html[data-ghrc-color-${key}]`)[1]?.split("\n")[0];
+    assert.ok(rule, `missing selected text ${key} rule`);
+    assert.ok(rule.includes("#prompt-textarea *"), "nested native editor text inherits the override");
+    assert.ok(rule.includes('[data-composer-markdown][contenteditable="true"] *'), "nested rich editor text inherits the override");
+    assert.ok(rule.includes("!important"), "user selection color takes precedence over theme");
+  }
   for (const attr of ["plus-background", "plus-icon", "plus-hover"]) {
     assert.ok(css.includes(`html[data-ghrc-color-${attr}]`), `plus ${attr} is scoped`);
   }
@@ -75,7 +82,7 @@ test("HEX or picker edits enable individual colors immediately without checkboxe
   const stored = [];
   const chrome = { storage: {
     local: {
-      get: async () => ({ composerColors: { surface: "#AABBCC" }, composerColorSource: { "stop-background": "#008844", "stop-icon": "#ffffff", "plus-background": "#203040", "plus-icon": "#efefef" } }),
+      get: async () => ({ composerColors: { surface: "#AABBCC" }, composerColorSource: { "stop-background": "#008844", "stop-icon": "#ffffff", "plus-background": "#203040", "plus-icon": "#efefef", "selection-background": "#4070a0", "selection-text": "#ffffff" } }),
       set: async value => { stored.push(value.composerColors); },
     },
   }};
@@ -91,7 +98,7 @@ test("HEX or picker edits enable individual colors immediately without checkboxe
     },
   });
   await Promise.resolve();
-  assert.equal(grid.children.length, 19);
+  assert.equal(grid.children.length, 22);
   const [label, controls] = grid.children[0].children;
   const [picker, hex, clear] = controls.children;
   assert.equal(label.children.length, 0, "no redundant enable checkbox");
@@ -118,6 +125,13 @@ test("HEX or picker edits enable individual colors immediately without checkboxe
   assert.equal(plusMarker.hidden, false, "native plus preview is marked as sourced");
   assert.equal(grid.children[17].children[1].children[1].value, "#efefef");
   assert.equal(grid.children[18].children[0].children.length, 0, "hover has no fabricated source marker");
+  const selectionRow = grid.children[6];
+  const selectionMarker = selectionRow.children[0].children[0];
+  const [selectionPicker, selectionHex, selectionClear] = selectionRow.children[1].children;
+  assert.equal(selectionPicker.value, "#4070a0", "preview real ChatGPT selection color");
+  assert.equal(selectionHex.value, "#4070a0");
+  assert.equal(selectionMarker.hidden, false, "selection theme is marked as inherited");
+  assert.equal(selectionClear.hidden, true);
   assert.equal(otherHex.disabled, undefined, "HEX editing starts enabled");
   const flush = () => new Promise(resolve => setImmediate(resolve));
 
@@ -154,6 +168,17 @@ test("HEX or picker edits enable individual colors immediately without checkboxe
   assert.equal(stopMarker.hidden, false);
   assert.equal(stored.at(-1)["stop-background"], undefined);
 
+  selectionHex.value = "#ffaacc";
+  selectionHex.emit("input");
+  await flush();
+  assert.equal(stored.at(-1)["selection-background"], "#ffaacc");
+  assert.equal(selectionMarker.hidden, true, "selected text override is no longer inherited");
+  selectionClear.emit("click");
+  await flush();
+  assert.equal(selectionHex.value, "#4070a0", "Default restores ChatGPT selection preview");
+  assert.equal(selectionMarker.hidden, false);
+  assert.equal(stored.at(-1)["selection-background"], undefined);
+
   plusHex.value = "#abcdef";
   plusHex.emit("input");
   await flush();
@@ -185,6 +210,10 @@ test("stop preview imports native ChatGPT colors without sampling an extension o
   let plusBackground = "rgb(45, 56, 67)", plusIcon = "rgb(22, 33, 44)";
   const button = { querySelector: () => null };
   const plusButton = { querySelector: () => null };
+  const paragraph = {};
+  const editor = { querySelector: () => paragraph };
+  let selectedBackground = "rgb(90, 100, 110)";
+  let selectedText = "rgb(255, 255, 255)";
   const root = {
     hasAttribute: name => attrs.has(name),
     setAttribute: name => attrs.add(name), removeAttribute: name => attrs.delete(name),
@@ -199,8 +228,10 @@ test("stop preview imports native ChatGPT colors without sampling an extension o
   }};
   vm.runInNewContext(source, {
     chrome,
-    document: { documentElement: root, getElementById: () => null, querySelector: selector => selector.includes("composer-plus-btn") ? plusButton : button },
-    getComputedStyle: element => element === root
+    document: { documentElement: root, getElementById: () => null, querySelector: selector => selector.includes("composer-plus-btn") ? plusButton : selector.startsWith("#prompt-textarea") ? editor : button },
+    getComputedStyle: (element, pseudo) => pseudo === "::selection" && element === paragraph
+      ? { backgroundColor: selectedBackground, color: selectedText }
+      : element === root
       ? { getPropertyValue: key => key === "--theme-submit-btn-bg" ? themeBackground : "" }
       : element === plusButton ? { backgroundColor: plusBackground, color: plusIcon }
       : { backgroundColor: background, color: icon },
@@ -215,10 +246,12 @@ test("stop preview imports native ChatGPT colors without sampling an extension o
   assert.equal(saves.at(-1)["plus-background"], "#2d3843");
   assert.equal(saves.at(-1)["plus-icon"], "#16212c");
   assert.equal(saves.at(-1)["plus-hover"], undefined, "never invent hovered colors");
+  assert.equal(saves.at(-1)["selection-background"], "#5a646e");
+  assert.equal(saves.at(-1)["selection-text"], "#ffffff");
   attrs.add("data-ghrc-color-stop-background");
   background = "rgb(18, 52, 86)";
   timers[0]();
-  assert.equal(saves.length, 1, "Flawless override is not imported");
+  assert.equal(saves.at(-1)["stop-background"], undefined, "Flawless override is not imported");
   themeBackground = "#aabbcc";
   timers[0]();
   assert.equal(saves.at(-1)["stop-background"], "#aabbcc");
@@ -232,5 +265,13 @@ test("stop preview imports native ChatGPT colors without sampling an extension o
   attrs.delete("data-ghrc-color-plus-background");
   timers[0]();
   assert.equal(saves.at(-1)["plus-background"], "#636363");
+  attrs.add("data-ghrc-color-selection-background");
+  selectedBackground = "rgb(10, 20, 30)";
+  timers[0]();
+  assert.equal(saves.at(-1)["selection-background"], undefined,
+    "selection override is not misidentified as ChatGPT's theme");
+  attrs.delete("data-ghrc-color-selection-background");
+  timers[0]();
+  assert.equal(saves.at(-1)["selection-background"], "#0a141e");
   cleanup();
 });

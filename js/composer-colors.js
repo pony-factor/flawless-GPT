@@ -47,11 +47,11 @@
       const label = document.createElement("span");
       label.className = "composer-color-label";
       label.textContent = title;
-      const sourceMarker = (key.startsWith("stop-") || key === "plus-background" || key === "plus-icon") ? document.createElement("span") : null;
+      const sourceMarker = (key.startsWith("stop-") || key === "plus-background" || key === "plus-icon" || key.startsWith("selection-")) ? document.createElement("span") : null;
       if (sourceMarker) {
         sourceMarker.className = "composer-color-source";
         sourceMarker.textContent = "*";
-        sourceMarker.title = "Inherited from ChatGPT's Appearance / Accent color settings";
+        sourceMarker.title = "Inherited from ChatGPT's active theme";
         sourceMarker.setAttribute("aria-label", "Inherited from ChatGPT settings");
         sourceMarker.hidden = true;
         label.append(sourceMarker);
@@ -204,6 +204,31 @@
       if (!root.hasAttribute?.("data-ghrc-color-plus-icon")) {
         const icon = cssHex(getComputedStyle(plus.querySelector?.("svg") || plus).color);
         if (icon) source["plus-icon"] = icon;
+      }
+    }
+    // Text selection in ChatGPT's rich editor occurs on nested paragraphs
+    // and spans, not necessarily on the contenteditable container itself.
+    // CSSOM lets the preview report the actual theme highlight while our
+    // ::selection override remains disabled.
+    const editor = document.querySelector?.('#prompt-textarea, [data-composer-markdown][contenteditable="true"]');
+    if (editor && (!root.hasAttribute?.("data-ghrc-color-selection-background")
+        || !root.hasAttribute?.("data-ghrc-color-selection-text"))) {
+      const sample = editor.querySelector?.("p, span") || editor;
+      let nativeSelection;
+      try {
+        nativeSelection = getComputedStyle(sample, "::selection");
+      } catch {
+        // Not every browser/version exposes computed highlight pseudo styles.
+      }
+      if (nativeSelection) {
+        if (!root.hasAttribute?.("data-ghrc-color-selection-background")) {
+          const selectedBackground = cssHex(nativeSelection.backgroundColor);
+          if (selectedBackground) source["selection-background"] = selectedBackground;
+        }
+        if (!root.hasAttribute?.("data-ghrc-color-selection-text")) {
+          const selectedText = cssHex(nativeSelection.color);
+          if (selectedText) source["selection-text"] = selectedText;
+        }
       }
     }
     if (!Object.keys(source).length) return;
