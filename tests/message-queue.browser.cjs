@@ -2120,6 +2120,58 @@ test('inline edit reusing prompt-textarea cannot receive an automatic queued sen
   await p.close();
 });
 
+// The queue briefly paints a textarea over the real composer while restoring
+// a queued payload. Its background must not jump to the white page color.
+for (const variant of [
+  { name: 'dark theme without a painted form', expected: 'rgb(48, 48, 48)' },
+  { name: 'separate composer backdrop', expected: 'rgb(35, 37, 43)' },
+  { name: 'custom composer surface', expected: 'rgb(20, 40, 60)' },
+]) {
+  test(`queued draft overlay matches ${variant.name}`, async () => {
+    const p = await fixture({ active: true });
+    await enqueue(p, 'Queued send');
+    const composer = p.locator('[data-composer-markdown]');
+    await composer.fill('Keep editing this draft');
+    await composer.focus();
+    await p.evaluate(({ name }) => {
+      document.documentElement.setAttribute('data-theme', 'dark');
+      const form = document.querySelector('form');
+      const host = form.parentElement;
+      host.classList.add('composer-parent');
+      document.body.style.backgroundColor = '#181818';
+      if (name === 'separate composer backdrop') {
+        const backdrop = document.createElement('div');
+        backdrop.id = 'composer-background';
+        backdrop.style.backgroundColor = 'rgb(35, 37, 43)';
+        host.insertBefore(backdrop, form);
+      } else if (name === 'custom composer surface') {
+        form.style.backgroundColor = 'rgb(20, 40, 60)';
+      }
+      button.addEventListener('click', event => {
+        if (window.active) return;
+        event.stopImmediatePropagation();
+        const payload = read().trim();
+        window.setTimeout(() => {
+          sent.push(payload);
+          addTurn('user'); addTurn('assistant');
+          clear(); window.active = true; update();
+        }, 800);
+      }, true);
+      finish();
+    }, variant);
+
+    const overlay = p.locator('.ghrc-queue-live-draft');
+    await overlay.waitFor({ timeout: 7000 });
+    assert.equal(await overlay.evaluate(el => getComputedStyle(el).backgroundColor), variant.expected);
+    assert.equal(await overlay.inputValue(), 'Keep editing this draft');
+    await sentCount(p, 1);
+    await p.waitForFunction(() => !document.querySelector('.ghrc-queue-live-draft'));
+    assert.deepEqual(await p.evaluate(() => sent), ['Queued send']);
+    assert.deepEqual(p.errors, []);
+    await p.close();
+  });
+}
+
 test('queued sends preserve typing in an independent draft overlay', async () => {
   const p = await fixture({ active: true });
   await enqueue(p, 'Send queued payload');
