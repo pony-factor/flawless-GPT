@@ -10,6 +10,7 @@
   const MESSAGE_SELECTOR = '[data-testid^="conversation-turn-"], [data-message-author-role], [data-content-search-unit-key]';
   const COMPOSER_SELECTOR = '#prompt-textarea, [contenteditable="true"]';
   const SIDEBAR_LABELS = /^(?:open|close|expand|collapse|show|hide) sidebar$/i;
+  const SIDEBAR_SCROLL_SELECTOR = 'aside, nav, [role="navigation"], [data-testid*="sidebar" i], [data-testid*="history" i], #sidebar';
   const USER_SCROLL_KEYS = new Set([
     "ArrowUp",
     "ArrowDown",
@@ -54,9 +55,14 @@
     const mainScroller = scrollableAncestor(document.querySelector("main, [role='main']"));
     if (mainScroller) return mainScroller;
 
-    const candidates = [...document.querySelectorAll(
-      'main, [role="main"], [class*="overflow-y-auto"], [class*="overflow-auto"]',
-    )].filter(isScrollableElement);
+    // Only search the chat column. A sidebar with a longer history can
+    // otherwise win the largest-scroll-range fallback and be mistaken for
+    // the conversation scroll container on a new or empty chat.
+    const main = document.querySelector('main, [role="main"]');
+    const candidates = main ? [
+      main,
+      ...main.querySelectorAll('[class*="overflow-y-auto"], [class*="overflow-auto"]'),
+    ].filter(isScrollableElement) : [];
 
     if (candidates.length) {
       return candidates.reduce((best, candidate) => {
@@ -96,11 +102,17 @@
     return USER_SCROLL_KEYS.has(event.key);
   }
 
+  function isSidebarScrollTarget(target) {
+    const element = target?.closest ? target : target?.parentElement;
+    return Boolean(element?.closest?.(SIDEBAR_SCROLL_SELECTOR));
+  }
+
   const api = {
     isSendButtonTarget,
     isComposerTarget,
     shouldBeginForKeydown,
     isUserScrollKey,
+    isSidebarScrollTarget,
   };
 
   if (globalThis.__GHRC_TEST__) {
@@ -322,7 +334,9 @@
   }, true);
 
   document.addEventListener("wheel", (event) => {
-    if (!enabled || event.ctrlKey || event.defaultPrevented) return;
+    // Let ChatGPT handle chat-history wheel input itself, even when the
+    // conversation scroller falls back to document.scrollingElement.
+    if (!enabled || event.ctrlKey || event.defaultPrevented || isSidebarScrollTarget(event.target)) return;
     const container = findConversationScrollContainer();
     if (!container.contains(event.target)) return;
     // Horizontal source cards compute overflow-y:auto too, even when they
