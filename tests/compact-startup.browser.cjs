@@ -75,12 +75,12 @@ for (const [route, width, legacy, enabled] of [
       assert.ok(frames.some(f => f.composerTop === undefined), 'sample welcome before composer hydration');
       assert.ok(frames.every(f => f.pending), 'settings must still be pending for every sampled frame');
       assert.ok(frames.every(f => f.welcomeVisible === !home), JSON.stringify(frames));
-      if (home) assert.ok(frames.filter(f => f.composerTop !== undefined).every(f => f.composerTop === 8), JSON.stringify(frames));
+      if (home) assert.ok(frames.filter(f => f.composerTop !== undefined).every(f => f.composerTop === 28), JSON.stringify(frames));
       await page.evaluate(() => document.dispatchEvent(new Event('test:release-settings')));
       await page.waitForFunction(() => !document.documentElement.hasAttribute('data-test-settings-pending'));
       const final = await page.evaluate(() => ({welcomeVisible:!!document.getElementById('welcome').getClientRects().length,top:document.querySelector('form').getBoundingClientRect().top}));
       assert.equal(final.welcomeVisible, !home || !enabled);
-      if (home && enabled) assert.equal(final.top, 8);
+      if (home && enabled) assert.equal(final.top, 28);
       if (!home || !enabled) assert.ok(final.top > 300);
       assert.deepEqual(errors, []);
     } finally {
