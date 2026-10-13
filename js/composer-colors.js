@@ -2,7 +2,7 @@
   "use strict";
   const STORAGE_KEY = "composerColors";
   const SOURCE_KEY = "composerColorSource";
-  const SPECS = [["surface","Bar background","#303030"],["surface-border","Bar border","#666666"],["focus-ring","Focus border and ring","#a97dee"],["text","Typed text","#ffffff"],["caret","Typing cursor","#a97dee"],["placeholder","Placeholder text","#a1a1aa"],["selection-background","Selected text background","#8556c6"],["selection-text","Selected text","#ffffff"],["toolbar-background","Toolbar button backgrounds","#444444"],["toolbar-icon","Toolbar icons and labels","#ffffff"],["toolbar-hover","Toolbar hover","#555555"],["send-background","Send button background","#ffffff"],["send-icon","Send button icon","#202020"],["send-hover","Send button hover","#dadada"],["stop-background","Stop button background","#ffffff"],["stop-icon","Stop button icon","#202020"],["attachment-background","Attachment background","#404040"],["attachment-text","Attachment text","#ffffff"],["attachment-border","Attachment border","#747474"]];
+  const SPECS = [["surface","Bar background","#303030"],["surface-border","Bar border","#666666"],["focus-ring","Focus border and ring","#a97dee"],["text","Typed text","#ffffff"],["caret","Typing cursor","#a97dee"],["placeholder","Placeholder text","#a1a1aa"],["selection-background","Selected text background","#8556c6"],["selection-text","Selected text","#ffffff"],["toolbar-background","Toolbar button backgrounds","#444444"],["toolbar-icon","Toolbar icons and labels","#ffffff"],["toolbar-hover","Toolbar hover","#555555"],["send-background","Send button background","#ffffff"],["send-icon","Send button icon","#202020"],["send-hover","Send button hover","#dadada"],["stop-background","Stop button background","#ffffff"],["stop-icon","Stop button icon","#202020"],["plus-background","+ button background","#444444"],["plus-icon","+ button icon","#ffffff"],["plus-hover","+ button hover","#555555"],["attachment-background","Attachment background","#404040"],["attachment-text","Attachment text","#ffffff"],["attachment-border","Attachment border","#747474"]];
   const HEX = /^#[0-9a-f]{6}$/i;
   const normalizeHex = input => {
     const text = typeof input === "string" ? input.trim() : "";
@@ -47,7 +47,7 @@
       const label = document.createElement("span");
       label.className = "composer-color-label";
       label.textContent = title;
-      const sourceMarker = key.startsWith("stop-") ? document.createElement("span") : null;
+      const sourceMarker = (key.startsWith("stop-") || key === "plus-background" || key === "plus-icon") ? document.createElement("span") : null;
       if (sourceMarker) {
         sourceMarker.className = "composer-color-source";
         sourceMarker.textContent = "*";
@@ -159,7 +159,7 @@
     }
   }
 
-  // Sample actual ChatGPT stop-button colors for the options-page preview.
+  // Sample actual ChatGPT composer-button colors for the options-page preview.
   // Never copy these inherited values into the user's composerColors overrides.
   const cssHex = value => {
     if (typeof value !== "string") return null;
@@ -190,6 +190,20 @@
       if (!root.hasAttribute?.("data-ghrc-color-stop-icon")) {
         const value = cssHex(getComputedStyle(button.querySelector?.("svg") || button).color);
         if (value) source["stop-icon"] = value;
+      }
+    }
+    // The + button opens the attachment/tools menu, not an attachment chip.
+    // Its unmodified background and icon should be discoverable independently
+    // of the toolbar defaults and never be mistaken for a saved override.
+    const plus = document.querySelector?.('button[data-testid="composer-plus-btn"], button#composer-plus-btn, button[aria-label^="Add files and more" i]');
+    if (plus) {
+      if (!root.hasAttribute?.("data-ghrc-color-plus-background")) {
+        const background = cssHex(getComputedStyle(plus).backgroundColor);
+        if (background) source["plus-background"] = background;
+      }
+      if (!root.hasAttribute?.("data-ghrc-color-plus-icon")) {
+        const icon = cssHex(getComputedStyle(plus.querySelector?.("svg") || plus).color);
+        if (icon) source["plus-icon"] = icon;
       }
     }
     if (!Object.keys(source).length) return;
