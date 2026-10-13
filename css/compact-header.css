@@ -1,3 +1,14 @@
+/* The compact homepage no longer needs the native header's top inset. */
+html[data-ghrc-new-chat][data-ghrc-compact-header] main {
+  padding-top: 0 !important;
+}
+
+/* The current app shell reserves toolbar space even with model controls hidden. */
+html[data-ghrc-new-chat][data-ghrc-compact-header]:not([data-ghrc-show-model-controls])
+  [data-app-shell-main-content-layout] {
+  --app-shell-main-content-frame-top-offset: 0px !important;
+}
+
 html[data-ghrc-new-chat][data-ghrc-compact-header] .home-composer-anchor,
 html[data-ghrc-new-chat][data-ghrc-compact-header] #thread > :is(h1, h2, [role="heading"]),
 html[data-ghrc-new-chat][data-ghrc-compact-header] .ghrc-compact-welcome-region {

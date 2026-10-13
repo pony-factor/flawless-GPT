@@ -21,7 +21,7 @@ for (const [route, width, legacy, enabled] of [
     const manifest = JSON.parse(fs.readFileSync(path.join(root, 'manifest.json'), 'utf8'));
     const entry = manifest.content_scripts.find(e => e.js?.includes('js/compact-header.js'));
     assert.equal(entry.run_at, 'document_start');
-    assert.equal(entry.js[1], 'js/compact-header.js');
+    assert.ok(entry.js.indexOf('js/compact-header.js') > entry.js.indexOf('js/extension-context.js'));
     for (const file of ['js/extension-context.js', 'js/compact-header.js', 'css/compact-header.css']) {
       fs.mkdirSync(path.dirname(path.join(extension, file)), { recursive: true });
       fs.copyFileSync(path.join(root, file), path.join(extension, file));
@@ -46,13 +46,13 @@ for (const [route, width, legacy, enabled] of [
     const timers = new Set();
     const server = http.createServer((request, response) => {
       response.writeHead(200, {'content-type':'text/html'});
-      response.write(`<html><head><style>body{margin:0}main{padding-top:64px}.stack{display:flex;flex-direction:column;justify-content:center;min-height:calc(100vh - 64px)}form{width:min(720px,calc(100% - 24px));margin-inline:auto;height:80px}h1{margin:0;height:60px}</style></head><body><main><div ${legacy ? 'id="thread"' : 'class="stack group/home-composer-layout"'} ${legacy ? 'class="stack"' : ''}>${legacy ? '<h1 id="welcome">Welcome</h1>' : '<div class="home-composer-anchor" id="welcome"><h1>Welcome</h1></div>'}<script>
+      response.write(`<html><head><style>body{margin:0}main{padding-top:64px}[data-app-shell-main-content-layout]{--app-shell-main-content-frame-top-offset:52px;padding-top:var(--app-shell-main-content-frame-top-offset)}.stack{display:flex;flex-direction:column;justify-content:center;min-height:calc(100vh - 64px)}form{width:min(720px,calc(100% - 24px));margin-inline:auto;height:80px}h1{margin:0;height:60px}</style></head><body><main><div data-app-shell-main-content-layout="default"><div ${legacy ? 'id="thread"' : 'class="stack group/home-composer-layout"'} ${legacy ? 'class="stack"' : ''}>${legacy ? '<h1 id="welcome">Welcome</h1>' : '<div class="home-composer-anchor" id="welcome"><h1>Welcome</h1></div>'}<script>
         window.framesSeen=[];
         function sample(){const w=document.getElementById('welcome'),c=document.querySelector('form');if(w)framesSeen.push({welcomeVisible:!!w.getClientRects().length,composerTop:c?.getBoundingClientRect().top,pending:document.documentElement.hasAttribute('data-test-settings-pending')});requestAnimationFrame(sample)}requestAnimationFrame(sample);
       </script>`);
       const timer = setTimeout(() => {
         timers.delete(timer);
-        response.end('<form><div id="prompt-textarea" contenteditable="true"></div><button type="button">Send</button></form></div></main></body></html>');
+        response.end('<form><div id="prompt-textarea" contenteditable="true"></div><button type="button">Send</button></form></div></div></main></body></html>');
       }, 300);
       timers.add(timer);
     });
@@ -75,12 +75,12 @@ for (const [route, width, legacy, enabled] of [
       assert.ok(frames.some(f => f.composerTop === undefined), 'sample welcome before composer hydration');
       assert.ok(frames.every(f => f.pending), 'settings must still be pending for every sampled frame');
       assert.ok(frames.every(f => f.welcomeVisible === !home), JSON.stringify(frames));
-      if (home) assert.ok(frames.filter(f => f.composerTop !== undefined).every(f => f.composerTop < 100), JSON.stringify(frames));
+      if (home) assert.ok(frames.filter(f => f.composerTop !== undefined).every(f => f.composerTop === 8), JSON.stringify(frames));
       await page.evaluate(() => document.dispatchEvent(new Event('test:release-settings')));
       await page.waitForFunction(() => !document.documentElement.hasAttribute('data-test-settings-pending'));
       const final = await page.evaluate(() => ({welcomeVisible:!!document.getElementById('welcome').getClientRects().length,top:document.querySelector('form').getBoundingClientRect().top}));
       assert.equal(final.welcomeVisible, !home || !enabled);
-      if (home && enabled) assert.ok(final.top < 100);
+      if (home && enabled) assert.equal(final.top, 8);
       if (!home || !enabled) assert.ok(final.top > 300);
       assert.deepEqual(errors, []);
     } finally {
