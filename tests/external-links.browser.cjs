@@ -106,6 +106,28 @@ test('sidebar mode adds only the sidebar action and preserves normal new-tab cli
   await page.close();
 });
 
+test('image card capture handlers cannot intercept the sidebar icon', async () => {
+  const page = await fixture({ openExternalLinksInSplitView: true });
+  await page.locator('.ghrc-link-sidebar-button').waitFor();
+  await page.addStyleTag({ content: 'main p:first-child{position:relative;pointer-events:none}#image-overlay{position:absolute;inset:0;pointer-events:auto}' });
+  await page.evaluate(() => {
+    const overlay = document.createElement('button');
+    overlay.id = 'image-overlay';
+    overlay.setAttribute('aria-label', 'Open image');
+    document.querySelector('#source').parentElement.append(overlay);
+    window.imageViewerClicks = 0;
+    document.querySelector('main').addEventListener('click', event => {
+      imageViewerClicks++;
+      event.stopImmediatePropagation();
+    }, true);
+  });
+  await page.locator('.ghrc-link-sidebar-button svg rect').click();
+  await page.frameLocator('#ghrc-link-preview iframe').frameLocator('iframe').locator('h1').waitFor();
+  assert.equal(await page.evaluate(() => imageViewerClicks), 0);
+  assert.equal((await page.evaluate(() => openedLinks)).length, 0);
+  await page.close();
+});
+
 test('embedded citation buttons open the actual source beside chat without invoking native navigation', async () => {
   const page = await fixture({ openExternalLinksInSplitView: true });
   await page.evaluate(() => {

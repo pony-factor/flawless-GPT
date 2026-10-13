@@ -631,12 +631,6 @@
     sidebar.title = "Open beside chat";
     sidebar.setAttribute("aria-label", "Open link beside chat");
     sidebar.innerHTML = '<svg viewBox="0 0 20 20" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="2.5" y="3" width="15" height="14" rx="2"/><path d="M11 3v14"/></svg>';
-    sidebar.addEventListener("click", (event) => {
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      const href = sidebar.dataset.href;
-      if (href) showLinkPreview(href, link);
-    });
 
     actions.append(sidebar);
     linkActions.set(link, actions);
@@ -842,6 +836,17 @@
   });
 
   document.addEventListener("click", (event) => {
+    const sidebar = event.target.closest?.(".ghrc-link-sidebar-button");
+    if (sidebar) {
+      // Image cards handle clicks during React's capture phase. Intercept the
+      // sidebar action before the card can open its image viewer.
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      const href = sidebar.dataset.href;
+      const source = sidebar.closest(".ghrc-link-actions")?.previousSibling;
+      if (href) showLinkPreview(href, source);
+      return;
+    }
     const link = event.target.closest?.("a[href]");
     stripTrackingFromLink(link);
     openExternalLink(event, link);
