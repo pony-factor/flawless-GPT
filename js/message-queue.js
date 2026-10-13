@@ -1345,7 +1345,7 @@
     }
     for (const element of layers) {
       const color = getComputedStyle(element).backgroundColor;
-      if (color && color !== "transparent" && !/^rgba\\([^)]*,\\s*0(?:\\.0+)?\\)$/.test(color)) return color;
+      if (color && color !== "transparent" && !/^rgba\([^)]*,\s*0(?:\.0+)?\)$/.test(color)) return color;
     }
     const root = document.documentElement;
     if (root.hasAttribute("data-ghrc-color-surface")) {
