@@ -63,8 +63,20 @@
       const image = document.createElement("img");
       image.alt = "";
       image.draggable = false;
-      image.src = chrome.runtime.getURL("artwork/squeaky-belle-full.webp");
+      const stillSource = chrome.runtime.getURL("artwork/squeaky-belle-full.webp");
+      const animatedSource = chrome.runtime.getURL("artwork/squeaky-belle-full.gif");
+      image.src = stillSource;
+      // Warm the GIF cache so the first hover does not flash an empty image.
+      const animatedPreload = new Image();
+      animatedPreload.src = animatedSource;
       link.append(image);
+      const updateMascotAnimation = () => {
+        const source = link.matches(":hover, :focus-visible") ? animatedSource : stillSource;
+        if (image.src !== source) image.src = source;
+      };
+      for (const eventName of ["mouseenter", "mouseleave", "focus", "blur"]) {
+        link.addEventListener(eventName, updateMascotAnimation);
+      }
       link.addEventListener("click", event => {
         const controls = Array.from(document.querySelectorAll(NEW_CHAT_SELECTOR)).filter(control => control !== link);
         const native = controls.find(control => control.getClientRects().length) || controls[0];
