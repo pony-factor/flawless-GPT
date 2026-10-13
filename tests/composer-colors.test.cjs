@@ -70,7 +70,7 @@ test("HEX or picker edits enable individual colors immediately without checkboxe
   const stored = [];
   const chrome = { storage: {
     local: {
-      get: async () => ({ composerColors: { surface: "#AABBCC" } }),
+      get: async () => ({ composerColors: { surface: "#AABBCC" }, composerColorSource: { "stop-background": "#008844", "stop-icon": "#ffffff" } }),
       set: async value => { stored.push(value.composerColors); },
     },
   }};
@@ -96,6 +96,13 @@ test("HEX or picker edits enable individual colors immediately without checkboxe
 
   const [otherPicker, otherHex, otherClear] = grid.children[1].children[1].children;
   assert.equal(otherClear.hidden, true, "untouched colors inherit native theme");
+  const stopRow = grid.children[14];
+  const stopMarker = stopRow.children[0].children[0];
+  const [stopPicker, stopHex, stopClear] = stopRow.children[1].children;
+  assert.equal(stopPicker.value, "#008844", "source accent replaces the white placeholder");
+  assert.equal(stopHex.value, "#008844");
+  assert.equal(stopMarker.hidden, false, "inherited preview is marked with an asterisk");
+  assert.equal(stopClear.hidden, true, "source preview does not count as an override");
   assert.equal(otherHex.disabled, undefined, "HEX editing starts enabled");
   const flush = () => new Promise(resolve => setImmediate(resolve));
 
@@ -121,6 +128,17 @@ test("HEX or picker edits enable individual colors immediately without checkboxe
   assert.equal(hex.value, "#123456");
   assert.equal(stored.at(-1).surface, "#123456");
 
+  stopHex.value = "#123456";
+  stopHex.emit("input");
+  await flush();
+  assert.equal(stopMarker.hidden, true, "custom stop colors are not marked inherited");
+  assert.equal(stored.at(-1)["stop-background"], "#123456");
+  stopClear.emit("click");
+  await flush();
+  assert.equal(stopHex.value, "#008844", "Default restores the source accent");
+  assert.equal(stopMarker.hidden, false);
+  assert.equal(stored.at(-1)["stop-background"], undefined);
+
   clear.emit("click");
   await flush();
   assert.equal(clear.hidden, true);
@@ -131,4 +149,49 @@ test("HEX or picker edits enable individual colors immediately without checkboxe
   await flush();
   assert.equal(otherClear.hidden, true);
   assert.equal(stored.at(-1)["surface-border"], undefined);
+});
+
+
+test("stop preview imports native ChatGPT colors without sampling an extension override", async () => {
+  const attrs = new Set(), saves = [], timers = [];
+  let cleanup;
+  let background = "rgb(0, 170, 68)", icon = "rgb(255, 255, 255)", themeBackground = "";
+  const button = { querySelector: () => null };
+  const root = {
+    hasAttribute: name => attrs.has(name),
+    setAttribute: name => attrs.add(name), removeAttribute: name => attrs.delete(name),
+    style: { setProperty() {}, removeProperty() {} },
+  };
+  const chrome = { storage: {
+    local: {
+      get: async () => ({ composerColors: {} }),
+      set: async snapshot => { saves.push(snapshot.composerColorSource); },
+    },
+    onChanged: { addListener() {}, removeListener() {} },
+  }};
+  vm.runInNewContext(source, {
+    chrome,
+    document: { documentElement: root, getElementById: () => null, querySelector: () => button },
+    getComputedStyle: element => element === root
+      ? { getPropertyValue: key => key === "--theme-submit-btn-bg" ? themeBackground : "" }
+      : { backgroundColor: background, color: icon },
+    setInterval: fn => { timers.push(fn); return 1; }, clearInterval() {},
+    globalThis: { __ghrcExtensionContext: {
+      active: () => true, run: fn => fn(), onStop: fn => { cleanup = fn; },
+    }},
+  });
+  await Promise.resolve();
+  assert.equal(saves.at(-1)["stop-background"], "#00aa44");
+  assert.equal(saves.at(-1)["stop-icon"], "#ffffff");
+  attrs.add("data-ghrc-color-stop-background");
+  background = "rgb(18, 52, 86)";
+  timers[0]();
+  assert.equal(saves.length, 1, "Flawless override is not imported");
+  themeBackground = "#aabbcc";
+  timers[0]();
+  assert.equal(saves.at(-1)["stop-background"], "#aabbcc");
+  attrs.delete("data-ghrc-color-stop-background");
+  timers[0]();
+  assert.equal(saves.at(-1)["stop-background"], "#123456");
+  cleanup();
 });

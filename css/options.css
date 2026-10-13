@@ -623,6 +623,8 @@ button.secondary {
 #composer-color-settings .composer-color-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,330px),1fr)); gap:8px 16px; margin:12px 0; }
 #composer-color-settings .composer-color-row { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px 12px; }
 #composer-color-settings .composer-color-label { font-size:13px; font-weight:400; margin:0; }
+#composer-color-settings .composer-color-source { margin-left:2px; font-weight:600; cursor:help; }
+#composer-color-settings .composer-color-source[hidden] { display:none; }
 #composer-color-settings .composer-color-controls { display:flex; flex:0 1 auto; align-items:center; gap:6px; }
 #composer-color-settings input[type="color"] { cursor:pointer; flex:0 0 42px; height:30px; width:42px; padding:2px; }
 #composer-color-settings .composer-color-hex { width:92px; height:30px; padding:4px 7px; font-size:12px; }
