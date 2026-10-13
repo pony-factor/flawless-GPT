@@ -248,3 +248,94 @@ test('leaves popup URLs untouched when tracking removal is disabled', () => {
   fixture.window.open(input, '_blank');
   assert.deepEqual(fixture.opened, [[input, '_blank']]);
 });
+
+
+test('removes a citation favicon and its standalone DOC filename from copied blockquotes', () => {
+  const input = [
+    'Under Part II.A.1, the report states:',
+    '',
+    '> Contractual claimants are generally afforded the status of mere unsecured creditors.',
+    '>',
+    '> [image](https://www.google.com/s2/favicons?domain=https://www.newyorkfed.org\\&sz=32)',
+    '>',
+    '> 2074323_5.DOC',
+    '>',
+    '',
+    '[Open directly to page 25](https://www.newyorkfed.org/medialibrary/media/markets/Full_Report.pdf#page=30)',
+  ].join('\n');
+  const result = sanitizeCopiedText(input);
+  assert.doesNotMatch(result, /favicons|2074323_5\.DOC|\[image\]/);
+  assert.match(result, /Contractual claimants/);
+  assert.match(result, /Full_Report\.pdf#page=30/);
+});
+
+test('removes a standalone favicon without swallowing the following content', () => {
+  const input = 'One\n\n![image](https://www.google.com/s2/favicons?domain=sec.gov&sz=32)\n\nTwo';
+  assert.equal(sanitizeCopiedText(input), 'One\n\n\n\nTwo');
+});
+
+test('preserves image citations and document filenames that are actual content', () => {
+  const input = [
+    'See 2074323_5.DOC for the precise paragraph.',
+    '![Figure](https://newyorkfed.org/figure.png)',
+    '[image](https://newyorkfed.org/diagram.png)',
+    '[Open report](https://newyorkfed.org/full.pdf)',
+  ].join('\n');
+  assert.equal(sanitizeCopiedText(input), input);
+});
+
+test('does not remove an unrelated filename unless immediately after a citation favicon', () => {
+  const input = '[image](https://www.google.com/s2/favicons?domain=sec.gov&sz=32)\n\nThe report states:\n\nsummary.DOC';
+  const result = sanitizeCopiedText(input);
+  assert.doesNotMatch(result, /favicons/);
+  assert.match(result, /summary\.DOC/);
+});
+
+test('removes decorative favicons from rich HTML but preserves real image content', () => {
+  const input = '<p>Source <img src="https://www.google.com/s2/favicons?domain=sec.gov&amp;sz=32" alt="image"></p><img src="https://sec.gov/chart.png" alt="Chart">';
+  assert.equal(sanitizeCopiedHtml(input), '<p>Source </p><img src="https://sec.gov/chart.png" alt="Chart">');
+});
+
+test('citation previews are excluded regardless of optional text-formatting settings', () => {
+  const input = '[image](https://www.google.com/s2/favicons?domain=sec.gov&sz=32)\n\nexample.PDF';
+  assert.doesNotMatch(sanitizeCopiedText(input, {
+    stripTracking: false, stripBold: false, plainQuotes: false, underscoreItalics: false,
+  }), /favicon|example\.PDF/);
+});
+
+
+test('rich clipboard keeps explicitly disabled formatting while removing citation favicons', async () => {
+  const writes = [];
+  class Clipboard {
+    write(items) { writes.push(items); return Promise.resolve(); }
+  }
+  class ClipboardItem {
+    constructor(data, options) { this.data = data; this.types = Object.keys(data); this.presentationStyle = options?.presentationStyle; }
+    getType(type) { return Promise.resolve(this.data[type]); }
+  }
+  const clipboard = new Clipboard();
+  const context = {
+    navigator: { clipboard },
+    Clipboard,
+    ClipboardItem,
+    Blob,
+    URL,
+    document: {
+      documentElement: {
+        getAttribute(name) {
+          return name === 'data-ghrc-strip-copied-bold' ? 'false' : 'true';
+        },
+      },
+    },
+    window: { open() {} },
+  };
+  vm.runInNewContext(source, context);
+  const image = '<img src="https://www.google.com/s2/favicons?domain=sec.gov&amp;sz=32">';
+  await clipboard.write([new ClipboardItem({
+    'text/html': Promise.resolve(new Blob(['<strong>Important</strong>' + image], { type: 'text/html' })),
+    'text/plain': Promise.resolve(new Blob(['**Important**\n[image](https://www.google.com/s2/favicons?domain=sec.gov&sz=32)'], { type: 'text/plain' })),
+  })]);
+  const copy = writes[0][0];
+  assert.equal(await (await copy.getType('text/html')).text(), '<strong>Important</strong>');
+  assert.equal(await (await copy.getType('text/plain')).text(), '**Important**');
+});

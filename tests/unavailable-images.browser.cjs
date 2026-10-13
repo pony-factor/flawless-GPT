@@ -99,3 +99,32 @@ test('recover DIL citations and catalog artwork after an original image fails', 
     assert.equal(await page.locator('#image').getAttribute('aria-label'), 'End Zone');
   } finally { await browser.close(); }
 });
+
+
+test('ignores failed citation favicon images instead of recovering them as artwork', async () => {
+  const browser = await chromium.launch({
+    executablePath: process.env.BROWSER_EXECUTABLE || '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser',
+    headless: true,
+  });
+  const page = await browser.newPage();
+  try {
+    await page.route('https://www.google.com/s2/favicons**', route => route.abort());
+    await page.setContent('<div data-message-author-role="assistant"><a href="https://source.example/report">Report</a><img id="citation-icon" alt="image" src="https://www.google.com/s2/favicons?domain=https://www.newyorkfed.org&sz=32"></div>');
+    await page.locator('#citation-icon').evaluate(image => image.decode().catch(() => {}));
+    await page.evaluate(() => {
+      window.recoveryCalls = 0;
+      window.__ghrcExtensionContext = { active: () => true, onStop: () => {} };
+      window.chrome = { runtime: { sendMessage: async () => {
+        window.recoveryCalls++;
+        return { ok: true, url: 'https://source.example/report', html: '<img alt="image" src="photo.png">' };
+      } } };
+    });
+    await page.addScriptTag({ content: fs.readFileSync(path.join(__dirname, '../js/unavailable-images.js'), 'utf8') });
+    await page.waitForTimeout(150);
+    assert.equal(await page.evaluate(() => recoveryCalls), 0);
+    assert.equal(await page.locator('#citation-icon').getAttribute('src'), 'https://www.google.com/s2/favicons?domain=https://www.newyorkfed.org&sz=32');
+    assert.equal(await page.locator('#citation-icon').evaluate(img => img.parentElement.querySelectorAll('img').length), 1);
+  } finally {
+    await browser.close();
+  }
+});

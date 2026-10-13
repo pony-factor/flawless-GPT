@@ -5,6 +5,62 @@
   const UNDERSCORE_COPIED_ITALICS_ATTR = "data-ghrc-underscore-copied-italics";
   const URL_PATTERN = /https?:\/\/[^\s<>"'`\])}]+/gi;
   const CONTENT_REFERENCE_PATTERN = /:chatgpt-content-reference\{[^}\r\n]*\}/g;
+  // Source-preview favicons are decoration, not cited images. The copied
+  // Markdown may include the icon and a bare file name as an extra paragraph.
+  const CITATION_PREVIEW_FILE_PATTERN = /^[a-z0-9][a-z0-9_.() -]{0,150}\.(?:docx?|pdf|rtf|txt|html?)$/i;
+
+  function isCitationFaviconUrl(value) {
+    try {
+      const url = new URL(value.replace(/\\&/g, "&").replace(/&amp;/gi, "&"));
+      return url.protocol === "https:"
+        && ["www.google.com", "google.com"].includes(url.hostname)
+        && url.pathname === "/s2/favicons";
+    } catch {
+      return false;
+    }
+  }
+
+  function isBlankPreviewLine(line) {
+    return !line.replace(/^\s*(?:>\s*)+/, "").trim();
+  }
+
+  function stripCitationPreviewThumbnails(value) {
+    if (typeof value !== "string" || !value) return value;
+    const lines = value.split(/\r?\n/);
+    const removed = new Set();
+    const imageLine = /^!?\[(?:image|favicon|thumbnail)\]\((https?:\/\/[^\s)]+)\)$/i;
+    for (let index = 0; index < lines.length; index += 1) {
+      const content = lines[index].replace(/^\s*(?:>\s*)+/, "").trim();
+      const match = content.match(imageLine);
+      if (!match || !isCitationFaviconUrl(match[1])) continue;
+      removed.add(index);
+
+      let captionIndex = index + 1;
+      while (captionIndex < lines.length && captionIndex <= index + 4
+        && isBlankPreviewLine(lines[captionIndex])) captionIndex++;
+      const caption = lines[captionIndex]?.replace(/^\s*(?:>\s*)+/, "").trim();
+      if (!caption || !CITATION_PREVIEW_FILE_PATTERN.test(caption)) continue;
+
+      // Remove only a stand-alone filename directly following this known
+      // favicon, not document titles, hyperlinks, or filenames in prose.
+      for (let cursor = index + 1; cursor <= captionIndex; cursor++) removed.add(cursor);
+      for (let cursor = captionIndex + 1; cursor <= captionIndex + 2
+        && cursor < lines.length && isBlankPreviewLine(lines[cursor]); cursor++) {
+        removed.add(cursor);
+      }
+    }
+    if (!removed.size) return value;
+    return lines.filter((_, index) => !removed.has(index))
+      .join(value.includes("\r\n") ? "\r\n" : "\n");
+  }
+
+  function stripCitationPreviewHtml(value) {
+    return value.replace(/<img\b[^>]*>/gi, (tag) => {
+      const source = tag.match(/\bsrc\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i);
+      return source && isCitationFaviconUrl(source[1] ?? source[2] ?? source[3]) ? "" : tag;
+    });
+  }
+
 
   function stripTrackingFromUrlValue(value) {
     const htmlAmpersands = /&amp;/i.test(value);
@@ -73,7 +129,7 @@
   function sanitizeCopiedHtml(value, options = {}) {
     if (typeof value !== "string" || !value) return value;
     const settings = normalizedCopyOptions(options);
-    let result = value;
+    let result = stripCitationPreviewHtml(value);
     if (settings.stripBold) {
       result = result.replace(/<\/?(?:strong|b)\b[^>]*>/gi, "");
     }
@@ -146,7 +202,7 @@
 
   function sanitizeCopiedText(value, options = {}) {
     const settings = normalizedCopyOptions(options);
-    let result = convertReferenceLinksToInlineMarkdown(value);
+    let result = stripCitationPreviewThumbnails(convertReferenceLinksToInlineMarkdown(value));
     if (settings.stripBold) result = stripMarkdownBold(result);
     if (settings.underscoreItalics) result = normalizeMarkdownItalics(result);
     if (settings.plainQuotes) result = normalizeSmartQuotes(result);
@@ -162,6 +218,8 @@
       normalizeSmartQuotes,
       normalizeMarkdownItalics,
       convertReferenceLinksToInlineMarkdown,
+      stripCitationPreviewThumbnails,
+      stripCitationPreviewHtml,
       sanitizeCopiedText,
       sanitizeCopiedHtml,
     };
@@ -244,10 +302,10 @@
                 data[type] = blob;
               }
             }
-            const options = item.presentationStyle
+            const itemOptions = item.presentationStyle
               ? { presentationStyle: item.presentationStyle }
               : undefined;
-            return new ClipboardItem(data, options);
+            return new ClipboardItem(data, itemOptions);
           });
           return original.call(this, sanitizedItems);
         } catch {

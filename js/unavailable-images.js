@@ -165,11 +165,22 @@
     image.src = urls[0];
   }
 
+  function isCitationFavicon(element) {
+    if (element.tagName !== "IMG") return false;
+    const raw = element.currentSrc || element.getAttribute("src") || "";
+    try {
+      const url = new URL(raw, location.href);
+      return url.protocol === "https:"
+        && ["www.google.com", "google.com"].includes(url.hostname)
+        && url.pathname === "/s2/favicons";
+    } catch { return false; }
+  }
+
   function scan() {
     scheduled = false;
     if (!context.active()) return;
     for (const element of document.querySelectorAll(`[role="img"][aria-label="Image unavailable"], ${ROOT.split(", ").map(root => `${root} img`).join(", ")}`)) {
-      if (attempted.has(element) || element.tagName === "IMG" && (!element.complete || element.naturalWidth || !element.getAttribute("src"))) continue;
+      if (attempted.has(element) || isCitationFavicon(element) || element.tagName === "IMG" && (!element.complete || element.naturalWidth || !element.getAttribute("src"))) continue;
       attempted.add(element);
       void recover(element).catch(() => {});
     }
