@@ -18,3 +18,10 @@ for (const page of ["popup.html", "options.html"]) {
     }
   });
 }
+
+test("web commit guidance sync status is centered below the editor", () => {
+  const html = fs.readFileSync(path.join(root, "options.html"), "utf8");
+  const css = fs.readFileSync(path.join(root, "css/options.css"), "utf8");
+  assert.match(html, /<p\s+id="web-commit-guidance-status"[^>]*role="status"/);
+  assert.match(css, /#web-commit-guidance-status\s*\{\s*text-align:\s*center\s*;/);
+});
