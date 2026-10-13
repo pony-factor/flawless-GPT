@@ -1,0 +1,11 @@
+/* Mask the sidebar's transient light surface before ChatGPT finishes loading. */
+html[data-ghrc-sidebar-loading] :is(
+  #stage-slideover-sidebar,
+  #stage-sidebar-tiny-bar,
+  [data-testid="sidebar"],
+  [data-testid="sidebar-container"],
+  .bg-token-sidebar-surface-primary,
+  .bg-token-sidebar-surface-secondary
+) {
+  background-color: #000 !important;
+}
