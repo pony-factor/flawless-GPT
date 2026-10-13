@@ -68,6 +68,38 @@ test('one mascot starts native New chat without opening the sidebar', async () =
   await page.close();
 });
 
+
+test('mascot animates in place on hover and returns to its still frame on exit', async () => {
+  const page = await fixture();
+  const mascot = page.locator('#ghrc-flawless-corner');
+  const image = mascot.locator('img');
+  const initialBounds = await mascot.boundingBox();
+
+  assert.ok((await image.getAttribute('src')).endsWith('artwork/squeaky-belle-full.webp'));
+  await mascot.hover();
+  assert.ok((await image.getAttribute('src')).endsWith('artwork/squeaky-belle-full.gif'));
+  assert.deepEqual(await mascot.boundingBox(), initialBounds);
+
+  await page.mouse.move(600, 300);
+  assert.ok((await image.getAttribute('src')).endsWith('artwork/squeaky-belle-full.webp'));
+  assert.deepEqual(await mascot.boundingBox(), initialBounds);
+
+  await mascot.hover();
+  assert.ok((await image.getAttribute('src')).endsWith('artwork/squeaky-belle-full.gif'));
+  await mascot.click();
+  assert.equal(await page.evaluate(() => window.newChats), 1);
+  assert.equal(await page.evaluate(() => window.sidebarClicks || 0), 0);
+  assert.deepEqual(page.errors, []);
+  await page.close();
+});
+
+test('animated mascot image is web-accessible to ChatGPT pages', () => {
+  const manifest = JSON.parse(read('manifest.json'));
+  const resources = manifest.web_accessible_resources.flatMap(group => group.resources);
+  assert.ok(resources.includes('artwork/squeaky-belle-full.webp'));
+  assert.ok(resources.includes('artwork/squeaky-belle-full.gif'));
+});
+
 test('native controls return when extension stops', async () => {
   const page = await fixture();
   await page.setViewportSize({ width: 320, height: 600 });
