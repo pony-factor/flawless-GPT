@@ -121,6 +121,11 @@ button.standalone-settings-tab[aria-selected="true"] {
   margin-top: 0;
 }
 
+/* Center all guidance sync states beneath the editor, not the guidance itself. */
+#web-commit-guidance-status {
+  text-align: center;
+}
+
 @media (max-width: 599px) {
   .standalone-settings-tabs {
     grid-template-columns: repeat(5, minmax(112px, 1fr));
