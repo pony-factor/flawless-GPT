@@ -100,6 +100,28 @@ test('external-link arrows can be hidden and restored without hiding sidebar but
   await page.close();
 });
 
+test('hidden arrow wrappers leave no gap before trailing punctuation', async () => {
+  const page = await fixture({ openExternalLinksInSplitView: true, hideExternalLinkArrows: true });
+  await page.locator('.ghrc-link-with-actions').waitFor();
+  await page.evaluate(() => {
+    const link = document.getElementById('source');
+    link.innerHTML = 'Source reference<span id="native-arrow-wrapper" style="display:inline-block;width:14px;margin-left:4px"><svg width="14" height="14"><path d="M3 11L11 3"/></svg></span>';
+    link.parentElement.after(document.createTextNode(', next phrase.'));
+  });
+  await page.locator('.ghrc-link-trailing-punctuation').waitFor();
+  const gap = await page.evaluate(() => {
+    const range = document.createRange();
+    range.selectNodeContents(document.getElementById('source').firstChild);
+    const labelEnd = range.getBoundingClientRect().right;
+    range.selectNodeContents(document.querySelector('.ghrc-link-trailing-punctuation'));
+    return range.getBoundingClientRect().left - labelEnd;
+  });
+  assert.ok(Math.abs(gap) < 1, `Unwanted gap before punctuation: ${gap}px`);
+  assert.equal(await page.locator('#native-arrow-wrapper').isVisible(), false);
+  assert.equal(await page.locator('.ghrc-link-sidebar-button').isVisible(), true);
+  await page.close();
+});
+
 test('sidebar icons follow trailing punctuation without changing the sentence or destination', async () => {
   const page = await fixture({ openExternalLinksInSplitView: true }, null, true);
   await page.locator('.ghrc-link-with-actions').waitFor();

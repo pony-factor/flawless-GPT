@@ -698,7 +698,16 @@
         && !link.querySelector('img, picture, video, canvas')) {
       // Native text links append their new-tab SVG after the link label.
       const icons = link.querySelectorAll('svg');
-      if (icons.length === 1) icons[0].setAttribute('data-ghrc-external-link-arrow', '');
+      if (icons.length === 1) {
+        const icon = icons[0];
+        const wrapper = icon.parentElement;
+        // Hide the icon's empty layout wrapper too; hiding only its SVG can
+        // leave a reserved icon-width gap before the sentence punctuation.
+        const arrow = wrapper !== link && wrapper.childElementCount === 1
+          && [...wrapper.childNodes].every(node => node === icon || (node.nodeType === 3 && !node.textContent.trim()))
+          ? wrapper : icon;
+        arrow.setAttribute('data-ghrc-external-link-arrow', '');
+      }
     }
     // Native hover cards repeat the URL in a portal outside the conversation.
     // Only decorate the original chat link, not its popup copy.
