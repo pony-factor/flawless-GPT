@@ -197,6 +197,22 @@ test('image card capture handlers cannot intercept the sidebar icon', async () =
   await page.close();
 });
 
+test('ordinary link popovers keep a single sidebar icon', async () => {
+  const page = await fixture({ openExternalLinksInSplitView: true });
+  await page.locator('.ghrc-link-with-actions').waitFor();
+  await page.evaluate(() => {
+    const group = document.getElementById('source').parentElement;
+    const trigger = document.createElement('span');
+    trigger.setAttribute('data-d-component', 'popover-trigger');
+    trigger.__reactFiber$fixture = { memoizedProps: { __dilHostElement: { props: { onVisibleKey: 'https://example.org/source' } } } };
+    group.before(trigger);
+    trigger.append(group);
+  });
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  assert.equal(await page.locator('.ghrc-link-sidebar-button').count(), 1);
+  await page.close();
+});
+
 test('inline citation icons open the first source while the citation keeps its complete source list', async () => {
   const page = await fixture({ openExternalLinksInSplitView: true }, null, true);
   await page.evaluate(() => {

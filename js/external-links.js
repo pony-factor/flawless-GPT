@@ -692,11 +692,19 @@
   function ensureCitationActions(button) {
     const inline = button.matches('[data-d-component="popover-trigger"]')
       && Boolean(button.closest('main')) && !button.querySelector('a[href]');
-    if (!splitViewEnabled || (!inline && !button.closest('[role="dialog"]'))) return;
+    if (!splitViewEnabled || (!inline && !button.closest('[role="dialog"]'))) {
+      linkActions.get(button)?.remove();
+      button.classList.remove("ghrc-citation-source");
+      return;
+    }
     button.dispatchEvent(new Event("ghrc-resolve-citation-url", { bubbles: true }));
     const href = button.getAttribute("data-ghrc-citation-url");
     let url;
-    try { url = new URL(href); } catch { return; }
+    try { url = new URL(href); } catch {
+      linkActions.get(button)?.remove();
+      button.classList.remove("ghrc-citation-source");
+      return;
+    }
     if (!["http:", "https:"].includes(url.protocol)) return;
     let actions = linkActions.get(button);
     if (!actions?.isConnected) {
