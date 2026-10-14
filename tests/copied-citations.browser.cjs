@@ -8,7 +8,7 @@ test('response Copy preserves all citation destinations in text and HTML and sta
   const browser = await chromium.launch({ executablePath: '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser', headless: true });
   try {
     const page = await browser.newPage();
-    await page.setContent('<main><article id="other"><button data-d-component="popover-trigger">Scooch</button></article><article id="response"><p>Consider Scooch.</p><button id="source" data-d-component="popover-trigger"><span>Scooch</span><span>+2</span></button><button data-testid="copy-turn-btn" aria-label="Copy">Copy</button><pre><button id="code-copy">Copy</button></pre></article></main>');
+    await page.setContent('<main><article id="other"><button data-d-component="popover-trigger">Scooch</button></article><div id="response"><div data-message-author-role="assistant"><p>Consider Scooch.</p><button id="source" data-d-component="popover-trigger"><span>Scooch</span><span>+2</span></button></div><button data-testid="copy-turn-btn" aria-label="Copy">Copy</button><pre><button id="code-copy">Copy</button></pre></div></main>');
     await page.evaluate(() => {
       window.writes = [];
       class Clipboard {
@@ -46,6 +46,7 @@ test('response Copy preserves all citation destinations in text and HTML and sta
     assert.match(copied, /\[scooch.example\]\(https:\/\/scooch.example\/drop\)/);
     assert.match(copied, /\[amazon.example\]\(https:\/\/amazon.example\/listing\)/);
     assert.doesNotMatch(copied, /\+2|wrong-turn|unrelated|utm_source/);
+    assert.match(copied, /moneymate\)\n\[scooch.example\].*\n\[amazon.example\]/);
     assert.match(copied, /\[View listing\]\(https:\/\/amazon.example\/listing\)/);
     await page.locator('#code-copy').click();
     assert.equal(await page.evaluate(() => writes[1]), 'Scooch\n+2');
@@ -59,6 +60,7 @@ test('response Copy preserves all citation destinations in text and HTML and sta
     await page.waitForFunction(() => writes.length === 3);
     const rich = await page.evaluate(() => writes[2]);
     assert.equal((rich['text/html'].match(/<a /g) || []).length, 3);
+    assert.equal((rich['text/html'].match(/<\/a><br><a /g) || []).length, 2);
     assert.match(rich['text/html'], /<p>Consider Scooch\.<\/p>/);
     assert.doesNotMatch(rich['text/html'], /\+2|utm_source|wrong-turn/);
     assert.match(rich['text/plain'], /\[Scooch\]\(https:\/\/scooch.example\/moneymate\)/);
@@ -83,5 +85,26 @@ test('response Copy preserves all citation destinations in text and HTML and sta
     assert.equal(fallback.prevented, true);
     assert.match(fallback.text, /\[Scooch\]\(https:\/\/scooch.example\/moneymate\)/);
     assert.equal((fallback.html.match(/<a /g) || []).length, 3);
+    await page.evaluate(() => {
+      document.querySelector('[data-testid="copy-turn-btn"]').onclick = () => {
+        const temporary = document.createElement('div');
+        temporary.addEventListener('copy', event => {
+          event.clipboardData.setData('text/plain', 'Before.\n\n\nScooch\n\n+2\n\n\nAfter.');
+          event.clipboardData.setData('text/html', '<p>Before.</p><div><p>Scooch</p><p>+2</p></div><p>After.</p>');
+          event.preventDefault();
+          event.stopPropagation();
+        });
+        document.body.append(temporary);
+        const data = new DataTransfer();
+        temporary.dispatchEvent(new ClipboardEvent('copy', { clipboardData: data, bubbles: true, cancelable: true }));
+        writes.push({ text: data.getData('text/plain'), html: data.getData('text/html') });
+        temporary.remove();
+      };
+    });
+    await page.locator('[data-testid="copy-turn-btn"]').click();
+    const stopped = await page.evaluate(() => writes[4]);
+    assert.match(stopped.text, /Before\.\n\n\[Scooch\]/);
+    assert.doesNotMatch(stopped.text, /\n{3}|\+2/);
+    assert.equal((stopped.html.match(/<a /g) || []).length, 3);
   } finally { await browser.close(); }
 });

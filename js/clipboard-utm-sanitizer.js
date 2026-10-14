@@ -142,10 +142,10 @@
           const label = citation.text.replace(/\s*\+\s*\d+\s*$/, "").trim();
           node.replaceChildren();
           citation.urls.forEach((url, index) => {
-            if (index) node.append(" ");
+            if (index) node.append(parsed.createElement("br"));
             const anchor = parsed.createElement("a");
             anchor.href = url;
-            anchor.textContent = index ? new URL(url).hostname : label;
+            anchor.textContent = citation.titles?.[index] || (index ? new URL(url).hostname : label);
             node.append(anchor);
           });
         }
@@ -225,24 +225,28 @@
 
   function restoreCopiedCitations(value, citations = []) {
     let cursor = 0;
-    for (const { text, urls } of citations) {
+    for (const { text, urls, titles } of citations) {
       if (!text || !urls.length) continue;
       const label = text.replace(/\s*\+\s*\d+\s*$/, "").trim();
       const links = urls.map((url, index) => {
-        const title = index ? new URL(url).hostname : label;
+        const title = titles?.[index] || (index ? new URL(url).hostname : label);
         return `[${title.replace(/([\\[\]])/g, "\\$1")}](${url.replace(/\(/g, "%28").replace(/\)/g, "%29")})`;
-      }).join(" ");
+      }).join(value.includes("\r\n") ? "\r\n" : "\n");
       // Native copy emits chips on their own lines, including the +N count.
       // Do not turn ordinary mentions of the publisher in prose into links.
       const escapeLabel = label.split(/\s+/).map(part => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("\\s+");
       const count = text.match(/\+\s*(\d+)\s*$/)?.[1];
       const pattern = escapeLabel + (count ? `\\s*\\+\\s*${count}` : "");
-      const expression = new RegExp(`(^|\\n)[ \\t]*${pattern}[ \\t]*(?=\\r?$|\\n)${count ? "" : "(?!\\r?\\n[ \\t]*\\+\\s*\\d+)"}`, "m");
+      const expression = new RegExp(`(^|(?:\\r?\\n[ \\t]*)+)[ \\t]*${pattern}[ \\t]*(?=\\r?$|\\n)${count ? "" : "(?!\\s*\\+\\s*\\d+)"}(?:\\r?\\n[ \\t]*)*`, "m");
       const tail = value.slice(cursor);
       const match = expression.exec(tail);
       if (!match) continue;
       const start = cursor + match.index;
-      const replacement = match[1] + links;
+      const ending = value.includes("\r\n") ? "\r\n" : "\n";
+      const before = Math.min(2, (match[1].match(/\n/g) || []).length);
+      const trailing = match[0].match(/(?:\r?\n[ \t]*)+$/)?.[0] || "";
+      const after = Math.min(2, (trailing.match(/\n/g) || []).length);
+      const replacement = ending.repeat(before) + links + ending.repeat(after);
       value = value.slice(0, start) + replacement + value.slice(start + match[0].length);
       cursor = start + replacement.length;
     }
@@ -322,26 +326,55 @@
 
   const clipboard = navigator.clipboard;
   let copiedCitations = [];
+  const nativeCopies = new WeakMap();
+  document.addEventListener?.("copy", (event) => {
+    if (copiedCitations.length && event.clipboardData) {
+      nativeCopies.set(event.clipboardData, copiedCitations);
+      copiedCitations = [];
+    }
+  }, true);
+  if (typeof DataTransfer !== "undefined") {
+    patchMethod(DataTransfer.prototype, "setData", (original) => function setData(type, value) {
+      const citations = nativeCopies.get(this);
+      if (citations) {
+        if (type.toLowerCase() === "text/plain") value = sanitizeCopiedText(value, copyFormattingOptions(), citations);
+        if (type.toLowerCase() === "text/html") value = sanitizeCopiedHtml(value, copyFormattingOptions(), citations);
+      }
+      return original.call(this, type, value);
+    });
+  }
   document.addEventListener?.("click", (event) => {
     copiedCitations = [];
     const button = event.target?.closest?.('button, [role="button"], [data-d-component="pressable"]');
     if (!button || !(button.matches('[data-testid="copy-turn-btn"]')
         || /^(?:Copy|Copy response)$/i.test(button.getAttribute("aria-label") || button.textContent.trim()))) return;
     if (button.closest("pre")) return;
-    const turn = button.closest('article, [data-testid^="conversation-turn-"], [data-turn="assistant"], [data-dil-message-id]');
+    let turn = button.closest('article, [data-testid^="conversation-turn-"], [data-turn="assistant"], [data-dil-message-id]');
+    if (!turn?.querySelector('[data-d-component="popover-trigger"]')) {
+      // DIL places the toolbar outside its message element. Find the smallest
+      // common container with citations and exactly this response's Copy control.
+      turn = null;
+      for (let parent = button.parentElement; parent && !parent.matches("main, body"); parent = parent.parentElement) {
+        const copies = [...parent.querySelectorAll('button, [role="button"]')].filter(control =>
+          !control.closest("pre") && /^(?:Copy|Copy response)$/i.test(control.getAttribute("aria-label") || control.textContent.trim()));
+        if (copies.length > 1) break;
+        if (parent.querySelector('[data-d-component="popover-trigger"]')) { turn = parent; break; }
+      }
+    }
     if (!turn) return;
     for (const chip of turn.querySelectorAll('[data-d-component="popover-trigger"]')) {
       chip.dispatchEvent(new Event("ghrc-resolve-citation-url", { bubbles: true }));
       try {
         const urls = JSON.parse(chip.getAttribute("data-ghrc-citation-urls") || "[]");
-        if (urls.length) copiedCitations.push({ text: chip.innerText || chip.textContent, urls });
+        const sources = JSON.parse(chip.getAttribute("data-ghrc-citation-sources") || "[]");
+        if (urls.length) copiedCitations.push({ text: chip.innerText || chip.textContent, urls,
+          titles: urls.map(url => sources.find(source => source.url === url)?.title || "") });
       } catch { /* Unresolved citations retain the native copy output. */ }
     }
   }, true);
   window.addEventListener?.("copy", (event) => {
-    if (!copiedCitations.length || !event.clipboardData) return;
-    const citations = copiedCitations;
-    copiedCitations = [];
+    const citations = event.clipboardData && nativeCopies.get(event.clipboardData);
+    if (!citations?.length) return;
     const selection = window.getSelection();
     const field = document.activeElement;
     const text = event.clipboardData.getData("text/plain")
