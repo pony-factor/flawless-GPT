@@ -126,10 +126,32 @@
     };
   }
 
-  function sanitizeCopiedHtml(value, options = {}) {
+  function sanitizeCopiedHtml(value, options = {}, citations = []) {
     if (typeof value !== "string" || !value) return value;
     const settings = normalizedCopyOptions(options);
     let result = stripCitationPreviewHtml(value);
+    if (citations.length && typeof DOMParser !== "undefined") {
+      const parsed = new DOMParser().parseFromString(result, "text/html");
+      const compact = text => text.replace(/\s+/g, "").trim();
+      for (const citation of citations) {
+        const candidates = [...parsed.body.querySelectorAll("*")].filter(node =>
+          !node.closest("a, pre, code") && compact(node.textContent) === compact(citation.text));
+        // Replace the outer chip once, keeping all of its additional sources.
+        const node = candidates.find(node => !candidates.includes(node.parentElement));
+        if (node) {
+          const label = citation.text.replace(/\s*\+\s*\d+\s*$/, "").trim();
+          node.replaceChildren();
+          citation.urls.forEach((url, index) => {
+            if (index) node.append(" ");
+            const anchor = parsed.createElement("a");
+            anchor.href = url;
+            anchor.textContent = index ? new URL(url).hostname : label;
+            node.append(anchor);
+          });
+        }
+      }
+      result = parsed.body.innerHTML;
+    }
     if (settings.stripBold) {
       result = result.replace(/<\/?(?:strong|b)\b[^>]*>/gi, "");
     }
@@ -140,6 +162,7 @@
     }
     if (settings.plainQuotes) result = normalizeSmartQuotes(result);
     if (settings.stripTracking) result = stripTrackingFromText(result);
+    result = result.replace(/(\bhref=["'])github\.com\//gi, "$1https://github.com/");
     return result;
   }
 
@@ -200,13 +223,40 @@
       .join(lineEnding);
   }
 
-  function sanitizeCopiedText(value, options = {}) {
+  function restoreCopiedCitations(value, citations = []) {
+    let cursor = 0;
+    for (const { text, urls } of citations) {
+      if (!text || !urls.length) continue;
+      const label = text.replace(/\s*\+\s*\d+\s*$/, "").trim();
+      const links = urls.map((url, index) => {
+        const title = index ? new URL(url).hostname : label;
+        return `[${title.replace(/([\\[\]])/g, "\\$1")}](${url.replace(/\(/g, "%28").replace(/\)/g, "%29")})`;
+      }).join(" ");
+      // Native copy emits chips on their own lines, including the +N count.
+      // Do not turn ordinary mentions of the publisher in prose into links.
+      const escapeLabel = label.split(/\s+/).map(part => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("\\s+");
+      const count = text.match(/\+\s*(\d+)\s*$/)?.[1];
+      const pattern = escapeLabel + (count ? `\\s*\\+\\s*${count}` : "");
+      const expression = new RegExp(`(^|\\n)[ \\t]*${pattern}[ \\t]*(?=\\r?$|\\n)${count ? "" : "(?!\\r?\\n[ \\t]*\\+\\s*\\d+)"}`, "m");
+      const tail = value.slice(cursor);
+      const match = expression.exec(tail);
+      if (!match) continue;
+      const start = cursor + match.index;
+      const replacement = match[1] + links;
+      value = value.slice(0, start) + replacement + value.slice(start + match[0].length);
+      cursor = start + replacement.length;
+    }
+    return value;
+  }
+
+  function sanitizeCopiedText(value, options = {}, citations = []) {
     const settings = normalizedCopyOptions(options);
-    let result = stripCitationPreviewThumbnails(convertReferenceLinksToInlineMarkdown(value));
+    let result = stripCitationPreviewThumbnails(convertReferenceLinksToInlineMarkdown(restoreCopiedCitations(value, citations)));
     if (settings.stripBold) result = stripMarkdownBold(result);
     if (settings.underscoreItalics) result = normalizeMarkdownItalics(result);
     if (settings.plainQuotes) result = normalizeSmartQuotes(result);
     if (settings.stripTracking) result = stripTrackingFromText(result);
+    result = result.replace(/(\]\()github\.com\//gi, "$1https://github.com/");
     return result;
   }
 
@@ -222,6 +272,7 @@
       stripCitationPreviewHtml,
       sanitizeCopiedText,
       sanitizeCopiedHtml,
+      restoreCopiedCitations,
     };
     return;
   }
@@ -270,13 +321,32 @@
   });
 
   const clipboard = navigator.clipboard;
+  let copiedCitations = [];
+  document.addEventListener?.("click", (event) => {
+    copiedCitations = [];
+    const button = event.target?.closest?.("button");
+    if (!button || !(button.matches('[data-testid="copy-turn-btn"]')
+        || /^(?:Copy|Copy response)$/i.test(button.getAttribute("aria-label") || button.textContent.trim()))) return;
+    if (button.closest("pre")) return;
+    const turn = button.closest('article, [data-testid^="conversation-turn-"], [data-turn="assistant"]');
+    if (!turn) return;
+    for (const chip of turn.querySelectorAll('[data-d-component="popover-trigger"]')) {
+      chip.dispatchEvent(new Event("ghrc-resolve-citation-url", { bubbles: true }));
+      try {
+        const urls = JSON.parse(chip.getAttribute("data-ghrc-citation-urls") || "[]");
+        if (urls.length) copiedCitations.push({ text: chip.innerText || chip.textContent, urls });
+      } catch { /* Unresolved citations retain the native copy output. */ }
+    }
+  }, true);
   const clipboardPrototype = typeof Clipboard !== "undefined"
     ? Clipboard.prototype
     : (clipboard && Object.getPrototypeOf(clipboard));
 
   if (clipboardPrototype) {
     patchMethod(clipboardPrototype, "writeText", (original) => function writeText(text) {
-      const value = sanitizeCopiedText(String(text), copyFormattingOptions());
+      const citations = copiedCitations;
+      copiedCitations = [];
+      const value = sanitizeCopiedText(String(text), copyFormattingOptions(), citations);
       return original.call(this, value);
     });
 
@@ -284,18 +354,20 @@
       patchMethod(clipboardPrototype, "write", (original) => function write(items) {
         try {
           const options = copyFormattingOptions();
+          const citations = copiedCitations;
+          copiedCitations = [];
           const sanitizedItems = Array.from(items, (item) => {
             const data = {};
             for (const type of item.types) {
               const blob = item.getType(type);
               if (type === "text/plain") {
                 data[type] = blob.then(async (value) => new Blob(
-                  [sanitizeCopiedText(await value.text(), options)],
+                  [sanitizeCopiedText(await value.text(), options, citations)],
                   { type: value.type || type },
                 ));
               } else if (type === "text/html") {
                 data[type] = blob.then(async (value) => new Blob(
-                  [sanitizeCopiedHtml(await value.text(), options)],
+                  [sanitizeCopiedHtml(await value.text(), options, citations)],
                   { type: value.type || type },
                 ));
               } else {

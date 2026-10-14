@@ -339,3 +339,17 @@ test('rich clipboard keeps explicitly disabled formatting while removing citatio
   assert.equal(await (await copy.getType('text/html')).text(), '<strong>Important</strong>');
   assert.equal(await (await copy.getType('text/plain')).text(), '**Important**');
 });
+
+test('keeps repeated publisher chips tied to their own source groups', () => {
+  const { restoreCopiedCitations } = require(sourcePath);
+  const input = 'Consider Scooch.\nScooch\n\nMore options.\nScooch\n+2';
+  assert.equal(restoreCopiedCitations(input, [
+    { text: 'Scooch', urls: ['https://scooch.example/first'] },
+    { text: 'Scooch+2', urls: ['https://scooch.example/second', 'https://other.example/a', 'https://other.example/b'] },
+  ]), 'Consider Scooch.\n[Scooch](https://scooch.example/first)\n\nMore options.\n[Scooch](https://scooch.example/second) [other.example](https://other.example/a) [other.example](https://other.example/b)');
+});
+
+test('repairs schemeless GitHub destinations from native response Copy', () => {
+  assert.equal(sanitizeCopiedText('[PR](github.com/example/repo/pull/5)'), '[PR](https://github.com/example/repo/pull/5)');
+  assert.equal(sanitizeCopiedHtml('<a href="github.com/example/repo/pull/5">PR</a>'), '<a href="https://github.com/example/repo/pull/5">PR</a>');
+});
