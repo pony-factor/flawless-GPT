@@ -44,6 +44,14 @@ main span:has(> .ghrc-link-with-actions) {
   margin-inline: -27px 1px;
 }
 
+.ghrc-link-has-punctuation > a {
+  padding-inline-end: 0;
+}
+
+.ghrc-link-trailing-punctuation {
+  padding-inline-end: 30px;
+}
+
 .ghrc-link-actions {
   position: relative;
   z-index: 1;

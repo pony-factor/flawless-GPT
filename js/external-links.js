@@ -23,6 +23,8 @@
   let previewWidthPx = null;
   let githubPreviewGeneration = 0;
   const linkActions = new WeakMap();
+  const actionSources = new WeakMap();
+  const linkPunctuation = new WeakMap();
 
   async function savePreviewWidth() {
     if (!Number.isFinite(previewWidthPx)) return;
@@ -636,6 +638,7 @@
 
     actions.append(sidebar);
     linkActions.set(link, actions);
+    actionSources.set(actions, link);
     updateLinkActions(link, url, actions);
     return actions;
   }
@@ -647,11 +650,45 @@
   }
 
   function removeLinkActions(link, actions) {
+    restoreLinkPunctuation(link);
     actions?.remove();
     const group = link.parentElement;
     if (group?.classList.contains("ghrc-link-with-actions")) {
       group.replaceWith(...group.childNodes);
     }
+  }
+
+  function restoreLinkPunctuation(link) {
+    const punctuation = linkPunctuation.get(link);
+    if (!punctuation) return;
+    if (punctuation.textNode.isConnected) {
+      punctuation.textNode.data = punctuation.text + punctuation.textNode.data;
+      punctuation.span.remove();
+    }
+    link.parentElement?.classList.remove('ghrc-link-has-punctuation');
+    linkPunctuation.delete(link);
+  }
+
+  function placeLinkActionsAfterPunctuation(link, actions) {
+    const group = link.parentElement;
+    if (!group?.classList.contains('ghrc-link-with-actions') || linkPunctuation.has(link)) return;
+    let tail = group;
+    // ChatGPT may wrap the anchor in an inline popover before the sentence's
+    // punctuation. Keep the native wrapper and its handlers intact.
+    for (let depth = 0; !tail.nextSibling && tail.parentElement?.matches('span') && depth < 5; depth++) {
+      tail = tail.parentElement;
+    }
+    const textNode = tail.nextSibling;
+    if (textNode?.nodeType !== 3) return;
+    const text = /^[.,;:!?…\)\]\}"'»”’]+/u.exec(textNode.data)?.[0];
+    if (!text) return;
+    const span = document.createElement('span');
+    span.className = 'ghrc-link-trailing-punctuation';
+    span.textContent = text;
+    linkPunctuation.set(link, { span, textNode, text });
+    textNode.data = textNode.data.slice(text.length);
+    actions.before(span);
+    group.classList.add('ghrc-link-has-punctuation');
   }
 
   function ensureLinkActions(link) {
@@ -672,6 +709,7 @@
     }
     if (existing?.isConnected) {
       updateLinkActions(link, url, existing);
+      placeLinkActionsAfterPunctuation(link, existing);
       return;
     }
     // Keep a text link and its action together as the chat narrows. Preserve
@@ -683,7 +721,9 @@
       link.before(group);
       group.append(link);
     }
-    link.after(createLinkActions(link, url));
+    const actions = createLinkActions(link, url);
+    link.after(actions);
+    placeLinkActionsAfterPunctuation(link, actions);
   }
 
   function decorateExternalLinks(node) {
@@ -727,12 +767,15 @@
 
   function refreshLinkActions() {
     document.querySelectorAll(".ghrc-link-actions").forEach((actions) => {
-      if (!(actions.previousSibling instanceof HTMLAnchorElement)
-          && !actions.previousSibling?.matches?.('.ghrc-citation-source')) actions.remove();
+      if (!actionSources.get(actions)?.isConnected) actions.remove();
     });
     if (!splitViewEnabled) {
       document.querySelectorAll(".ghrc-link-actions").forEach(actions => actions.remove());
-      document.querySelectorAll(".ghrc-link-with-actions").forEach(group => group.replaceWith(...group.childNodes));
+      document.querySelectorAll(".ghrc-link-with-actions").forEach(group => {
+        const link = group.querySelector('a[href]');
+        if (link) restoreLinkPunctuation(link);
+        group.replaceWith(...group.childNodes);
+      });
       document.querySelectorAll('.ghrc-citation-source').forEach(button => button.classList.remove('ghrc-citation-source'));
       return;
     }
@@ -798,6 +841,10 @@
     decorateExternalLinks(document.documentElement);
     new MutationObserver((mutations) => {
       for (const mutation of mutations) {
+        if (mutation.type === "characterData") {
+          queueMutationNode(mutation.target.parentElement);
+          continue;
+        }
         if (mutation.type === "attributes") {
           queueMutationNode(mutation.target);
           continue;
@@ -806,6 +853,7 @@
       }
     }).observe(document.documentElement, {
       childList: true,
+      characterData: true,
       subtree: true,
       attributes: true,
       attributeFilter: ["href"],
@@ -888,7 +936,7 @@
       event.preventDefault();
       event.stopImmediatePropagation();
       const href = sidebar.dataset.href;
-      const source = sidebar.closest(".ghrc-link-actions")?.previousSibling;
+      const source = actionSources.get(sidebar.closest(".ghrc-link-actions"));
       if (href) void openNativeSplitView(href, source, false);
       return;
     }

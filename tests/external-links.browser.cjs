@@ -100,6 +100,38 @@ test('external-link arrows can be hidden and restored without hiding sidebar but
   await page.close();
 });
 
+test('sidebar icons follow trailing punctuation without changing the sentence or destination', async () => {
+  const page = await fixture({ openExternalLinksInSplitView: true }, null, true);
+  await page.locator('.ghrc-link-with-actions').waitFor();
+  await page.evaluate(() => {
+    const group = document.getElementById('source').parentElement;
+    const trigger = document.createElement('span');
+    trigger.setAttribute('data-d-component', 'popover-trigger');
+    group.before(trigger);
+    trigger.append(group);
+    trigger.after(document.createTextNode('). Next sentence.'));
+  });
+  await page.locator('.ghrc-link-trailing-punctuation').waitFor();
+  assert.equal(await page.locator('.ghrc-link-trailing-punctuation').textContent(), ').');
+  assert.equal(await page.locator('#source').getAttribute('href'), 'https://example.org/source?keep=1#section');
+  assert.ok((await page.locator('#source').locator('xpath=ancestor::p').textContent()).endsWith('). Next sentence.'));
+  await page.setViewportSize({ width: 320, height: 800 });
+  const geometry = await page.evaluate(() => {
+    const punctuation = document.querySelector('.ghrc-link-trailing-punctuation');
+    const range = document.createRange();
+    range.selectNodeContents(punctuation);
+    return { text: range.getBoundingClientRect().toJSON(), action: document.querySelector('.ghrc-link-actions').getBoundingClientRect().toJSON() };
+  });
+  assert.ok(geometry.action.x >= geometry.text.right);
+  assert.ok(geometry.action.x - geometry.text.right < 6);
+  await page.locator('.ghrc-link-sidebar-button').click();
+  assert.equal((await page.evaluate(() => previewRequests)).at(-1).url, 'https://example.org/source?keep=1#section');
+  await page.evaluate(() => settingsListeners.forEach(fn => fn({ openExternalLinksInSplitView: { newValue: false } }, 'local')));
+  assert.equal(await page.locator('.ghrc-link-trailing-punctuation').count(), 0);
+  assert.ok((await page.locator('#source').locator('xpath=ancestor::p').textContent()).endsWith('). Next sentence.'));
+  await page.close();
+});
+
 test('long links wrap beside their button without overflowing a narrow chat', async () => {
   const page = await fixture({ openExternalLinksInSplitView: true });
   await page.locator('.ghrc-link-with-actions').waitFor();
