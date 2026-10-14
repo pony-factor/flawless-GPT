@@ -73,6 +73,7 @@ const showSpellcheckGptLauncherInput = document.getElementById("show-spellcheck-
 const show2048LauncherInput = document.getElementById("show-2048-launcher");
 const showDeepResearchTrackerInput = document.getElementById("show-deep-research-tracker");
 const stripUtmTrackingInput = document.getElementById("strip-utm-tracking");
+const hideExternalLinkArrowsInput = document.getElementById("hide-external-link-arrows");
 const stripCopiedBoldInput = document.getElementById("strip-copied-bold");
 const normalizeCopiedQuotesInput = document.getElementById("normalize-copied-quotes");
 const underscoreCopiedItalicsInput = document.getElementById("underscore-copied-italics");
@@ -379,6 +380,7 @@ async function loadSettings() {
     show2048Launcher: false,
     showDeepResearchTracker: true,
     stripUtmTracking: true,
+    hideExternalLinkArrows: false,
     stripCopiedBold: true,
     normalizeCopiedQuotes: true,
     underscoreCopiedItalics: true,
@@ -432,6 +434,7 @@ async function loadSettings() {
   show2048LauncherInput.checked = Boolean(settings.show2048Launcher);
   showDeepResearchTrackerInput.checked = settings.showDeepResearchTracker !== false;
   stripUtmTrackingInput.checked = settings.stripUtmTracking !== false;
+  hideExternalLinkArrowsInput.checked = Boolean(settings.hideExternalLinkArrows);
   stripCopiedBoldInput.checked = settings.stripCopiedBold !== false;
   normalizeCopiedQuotesInput.checked = settings.normalizeCopiedQuotes !== false;
   underscoreCopiedItalicsInput.checked = settings.underscoreCopiedItalics !== false;
@@ -531,6 +534,7 @@ async function saveSettings() {
       show2048Launcher: show2048LauncherInput.checked,
       showDeepResearchTracker: showDeepResearchTrackerInput.checked,
       stripUtmTracking: stripUtmTrackingInput.checked,
+      hideExternalLinkArrows: hideExternalLinkArrowsInput.checked,
       stripCopiedBold: stripCopiedBoldInput.checked,
       normalizeCopiedQuotes: normalizeCopiedQuotesInput.checked,
       underscoreCopiedItalics: underscoreCopiedItalicsInput.checked,

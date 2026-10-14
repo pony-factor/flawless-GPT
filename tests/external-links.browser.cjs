@@ -85,6 +85,21 @@ test('normal link click keeps the configured new-tab behavior and sidebar contro
   await page.close();
 });
 
+test('external-link arrows can be hidden and restored without hiding sidebar buttons or changing navigation', async () => {
+  const page = await fixture({ openExternalLinksInSplitView: true, hideExternalLinkArrows: true });
+  await page.locator('#source').evaluate(link => {
+    link.innerHTML = 'Source reference <svg id="external-arrow" aria-hidden="true" width="14" height="14"><path d="M3 11L11 3M3 3h8v8"/></svg>';
+  });
+  await page.locator('#external-arrow[data-ghrc-external-link-arrow]').waitFor({ state: 'attached' });
+  assert.equal(await page.locator('#external-arrow').isVisible(), false);
+  assert.equal(await page.locator('.ghrc-link-sidebar-button svg').isVisible(), true);
+  await page.locator('#source').click();
+  assert.equal((await page.evaluate(() => openedLinks)).length, 1);
+  await page.evaluate(() => settingsListeners.forEach(fn => fn({ hideExternalLinkArrows: { newValue: false } }, 'local')));
+  assert.equal(await page.locator('#external-arrow').isVisible(), true);
+  await page.close();
+});
+
 test('long links wrap beside their button without overflowing a narrow chat', async () => {
   const page = await fixture({ openExternalLinksInSplitView: true });
   await page.locator('.ghrc-link-with-actions').waitFor();

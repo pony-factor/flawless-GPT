@@ -1,3 +1,7 @@
+html[data-ghrc-hide-external-link-arrows] [data-ghrc-external-link-arrow] {
+  display: none !important;
+}
+
 html[data-ghrc-link-preview] {
   --ghrc-preview-width: min(48vw, 800px);
   width: calc(100% - var(--ghrc-preview-width));

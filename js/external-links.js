@@ -657,6 +657,12 @@
   function ensureLinkActions(link) {
     const existing = linkActions.get(link);
     const url = externalUrlForLink(link);
+    if (url && link.closest('main') && link.textContent.trim()
+        && !link.querySelector('img, picture, video, canvas')) {
+      // Native text links append their new-tab SVG after the link label.
+      const icons = link.querySelectorAll('svg');
+      if (icons.length === 1) icons[0].setAttribute('data-ghrc-external-link-arrow', '');
+    }
     // Native hover cards repeat the URL in a portal outside the conversation.
     // Only decorate the original chat link, not its popup copy.
     if (!splitViewEnabled || !url || !link.closest('main')
@@ -754,6 +760,8 @@
 
   function inspectMutationNode(node) {
     if (!(node instanceof Element)) return;
+    const containingLink = node.closest('a[href]');
+    if (containingLink) ensureLinkActions(containingLink);
     inspectDialogs(node);
     stripTrackingFromLinks(node);
     decorateExternalLinks(node);
@@ -813,6 +821,7 @@
       linkPreviewWidth: null,
       [HISTORY_MODAL_SETTING_KEY]: true,
       [STRIP_UTM_TRACKING_SETTING_KEY]: true,
+      hideExternalLinkArrows: false,
     });
     newTabsEnabled = settings.openExternalLinksInNewTabs !== false;
     splitViewEnabled = Boolean(settings.openExternalLinksInSplitView);
@@ -822,6 +831,7 @@
     externalWarningEnabled = Boolean(settings[EXTERNAL_WARNING_SETTING_KEY]);
     historyModalEnabled = Boolean(settings[HISTORY_MODAL_SETTING_KEY]);
     stripUtmTrackingEnabled = Boolean(settings[STRIP_UTM_TRACKING_SETTING_KEY]);
+    document.documentElement.toggleAttribute('data-ghrc-hide-external-link-arrows', Boolean(settings.hideExternalLinkArrows));
     if (document.documentElement) {
       inspectDialogs(document.documentElement);
       suppressHistoryRateLimitModal();
@@ -832,6 +842,9 @@
 
   chrome.storage.onChanged.addListener((changes, areaName) => {
     if (areaName !== "local") return;
+    if (changes.hideExternalLinkArrows) {
+      document.documentElement.toggleAttribute('data-ghrc-hide-external-link-arrows', Boolean(changes.hideExternalLinkArrows.newValue));
+    }
     if (changes.openExternalLinksInNewTabs) {
       newTabsEnabled = changes.openExternalLinksInNewTabs.newValue !== false;
       refreshLinkActions();
