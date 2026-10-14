@@ -334,7 +334,7 @@
     close.title = "Close website preview";
     close.setAttribute("aria-label", "Close website preview");
     close.addEventListener("click", closeLinkPreview);
-    header.append(close, open, copy, destination);
+    header.append(destination, copy, open, close);
     panel.append(resizer, header);
 
     if (nativeGuide) {
@@ -349,19 +349,25 @@
       let index = -1;
       const navigation = document.createElement("nav");
       navigation.className = "ghrc-preview-navigation";
+      navigation.setAttribute("aria-label", "Preview history");
       const back = document.createElement("button");
       const forward = document.createElement("button");
-      for (const [button, label] of [[back, "Back"], [forward, "Forward"]]) {
+      for (const [button, label, path] of [
+        [back, "Back", '<path d="M15 18l-6-6 6-6"/>'],
+        [forward, "Forward", '<path d="M9 18l6-6-6-6"/>'],
+      ]) {
         button.type = "button";
         button.className = "ghrc-preview-control";
-        button.textContent = label;
+        button.innerHTML = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${path}</svg>`;
+        button.title = label;
         button.setAttribute("aria-label", label);
         navigation.append(button);
       }
+      header.prepend(navigation);
       const content = document.createElement("div");
       content.className = "ghrc-preview-content";
       content.setAttribute("aria-live", "polite");
-      panel.append(navigation, content);
+      panel.append(content);
       const visit = (nextHref, delta = 0) => {
         if (delta) {
           const target = index + delta;

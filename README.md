@@ -198,8 +198,9 @@ commits, releases, workflow runs, and Discussions. The existing pull-request dif
 viewer remains available, with issue/PR comments where GitHub permits access.
 
 In the API fallback, GitHub directories and lists include links you can follow **inside the same panel**.
-That pane has Back and Forward controls, a parent-directory link when applicable,
-and its usual Copy link and Open in new tab actions for the currently viewed page.
+The Back and Forward arrows sit immediately left of the URL in a high-contrast,
+theme-aware toolbar. The pane also keeps a parent-directory link when applicable,
+and Copy link and Open in new tab actions for the currently viewed page.
 Paths are loaded for the branch or tag in the URL, including ref names containing slashes.
 
 Private pages require a configured GitHub token with appropriate read permissions.
