@@ -324,11 +324,11 @@
   let copiedCitations = [];
   document.addEventListener?.("click", (event) => {
     copiedCitations = [];
-    const button = event.target?.closest?.("button");
+    const button = event.target?.closest?.('button, [role="button"], [data-d-component="pressable"]');
     if (!button || !(button.matches('[data-testid="copy-turn-btn"]')
         || /^(?:Copy|Copy response)$/i.test(button.getAttribute("aria-label") || button.textContent.trim()))) return;
     if (button.closest("pre")) return;
-    const turn = button.closest('article, [data-testid^="conversation-turn-"], [data-turn="assistant"]');
+    const turn = button.closest('article, [data-testid^="conversation-turn-"], [data-turn="assistant"], [data-dil-message-id]');
     if (!turn) return;
     for (const chip of turn.querySelectorAll('[data-d-component="popover-trigger"]')) {
       chip.dispatchEvent(new Event("ghrc-resolve-citation-url", { bubbles: true }));
@@ -338,6 +338,27 @@
       } catch { /* Unresolved citations retain the native copy output. */ }
     }
   }, true);
+  window.addEventListener?.("copy", (event) => {
+    if (!copiedCitations.length || !event.clipboardData) return;
+    const citations = copiedCitations;
+    copiedCitations = [];
+    const selection = window.getSelection();
+    const field = document.activeElement;
+    const text = event.clipboardData.getData("text/plain")
+      || (typeof field?.value === "string" && field.selectionStart != null
+        ? field.value.slice(field.selectionStart, field.selectionEnd) : selection?.toString());
+    if (!text) return;
+    let html = event.clipboardData.getData("text/html");
+    if (!html && selection?.rangeCount) {
+      const container = document.createElement("div");
+      container.append(selection.getRangeAt(0).cloneContents());
+      html = container.innerHTML;
+    }
+    const options = copyFormattingOptions();
+    event.clipboardData.setData("text/plain", sanitizeCopiedText(text, options, citations));
+    if (html) event.clipboardData.setData("text/html", sanitizeCopiedHtml(html, options, citations));
+    event.preventDefault();
+  });
   const clipboardPrototype = typeof Clipboard !== "undefined"
     ? Clipboard.prototype
     : (clipboard && Object.getPrototypeOf(clipboard));

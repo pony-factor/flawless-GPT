@@ -62,5 +62,26 @@ test('response Copy preserves all citation destinations in text and HTML and sta
     assert.match(rich['text/html'], /<p>Consider Scooch\.<\/p>/);
     assert.doesNotMatch(rich['text/html'], /\+2|utm_source|wrong-turn/);
     assert.match(rich['text/plain'], /\[Scooch\]\(https:\/\/scooch.example\/moneymate\)/);
+    await page.evaluate(() => {
+      document.querySelector('[data-testid="copy-turn-btn"]').onclick = () => {
+        const temporary = document.createElement('div');
+        temporary.innerHTML = '<p>Consider Scooch.</p><div>Scooch<br>+2</div>';
+        document.body.append(temporary);
+        const range = document.createRange();
+        range.selectNodeContents(temporary);
+        getSelection().removeAllRanges();
+        getSelection().addRange(range);
+        const data = new DataTransfer();
+        const event = new ClipboardEvent('copy', { clipboardData: data, bubbles: true, cancelable: true });
+        temporary.dispatchEvent(event);
+        writes.push({ text: data.getData('text/plain'), html: data.getData('text/html'), prevented: event.defaultPrevented });
+        temporary.remove();
+      };
+    });
+    await page.locator('[data-testid="copy-turn-btn"]').click();
+    const fallback = await page.evaluate(() => writes[3]);
+    assert.equal(fallback.prevented, true);
+    assert.match(fallback.text, /\[Scooch\]\(https:\/\/scooch.example\/moneymate\)/);
+    assert.equal((fallback.html.match(/<a /g) || []).length, 3);
   } finally { await browser.close(); }
 });
