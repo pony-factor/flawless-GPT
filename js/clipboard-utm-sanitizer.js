@@ -147,6 +147,13 @@
             node.replaceChildren(anchor);
             continue;
           }
+          let separator = node.previousSibling;
+          while (separator && !separator.textContent.trim()) separator = separator.previousSibling;
+          if (separator && separator.textContent.trim() === "·") {
+            let preceding = separator.previousSibling;
+            while (preceding && !preceding.textContent.trim()) preceding = preceding.previousSibling;
+            if (preceding?.nodeType === 1 && (preceding.matches("a[href]") || preceding.querySelector("a[href]"))) separator.remove();
+          }
           const list = parsed.createElement("ul");
           list.style.marginTop = "0";
           list.style.marginBottom = "0";
@@ -261,12 +268,16 @@
       const escapeLabel = label.split(/\s+/).map(part => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("\\s+");
       const count = text.match(/\+\s*(\d+)\s*$/)?.[1];
       const pattern = escapeLabel + (count ? `\\s*\\+\\s*${count}` : "");
+      const ending = value.includes("\r\n") ? "\r\n" : "\n";
+      // The middle dot separated the original link and inline citation chip.
+      // The citation is now a list, so that decorative separator has no role.
+      const separator = new RegExp(`(\\]\\([^\\r\\n]*?\\)|\\]\\[[^\\]\\r\\n]*\\])[ \\t]*·[ \\t]*(?:\\r?\\n[ \\t]*)*(?=${pattern}[ \\t]*(?:\\r?$|\\n))`, "gm");
+      value = value.slice(0, cursor) + value.slice(cursor).replace(separator, (_, link) => link + ending);
       const expression = new RegExp(`(^|(?:\\r?\\n[ \\t]*)+)[ \\t]*${pattern}[ \\t]*(?=\\r?$|\\n)${count ? "" : "(?!\\s*\\+\\s*\\d+)"}(?:\\r?\\n[ \\t]*)*`, "m");
       const tail = value.slice(cursor);
       const match = expression.exec(tail);
       if (!match) continue;
       const start = cursor + match.index;
-      const ending = value.includes("\r\n") ? "\r\n" : "\n";
       const before = Math.min(2, (match[1].match(/\n/g) || []).length);
       const trailing = match[0].match(/(?:\r?\n[ \t]*)+$/)?.[0] || "";
       const after = Math.min(2, (trailing.match(/\n/g) || []).length);

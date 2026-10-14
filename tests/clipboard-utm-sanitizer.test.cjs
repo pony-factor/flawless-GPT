@@ -379,3 +379,13 @@ test('restores item-header links without making the heading a citation bullet', 
     text: 'Scooch Wingmate', kind: 'item', urls: ['https://scooch.example/wingmate'],
   }]), 'I compared Scooch Wingmate earlier.\n\n### [Scooch Wingmate](https://scooch.example/wingmate)\nDetails about the case.');
 });
+
+test('removes the middle dot between a copied link and a restored citation card', () => {
+  const citations = [{ text: 'Scooch +1', urls: ['https://scooch.example/case', 'https://scooch.example/specs'] }];
+  for (const gap of [' ', '\n', '\n\n']) {
+    assert.equal(sanitizeCopiedText('[Official store](https://scooch.example/store) ·' + gap + 'Scooch\n+1', {}, citations),
+      '[Official store](https://scooch.example/store)\n- [Scooch](https://scooch.example/case)\n- [scooch.example](https://scooch.example/specs)');
+  }
+  assert.equal(sanitizeCopiedText('[One](https://example.com/one) · [Two](https://example.com/two)'),
+    '[One](https://example.com/one) · [Two](https://example.com/two)');
+});

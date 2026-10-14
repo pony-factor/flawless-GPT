@@ -53,13 +53,14 @@ test('response Copy preserves all citation destinations in text and HTML and sta
     await page.evaluate(() => {
       document.querySelector('[data-testid="copy-turn-btn"]').onclick = () => navigator.clipboard.write([new ClipboardItem({
         'text/plain': new Blob(['Scooch\n+2'], { type: 'text/plain' }),
-        'text/html': new Blob(['<p>Consider Scooch.</p><span><span>Scooch</span><span>+2</span></span>'], { type: 'text/html' }),
+        'text/html': new Blob(['<p>Consider Scooch.</p><a href="https://scooch.example/store">Official store</a> · <span><span>Scooch</span><span>+2</span></span>'], { type: 'text/html' }),
       })]);
     });
     await page.locator('[data-testid="copy-turn-btn"]').click();
     await page.waitForFunction(() => writes.length === 3);
     const rich = await page.evaluate(() => writes[2]);
-    assert.equal((rich['text/html'].match(/<a /g) || []).length, 3);
+    assert.equal((rich['text/html'].match(/<a /g) || []).length, 4);
+    assert.doesNotMatch(rich['text/html'], /·/);
     assert.equal((rich['text/html'].match(/<li><a /g) || []).length, 3);
     assert.match(rich['text/html'], /<p>Consider Scooch\.<\/p>/);
     assert.doesNotMatch(rich['text/html'], /\+2|utm_source|wrong-turn/);
