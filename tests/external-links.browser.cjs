@@ -393,7 +393,7 @@ test('left-side preview moves the panel, keeps controls ordered, and resizes fro
   const headerChildren = await page.locator('#ghrc-link-preview header').evaluate(
     header => [...header.children].map(child => child.getAttribute('aria-label') || child.className),
   );
-  assert.deepEqual(headerChildren, ['Close website preview', 'Open in new tab', 'Copy link', 'ghrc-preview-destination']);
+  assert.deepEqual(headerChildren, ['ghrc-preview-destination', 'Copy link', 'Open in new tab', 'Close website preview']);
 
   const destination = page.locator('#ghrc-link-preview .ghrc-preview-destination');
   assert.equal(await destination.getAttribute('href'), 'https://example.org/source?keep=1#section');
@@ -449,6 +449,64 @@ test('GitHub embeds the website first and uses the API only after the active fra
   assert.equal(await page.locator('#ghrc-link-preview .ghrc-preview-body img').count(), 0);
   assert.match(await page.locator('#ghrc-link-preview details').textContent(), /safe change/);
   assert.ok((await page.evaluate(() => previewRequests)).some(message => message.type === 'load-github-link-preview'));
+  await page.close();
+});
+
+
+test('GitHub fallback shows history arrows beside the URL and readable theme colors', async () => {
+  const page = await fixture({ openExternalLinksInSplitView: true }, {
+    ok: true, title: 'Repository preview',
+    entries: [{ title: 'Issues', url: 'https://github.com/owner/repo/issues' }],
+  });
+  await page.locator('#source').evaluate(link => { link.href = 'https://github.com/owner/repo'; });
+  await page.locator('.ghrc-link-sidebar-button').click();
+  const preview = page.locator('#ghrc-link-preview');
+  await preview.locator('.ghrc-preview-entries a').waitFor();
+  const headerChildren = await preview.locator('header').evaluate(header =>
+    [...header.children].map(child => child.getAttribute('aria-label') || child.className));
+  assert.deepEqual(headerChildren, [
+    'Preview history', 'ghrc-preview-destination', 'Copy link', 'Open in new tab', 'Close website preview',
+  ]);
+  assert.equal(await preview.locator('.ghrc-preview-navigation svg').count(), 2);
+  const back = preview.getByRole('button', { name: 'Back' });
+  const forward = preview.getByRole('button', { name: 'Forward' });
+  assert.equal(await back.isDisabled(), true);
+  assert.equal(await forward.isDisabled(), true);
+  const navBox = await preview.locator('.ghrc-preview-navigation').boundingBox();
+  const urlBox = await preview.locator('.ghrc-preview-destination').boundingBox();
+  assert.ok(navBox.x + navBox.width <= urlBox.x);
+
+  await preview.locator('.ghrc-preview-entries a').click();
+  assert.equal(await preview.locator('.ghrc-preview-destination').getAttribute('href'), 'https://github.com/owner/repo/issues');
+  assert.equal(await back.isEnabled(), true);
+  assert.equal(await forward.isDisabled(), true);
+  await back.click();
+  assert.equal(await preview.locator('.ghrc-preview-destination').getAttribute('href'), 'https://github.com/owner/repo');
+  assert.equal(await forward.isEnabled(), true);
+  await forward.click();
+  assert.equal(await preview.locator('.ghrc-preview-destination').getAttribute('href'), 'https://github.com/owner/repo/issues');
+  await preview.getByRole('button', { name: 'Copy link' }).click();
+  assert.deepEqual(await page.evaluate(() => copiedLinks), ['https://github.com/owner/repo/issues']);
+
+  const colors = () => page.evaluate(() => {
+    const panel = document.querySelector('#ghrc-link-preview');
+    const header = panel.querySelector('header');
+    return {
+      background: getComputedStyle(panel).backgroundColor,
+      foreground: getComputedStyle(panel).color,
+      toolbar: getComputedStyle(header).backgroundColor,
+      controls: getComputedStyle(panel.querySelector('.ghrc-preview-navigation button:not(:disabled)')).backgroundColor,
+    };
+  });
+  const light = await colors();
+  await page.evaluate(() => document.documentElement.classList.add('dark'));
+  const dark = await colors();
+  assert.notEqual(light.background, dark.background);
+  assert.notEqual(light.foreground, dark.foreground);
+  assert.notEqual(light.toolbar, dark.toolbar);
+  assert.notEqual(light.controls, dark.controls);
+  await page.setViewportSize({ width: 320, height: 800 });
+  assert.equal(await preview.locator('header').evaluate(header => header.scrollWidth <= header.clientWidth), true);
   await page.close();
 });
 

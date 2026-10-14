@@ -112,25 +112,63 @@ main span:has(> .ghrc-link-with-actions) {
 }
 
 #ghrc-link-preview {
+  --ghrc-preview-surface: #ffffff;
+  --ghrc-preview-toolbar: #f1f4f9;
+  --ghrc-preview-text: #182337;
+  --ghrc-preview-muted: #46566f;
+  --ghrc-preview-link: #165aa8;
+  --ghrc-preview-border: #b9c7d9;
+  --ghrc-preview-button: #e4ebf5;
+  --ghrc-preview-button-hover: #ccdbee;
+  --ghrc-preview-focus: #2369bd;
   position: fixed;
   z-index: 10000;
   width: var(--ghrc-preview-width);
   display: flex;
   flex-direction: column;
-  background: Canvas;
-  color: CanvasText;
+  background: var(--ghrc-preview-surface);
+  color: var(--ghrc-preview-text);
   font: 14px/1.5 system-ui, sans-serif;
-  color-scheme: light dark;
+  color-scheme: light;
+}
+
+:is(html.dark, html[data-theme="dark"]) #ghrc-link-preview {
+  --ghrc-preview-surface: #171e29;
+  --ghrc-preview-toolbar: #222d3d;
+  --ghrc-preview-text: #eef3fa;
+  --ghrc-preview-muted: #b9c8dc;
+  --ghrc-preview-link: #a1c9ff;
+  --ghrc-preview-border: #52647b;
+  --ghrc-preview-button: #34445a;
+  --ghrc-preview-button-hover: #465c77;
+  --ghrc-preview-focus: #a1c9ff;
+  color-scheme: dark;
+}
+
+/* Use system colors only when ChatGPT does not explicitly specify a theme. */
+@media (prefers-color-scheme: dark) {
+  html:not(.light, .dark, [data-theme="light"], [data-theme="dark"]) #ghrc-link-preview {
+    --ghrc-preview-surface: #171e29;
+    --ghrc-preview-toolbar: #222d3d;
+    --ghrc-preview-text: #eef3fa;
+    --ghrc-preview-muted: #b9c8dc;
+    --ghrc-preview-link: #a1c9ff;
+    --ghrc-preview-border: #52647b;
+    --ghrc-preview-button: #34445a;
+    --ghrc-preview-button-hover: #465c77;
+    --ghrc-preview-focus: #a1c9ff;
+    color-scheme: dark;
+  }
 }
 
 html[data-ghrc-link-preview="right"] #ghrc-link-preview {
   inset: 0 0 0 auto;
-  border-left: 1px solid color-mix(in srgb, CanvasText 20%, transparent);
+  border-left: 1px solid var(--ghrc-preview-border);
 }
 
 html[data-ghrc-link-preview="left"] #ghrc-link-preview {
   inset: 0 auto 0 0;
-  border-right: 1px solid color-mix(in srgb, CanvasText 20%, transparent);
+  border-right: 1px solid var(--ghrc-preview-border);
 }
 
 #ghrc-link-preview .ghrc-preview-resizer {
@@ -150,12 +188,12 @@ html[data-ghrc-link-preview="left"] #ghrc-link-preview .ghrc-preview-resizer {
   content: "";
   position: absolute;
   inset: 0 4px;
-  background: color-mix(in srgb, CanvasText 20%, transparent);
+  background: var(--ghrc-preview-border);
 }
 
 #ghrc-link-preview .ghrc-preview-resizer:hover::after,
 #ghrc-link-preview .ghrc-preview-resizer:focus-visible::after {
-  background: Highlight;
+  background: var(--ghrc-preview-focus);
 }
 
 #ghrc-link-preview .ghrc-preview-resizer:focus-visible {
@@ -165,9 +203,10 @@ html[data-ghrc-link-preview="left"] #ghrc-link-preview .ghrc-preview-resizer {
 #ghrc-link-preview header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 12px;
+  gap: 6px;
+  padding: 10px 12px;
+  background: var(--ghrc-preview-toolbar);
+  border-bottom: 1px solid var(--ghrc-preview-border);
 }
 
 #ghrc-link-preview .ghrc-preview-destination {
@@ -176,9 +215,15 @@ html[data-ghrc-link-preview="left"] #ghrc-link-preview .ghrc-preview-resizer {
   gap: 8px;
   flex: 1;
   min-width: 0;
-  justify-content: flex-end;
-  color: LinkText;
+  height: 32px;
+  padding: 0 10px;
+  overflow: hidden;
+  border: 1px solid var(--ghrc-preview-border);
+  border-radius: 7px;
+  background: var(--ghrc-preview-surface);
+  color: var(--ghrc-preview-link);
   text-decoration: none;
+  box-sizing: border-box;
 }
 
 #ghrc-link-preview .ghrc-preview-destination span {
@@ -199,14 +244,14 @@ html[data-ghrc-link-preview="left"] #ghrc-link-preview .ghrc-preview-resizer {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   padding: 0;
   margin: 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  color: inherit;
+  border: 1px solid var(--ghrc-preview-border);
+  border-radius: 7px;
+  background: var(--ghrc-preview-button);
+  color: var(--ghrc-preview-text);
   text-decoration: none;
   box-sizing: border-box;
   font: inherit;
@@ -221,12 +266,13 @@ html[data-ghrc-link-preview="left"] #ghrc-link-preview .ghrc-preview-resizer {
   height: 18px;
 }
 
-#ghrc-link-preview .ghrc-preview-control:hover {
-  opacity: 0.65;
+#ghrc-link-preview .ghrc-preview-control:hover:not(:disabled) {
+  background: var(--ghrc-preview-button-hover);
 }
 
-#ghrc-link-preview .ghrc-preview-control:focus-visible {
-  outline: 2px solid Highlight;
+#ghrc-link-preview .ghrc-preview-control:focus-visible,
+#ghrc-link-preview .ghrc-preview-destination:focus-visible {
+  outline: 2px solid var(--ghrc-preview-focus);
   outline-offset: 2px;
 }
 
@@ -253,8 +299,12 @@ html[data-ghrc-link-preview="left"] #ghrc-link-preview .ghrc-preview-resizer {
 }
 
 #ghrc-link-preview .ghrc-preview-meta {
-  opacity: 0.7;
+  color: var(--ghrc-preview-muted);
   margin: 0;
+}
+
+#ghrc-link-preview .ghrc-preview-content a {
+  color: var(--ghrc-preview-link);
 }
 
 #ghrc-link-preview .ghrc-preview-content pre {
@@ -279,15 +329,9 @@ html[data-ghrc-link-preview="left"] #ghrc-link-preview .ghrc-preview-resizer {
 /* Structured GitHub API previews (the GitHub site itself cannot be framed). */
 #ghrc-link-preview .ghrc-preview-navigation {
   display: flex;
-  gap: 8px;
-  padding: 4px 12px 8px;
-  border-bottom: 1px solid color-mix(in srgb, CanvasText 15%, transparent);
-}
-
-#ghrc-link-preview .ghrc-preview-navigation .ghrc-preview-control {
-  width: auto;
-  padding: 4px 8px;
-  border-radius: 5px;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 4px;
 }
 
 #ghrc-link-preview .ghrc-preview-control:disabled {
@@ -314,7 +358,7 @@ html[data-ghrc-link-preview="left"] #ghrc-link-preview .ghrc-preview-resizer {
 #ghrc-link-preview .ghrc-preview-entries a {
   min-width: 0;
   overflow-wrap: anywhere;
-  color: LinkText;
+  color: var(--ghrc-preview-link);
   text-decoration: none;
 }
 
@@ -325,7 +369,7 @@ html[data-ghrc-link-preview="left"] #ghrc-link-preview .ghrc-preview-resizer {
 
 #ghrc-link-preview .ghrc-preview-entries small {
   flex-shrink: 0;
-  opacity: 0.65;
+  color: var(--ghrc-preview-muted);
 }
 
 #ghrc-link-preview .ghrc-preview-image {
