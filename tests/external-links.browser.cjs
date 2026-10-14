@@ -11,7 +11,7 @@ before(async () => {
 });
 after(async () => { await browser?.close(); });
 
-async function fixture(settings = {}, githubResponse = null) {
+async function fixture(settings = {}, githubResponse = null, nativeSplitSupported = false) {
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
   await page.route('https://chatgpt.com/**', route => route.fulfill({
     contentType: 'text/html',
@@ -22,13 +22,14 @@ async function fixture(settings = {}, githubResponse = null) {
     contentType: 'text/html', body: '<body><script>' + read('js/link-preview-host.js') + '</script></body>',
   }));
   await page.goto('https://chatgpt.com/c/example');
-  await page.evaluate(({ settings, githubResponse }) => {
+  await page.evaluate(({ settings, githubResponse, nativeSplitSupported }) => {
     window.settingsListeners = [];
     window.runtimeListeners = [];
     window.previewRequests = [];
     window.storageWrites = [];
     window.openedLinks = [];
     window.copiedLinks = [];
+    window.nativeSplitSupported = nativeSplitSupported;
     window.open = (...args) => openedLinks.push(args);
     Object.defineProperty(navigator, 'clipboard', {
       configurable: true,
@@ -41,7 +42,7 @@ async function fixture(settings = {}, githubResponse = null) {
         sendMessage: async message => {
           previewRequests.push(message);
           if (message.type === 'load-github-link-preview') return githubResponse;
-          if (message.type === 'open-native-split-view') return { ok: true };
+          if (message.type === 'open-native-split-view') return { ok: window.nativeSplitSupported };
           return { ok: true };
         },
       },
@@ -53,12 +54,27 @@ async function fixture(settings = {}, githubResponse = null) {
         onChanged: { addListener: listener => settingsListeners.push(listener) },
       },
     };
-  }, { settings, githubResponse });
+  }, { settings, githubResponse, nativeSplitSupported });
   await page.addStyleTag({ content: read('css/external-links.css') });
   await page.addScriptTag({ content: read('js/citation-links-main.js') });
   await page.addScriptTag({ content: read('js/external-links.js') });
   return page;
 }
+
+test('all sidebar buttons prefer the same native split, including GitHub documentation', async () => {
+  const page = await fixture({ openExternalLinksInSplitView: true, openExternalLinksInSplitViewOnLeft: true }, null, true);
+  for (const href of ['https://www.random.org/', 'https://en.wikipedia.org/wiki/Special:Random', 'https://github.com/owner/repo/blob/main/README.md', 'https://docs.github.com/en']) {
+    await page.locator('#source').evaluate((link, href) => { link.href = href; }, href);
+    await page.waitForFunction(href => document.querySelector('.ghrc-link-sidebar-button')?.dataset.href === href, href);
+    await page.locator('.ghrc-link-sidebar-button').click();
+    await page.waitForFunction(href => previewRequests.some(message => message.type === 'open-native-split-view' && message.url === href), href);
+    assert.equal(await page.locator('#ghrc-link-preview').count(), 0);
+  }
+  const requests = await page.evaluate(() => previewRequests);
+  assert.equal(requests.length, 4);
+  assert.ok(requests.every(message => message.type === 'open-native-split-view' && message.onLeft === true));
+  await page.close();
+});
 
 test('normal link click keeps the configured new-tab behavior and sidebar controls are opt-in', async () => {
   const page = await fixture();
@@ -273,12 +289,15 @@ test('blocked embedded previews can still fall back to the browser native split'
   await page.frameLocator('#ghrc-link-preview iframe').frameLocator('iframe').locator('h1').waitFor();
   const watch = (await page.evaluate(() => previewRequests)).find(message => message.type === 'watch-link-preview');
   assert.ok(watch);
-  await page.evaluate(watch => runtimeListeners.forEach(fn => fn({
-    type: 'link-preview-navigation-error',
-    previewId: watch.previewId,
-    url: watch.url,
-  })), watch);
-  await page.waitForFunction(() => previewRequests.some(message => message.type === 'open-native-split-view'));
+  await page.evaluate(watch => {
+    window.nativeSplitSupported = true;
+    runtimeListeners.forEach(fn => fn({
+      type: 'link-preview-navigation-error',
+      previewId: watch.previewId,
+      url: watch.url,
+    }));
+  }, watch);
+  await page.waitForFunction(() => previewRequests.filter(message => message.type === 'open-native-split-view').length === 2);
   assert.equal(await page.locator('#ghrc-link-preview').count(), 0);
   await page.close();
 });

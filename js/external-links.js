@@ -591,17 +591,19 @@
     }
   }
 
-  async function openNativeSplitView(href, link) {
+  async function openNativeSplitView(href, link, nativeGuide = true) {
     closeLinkPreview(false);
     const request = ++nativeSplitRequest;
     try {
-      const result = await chrome.runtime.sendMessage({ type: "open-native-split-view", url: href });
+      const result = await chrome.runtime.sendMessage({
+        type: "open-native-split-view", url: href, onLeft: splitViewOnLeft,
+      });
       if (request !== nativeSplitRequest) return;
       if (result?.ok) return;
     } catch {
       // Older browsers cannot create a native split through the extension API.
     }
-    if (request === nativeSplitRequest) showLinkPreview(href, link, true);
+    if (request === nativeSplitRequest) showLinkPreview(href, link, nativeGuide);
   }
 
   function showNativeSplitGuide(href, content) {
@@ -844,7 +846,7 @@
       event.stopImmediatePropagation();
       const href = sidebar.dataset.href;
       const source = sidebar.closest(".ghrc-link-actions")?.previousSibling;
-      if (href) showLinkPreview(href, source);
+      if (href) void openNativeSplitView(href, source, false);
       return;
     }
     const link = event.target.closest?.("a[href]");

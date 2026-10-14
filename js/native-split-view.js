@@ -9,7 +9,7 @@ function nativeSplitURL(value) {
 
 const nativeSplitRequests = new Map();
 
-async function openNativeSplit(value, sourceTabId) {
+async function openNativeSplit(value, sourceTabId, onLeft = false) {
   const url = nativeSplitURL(value);
   if (typeof chrome.tabs.createSplit !== "function") {
     return { ok: false, unavailable: true };
@@ -35,7 +35,7 @@ async function openNativeSplit(value, sourceTabId) {
     if (source.groupId !== undefined && source.groupId !== -1) {
       await chrome.tabs.group({ tabIds: [destination.id], groupId: source.groupId });
     }
-    await chrome.tabs.createSplit([source.id, destination.id]);
+    await chrome.tabs.createSplit(onLeft ? [destination.id, source.id] : [source.id, destination.id]);
     await chrome.storage.session.set({ [`nativeSplitPane:${source.id}`]: destination.id });
     await chrome.tabs.update(destination.id, { active: true });
     return { ok: true };
@@ -69,7 +69,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
   // Serialize clicks from one chat so repeated clicks reuse the same native pane.
   const previous = nativeSplitRequests.get(tabId) || Promise.resolve();
-  const request = previous.catch(() => {}).then(() => openNativeSplit(message.url, tabId));
+  const request = previous.catch(() => {}).then(() => openNativeSplit(message.url, tabId, message.onLeft === true));
   nativeSplitRequests.set(tabId, request);
   request.then(sendResponse).catch(() => sendResponse({ ok: false, unavailable: true }))
     .finally(() => {
