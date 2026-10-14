@@ -197,6 +197,49 @@ test('image card capture handlers cannot intercept the sidebar icon', async () =
   await page.close();
 });
 
+test('inline citation icons open the first source while the citation keeps its complete source list', async () => {
+  const page = await fixture({ openExternalLinksInSplitView: true }, null, true);
+  await page.evaluate(() => {
+    const chip = document.createElement('button');
+    chip.id = 'inline-citation';
+    chip.setAttribute('data-d-component', 'popover-trigger');
+    chip.setAttribute('aria-haspopup', 'dialog');
+    chip.textContent = 'GitHub Docs +1';
+    chip.__reactFiber$fixture = { memoizedProps: { __dilHostElement: { props: { children: 'GitHub Docs +1' } } }, return: {
+      memoizedProps: { __dilHostElement: { props: { content: [
+        { props: { onVisibleKey: 'https://docs.github.com/en/rest/branches' } },
+        { props: { onVisibleKey: 'https://docs.github.com/en/rest/commits' } },
+      ] } } },
+    } };
+    window.citationOpens = 0;
+    const showSources = () => {
+      citationOpens++;
+      if (document.getElementById('citation-list')) return;
+      const list = document.createElement('div');
+      list.id = 'citation-list';
+      list.setAttribute('role', 'dialog');
+      list.textContent = 'Branches documentation; Commits documentation';
+      document.body.append(list);
+    };
+    chip.addEventListener('click', showSources);
+    chip.addEventListener('mouseenter', showSources);
+    document.querySelector('main').append(chip);
+  });
+  const icon = page.locator('#inline-citation + .ghrc-inline-citation-actions button');
+  await icon.waitFor();
+  assert.equal(await icon.getAttribute('data-href'), 'https://docs.github.com/en/rest/branches');
+  await icon.click();
+  assert.equal(await page.evaluate(() => citationOpens), 0);
+  assert.equal((await page.evaluate(() => previewRequests)).at(-1).url, 'https://docs.github.com/en/rest/branches');
+  await page.locator('#inline-citation').hover();
+  assert.equal(await page.locator('#citation-list').textContent(), 'Branches documentation; Commits documentation');
+  await page.locator('#inline-citation').click();
+  assert.equal(await page.evaluate(() => citationOpens), 2);
+  await page.evaluate(() => settingsListeners.forEach(fn => fn({ openExternalLinksInSplitView: { newValue: false } }, 'local')));
+  assert.equal(await page.locator('.ghrc-inline-citation-actions').count(), 0);
+  await page.close();
+});
+
 test('embedded citation buttons open the actual source beside chat without invoking native navigation', async () => {
   const page = await fixture({ openExternalLinksInSplitView: true });
   await page.evaluate(() => {

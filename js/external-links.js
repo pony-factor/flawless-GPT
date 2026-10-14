@@ -684,13 +684,14 @@
     if (!(node instanceof Element)) return;
     if (node.matches("a[href]")) ensureLinkActions(node);
     node.querySelectorAll("a[href]").forEach(ensureLinkActions);
-    const selector = 'button[data-d-component="pressable"][aria-label^="Open "]';
+    const selector = 'button[data-d-component="pressable"][aria-label^="Open "], [data-d-component="popover-trigger"]';
     if (node.matches(selector)) ensureCitationActions(node);
     node.querySelectorAll(selector).forEach(ensureCitationActions);
   }
 
   function ensureCitationActions(button) {
-    if (!splitViewEnabled || !button.closest('[role="dialog"]')) return;
+    const inline = button.matches('[data-d-component="popover-trigger"]') && Boolean(button.closest('main'));
+    if (!splitViewEnabled || (!inline && !button.closest('[role="dialog"]'))) return;
     button.dispatchEvent(new Event("ghrc-resolve-citation-url", { bubbles: true }));
     const href = button.getAttribute("data-ghrc-citation-url");
     let url;
@@ -699,12 +700,14 @@
     let actions = linkActions.get(button);
     if (!actions?.isConnected) {
       actions = createLinkActions(button, url);
-      actions.classList.add("ghrc-citation-actions");
+      actions.classList.add(inline ? "ghrc-inline-citation-actions" : "ghrc-citation-actions");
       button.after(actions);
     } else updateLinkActions(button, url, actions);
     button.classList.add("ghrc-citation-source");
-    button.parentElement.classList.add("ghrc-citation-sources");
-    actions.style.top = `${button.offsetTop + 12}px`;
+    if (!inline) {
+      button.parentElement.classList.add("ghrc-citation-sources");
+      actions.style.top = `${button.offsetTop + 12}px`;
+    }
   }
 
   function refreshLinkActions() {

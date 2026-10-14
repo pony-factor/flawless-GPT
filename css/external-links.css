@@ -87,6 +87,11 @@ main span:has(> .ghrc-link-with-actions) {
   position: relative;
 }
 
+.ghrc-inline-citation-actions {
+  vertical-align: middle;
+  margin-inline: 3px 1px;
+}
+
 .ghrc-citation-actions {
   position: absolute;
   inset-inline-end: 8px;
