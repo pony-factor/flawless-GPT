@@ -138,6 +138,47 @@ test("adding and refreshing a PDF caches the complete first page, preserves link
   assert.deepEqual(errors, []);
 });
 
+test("the reference autocomplete stays clickable where it overlaps Highlights", async () => {
+  await page.locator("#ghrc-highlighted-pages .ghrc-highlighted-page").first().waitFor();
+  const overlap = await page.evaluate(() => {
+    const widget = document.getElementById("github-repositories-for-chatgpt");
+    widget.style.minHeight = "130px";
+    const form = document.createElement("form");
+    form.className = "ghrc-wooten-link-search";
+    form.style.cssText = "position:absolute;bottom:4px;left:calc(50% - 125px);width:250px;height:32px";
+    const results = document.createElement("div");
+    results.className = "ghrc-wooten-link-results";
+    results.style.cssText = "height:200px;max-height:none;overflow:hidden";
+    const option = document.createElement("button");
+    option.type = "button";
+    option.textContent = "Example reference";
+    option.style.height = "100%";
+    option.addEventListener("click", () => { window.__ghrcClickedReference = true; });
+    results.append(option);
+    form.append(results);
+    widget.append(form);
+    const a = option.getBoundingClientRect();
+    const b = document.querySelector("#ghrc-highlighted-pages .ghrc-highlighted-page").getBoundingClientRect();
+    return {
+      left: Math.max(a.left, b.left),
+      right: Math.min(a.right, b.right),
+      top: Math.max(a.top, b.top),
+      bottom: Math.min(a.bottom, b.bottom),
+    };
+  });
+  assert.ok(overlap.right > overlap.left && overlap.bottom > overlap.top, "the two surfaces overlap");
+  const point = { x: (overlap.left + overlap.right) / 2, y: (overlap.top + overlap.bottom) / 2 };
+  const topmost = await page.evaluate(({ x, y }) =>
+    document.elementFromPoint(x, y)?.closest(".ghrc-wooten-link-results button")?.textContent, point);
+  assert.equal(topmost, "Example reference", "Highlights must not intercept the reference click");
+  await page.mouse.click(point.x, point.y);
+  assert.equal(await page.evaluate(() => window.__ghrcClickedReference), true);
+  await page.evaluate(() => {
+    document.querySelector(".ghrc-wooten-link-search")?.remove();
+    delete window.__ghrcClickedReference;
+  });
+});
+
 test("invalid PDFs fail visibly and are not added to the cached shelf", async () => {
   await page.locator("#highlighted-page-url").fill(`${origin}/invalid.pdf`);
   await page.locator("#add-highlighted-page").click();

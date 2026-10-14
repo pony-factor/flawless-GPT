@@ -12,7 +12,8 @@
   position: relative;
   transform: translateX(-50%);
   width: 1120px;
-  z-index: 2;
+  /* Keep dashboard autocomplete popovers above this sibling shelf. */
+  z-index: 1;
 }
 
 #ghrc-highlighted-pages h2 {

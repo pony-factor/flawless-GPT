@@ -4,6 +4,7 @@ const fs = require("node:fs");
 
 const source = fs.readFileSync(require.resolve("../js/content.js"), "utf8");
 const stylesheet = fs.readFileSync(require.resolve("../css/styles.css"), "utf8");
+const highlightsStylesheet = fs.readFileSync(require.resolve("../css/highlighted-pages.css"), "utf8");
 const helper = source.match(/  function chooseWootenLinkPlacement\([\s\S]*?\n  }\n/)?.[0];
 assert.ok(helper, "WootenLink placement helper is present");
 const choosePlacement = new Function(`${helper}\nreturn chooseWootenLinkPlacement;`)();
@@ -39,4 +40,12 @@ test("WootenLink results are absolutely overlaid and default to opening downward
   assert.doesNotMatch(base, /bottom:/);
   assert.match(upward, /bottom: calc\(100% \+ 6px\)/);
   assert.match(upward, /top: auto/);
+});
+
+test("reference suggestions stack above the separate Highlights shelf", () => {
+  const dashboard = stylesheet.split("#github-repositories-for-chatgpt {")[1]?.split("}")[0];
+  const highlights = highlightsStylesheet.split("#ghrc-highlighted-pages.ghrc-highlighted-pages {")[1]?.split("}")[0];
+  assert.ok(dashboard && highlights, "both surfaces have a stacking context");
+  const layer = (rule) => Number(rule.match(/z-index:\s*(\d+)/)?.[1]);
+  assert.ok(layer(dashboard) > layer(highlights), "dashboard popovers must paint above Highlights");
 });
