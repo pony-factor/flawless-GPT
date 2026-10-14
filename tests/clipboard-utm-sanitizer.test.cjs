@@ -372,3 +372,10 @@ test('removes leading spaces from standalone copied card links while preserving 
   const input = '[First](https://example.com/first)\\\n  [Second](https://example.com/second)\n&#x20;&#x20;[Third](https://example.com/third)\n\n- [List](https://example.com/list)\n    [Code](https://example.com/code)\n```md\n  [Example](https://example.com/example)\n```';
   assert.equal(sanitizeCopiedText(input), '[First](https://example.com/first)\\\n[Second](https://example.com/second)\n[Third](https://example.com/third)\n\n- [List](https://example.com/list)\n    [Code](https://example.com/code)\n```md\n  [Example](https://example.com/example)\n```');
 });
+
+test('restores item-header links without making the heading a citation bullet', () => {
+  const input = 'I compared Scooch Wingmate earlier.\n\n### **Scooch Wingmate**\nDetails about the case.';
+  assert.equal(sanitizeCopiedText(input, {}, [{
+    text: 'Scooch Wingmate', kind: 'item', urls: ['https://scooch.example/wingmate'],
+  }]), 'I compared Scooch Wingmate earlier.\n\n### [Scooch Wingmate](https://scooch.example/wingmate)\nDetails about the case.');
+});

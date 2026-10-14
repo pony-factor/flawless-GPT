@@ -1,12 +1,14 @@
 (() => {
   // Citation cards and inline source groups are DIL controls. Their destinations are held in React's
   // rendered host element, rather than an href in the DOM.
-  document.addEventListener("ghrc-resolve-citation-url", (event) => {
+  function resolveDestination(event) {
     const button = event.target;
     if (!(button instanceof Element)
         || !(button.matches('[data-d-component="popover-trigger"]') && button.closest('main') && !button.querySelector('a[href]')
           || button.matches('button[data-d-component="pressable"][aria-label^="Open "]')
-            && button.closest('[role="dialog"]'))) return;
+            && button.closest('[role="dialog"]')
+          || button.matches('[data-d-component="pressable"]') && button.closest('main')
+            && event.type === "ghrc-resolve-item-url")) return;
     button.removeAttribute("data-ghrc-citation-url");
     button.removeAttribute("data-ghrc-citation-urls");
     button.removeAttribute("data-ghrc-citation-sources");
@@ -67,5 +69,7 @@
         break;
       }
     }
-  });
+  }
+  document.addEventListener("ghrc-resolve-citation-url", resolveDestination);
+  document.addEventListener("ghrc-resolve-item-url", resolveDestination);
 })();

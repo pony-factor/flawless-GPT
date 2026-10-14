@@ -106,5 +106,26 @@ test('response Copy preserves all citation destinations in text and HTML and sta
     assert.match(stopped.text, /Before\.\n\n- \[Scooch\]/);
     assert.doesNotMatch(stopped.text, /\n{3}|\+2/);
     assert.equal((stopped.html.match(/<a /g) || []).length, 3);
+    await page.evaluate(() => {
+      const header = document.createElement('button');
+      header.setAttribute('data-d-component', 'pressable');
+      header.textContent = 'Scooch Wingmate';
+      header.__reactFiber$test = { memoizedProps: { __dilHostElement: { props: {
+        onVisibleKey: 'https://scooch.example/wingmate', children: 'Scooch Wingmate',
+      } } }, return: { stateNode: document.querySelector('[data-message-author-role]') } };
+      document.querySelector('[data-message-author-role]').prepend(header);
+      document.querySelector('[data-testid="copy-turn-btn"]').onclick = () => navigator.clipboard.write([new ClipboardItem({
+        'text/plain': new Blob(['I compared Scooch Wingmate earlier.\n\n### Scooch Wingmate\nDetails.\nScooch\n+2'], { type: 'text/plain' }),
+        'text/html': new Blob(['<p>I compared Scooch Wingmate earlier.</p><h3>Scooch Wingmate</h3><p>Details.</p><span>Scooch+2</span>'], { type: 'text/html' }),
+      })]);
+    });
+    await page.locator('[data-testid="copy-turn-btn"]').click();
+    await page.waitForFunction(() => writes.length === 6);
+    const headers = await page.evaluate(() => writes[5]);
+    assert.match(headers['text/plain'], /### \[Scooch Wingmate\]\(https:\/\/scooch.example\/wingmate\)/);
+    assert.match(headers['text/plain'], /^I compared Scooch Wingmate earlier\./);
+    assert.match(headers['text/plain'], /\n- \[Scooch\]/);
+    assert.match(headers['text/html'], /<h3><a href="https:\/\/scooch.example\/wingmate">Scooch Wingmate<\/a><\/h3>/);
+    assert.equal((headers['text/html'].match(/<li><a /g) || []).length, 3);
   } finally { await browser.close(); }
 });

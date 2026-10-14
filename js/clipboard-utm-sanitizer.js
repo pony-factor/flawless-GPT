@@ -140,6 +140,13 @@
         const node = candidates.find(node => !candidates.includes(node.parentElement));
         if (node) {
           const label = citation.text.replace(/\s*\+\s*\d+\s*$/, "").trim();
+          if (citation.kind === "item") {
+            const anchor = parsed.createElement("a");
+            anchor.href = citation.urls[0];
+            anchor.textContent = citation.text.trim();
+            node.replaceChildren(anchor);
+            continue;
+          }
           const list = parsed.createElement("ul");
           list.style.marginTop = "0";
           list.style.marginBottom = "0";
@@ -229,8 +236,21 @@
 
   function restoreCopiedCitations(value, citations = []) {
     let cursor = 0;
-    for (const { text, urls, titles } of citations) {
+    for (const { text, urls, titles, kind } of citations) {
       if (!text || !urls.length) continue;
+      if (kind === "item") {
+        const label = text.trim();
+        const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        const expression = new RegExp(`(^|\\n)([ \\t]{0,3}(?:#{1,6}[ \\t]+|[-*+][ \\t]+)?(?:\\*\\*|__)?)(?:${escaped})((?:\\*\\*|__)?[ \\t]*)(?=\\r?$|\\n)`, "m");
+        const match = expression.exec(value.slice(cursor));
+        if (!match) continue;
+        const link = `[${label.replace(/([\\[\]])/g, "\\$1")}](${urls[0].replace(/\(/g, "%28").replace(/\)/g, "%29")})`;
+        const start = cursor + match.index;
+        const replacement = match[1] + match[2] + link + match[3];
+        value = value.slice(0, start) + replacement + value.slice(start + match[0].length);
+        cursor = start + replacement.length;
+        continue;
+      }
       const label = text.replace(/\s*\+\s*\d+\s*$/, "").trim();
       const links = urls.map((url, index) => {
         const title = titles?.[index] || (index ? new URL(url).hostname : label);
@@ -345,6 +365,15 @@
   });
 
   const clipboard = navigator.clipboard;
+  const sourceControlSelector = '[data-d-component="popover-trigger"], [data-d-component="pressable"]';
+  function sourceControls(parent) {
+    return [...parent.querySelectorAll(sourceControlSelector)].filter(control => {
+      const item = !control.matches('[data-d-component="popover-trigger"]');
+      if (item && /^(?:Copy|Copy response|Share|More actions|Sources|Read aloud)$/i.test(control.getAttribute("aria-label") || control.textContent.trim())) return false;
+      control.dispatchEvent(new Event(item ? "ghrc-resolve-item-url" : "ghrc-resolve-citation-url", { bubbles: true }));
+      return control.hasAttribute("data-ghrc-citation-url");
+    });
+  }
   let copiedCitations = [];
   const nativeCopies = new WeakMap();
   document.addEventListener?.("copy", (event) => {
@@ -370,7 +399,7 @@
         || /^(?:Copy|Copy response)$/i.test(button.getAttribute("aria-label") || button.textContent.trim()))) return;
     if (button.closest("pre")) return;
     let turn = button.closest('article, [data-testid^="conversation-turn-"], [data-turn="assistant"], [data-dil-message-id]');
-    if (!turn?.querySelector('[data-d-component="popover-trigger"]')) {
+    if (!turn || !sourceControls(turn).length) {
       // DIL places the toolbar outside its message element. Find the smallest
       // common container with citations and exactly this response's Copy control.
       turn = null;
@@ -378,16 +407,17 @@
         const copies = [...parent.querySelectorAll('button, [role="button"]')].filter(control =>
           !control.closest("pre") && /^(?:Copy|Copy response)$/i.test(control.getAttribute("aria-label") || control.textContent.trim()));
         if (copies.length > 1) break;
-        if (parent.querySelector('[data-d-component="popover-trigger"]')) { turn = parent; break; }
+        if (sourceControls(parent).length) { turn = parent; break; }
       }
     }
     if (!turn) return;
-    for (const chip of turn.querySelectorAll('[data-d-component="popover-trigger"]')) {
-      chip.dispatchEvent(new Event("ghrc-resolve-citation-url", { bubbles: true }));
+    for (const chip of sourceControls(turn)) {
+      const item = !chip.matches('[data-d-component="popover-trigger"]');
       try {
         const urls = JSON.parse(chip.getAttribute("data-ghrc-citation-urls") || "[]");
         const sources = JSON.parse(chip.getAttribute("data-ghrc-citation-sources") || "[]");
         if (urls.length) copiedCitations.push({ text: chip.innerText || chip.textContent, urls,
+          kind: item ? "item" : "citation",
           titles: urls.map(url => sources.find(source => source.url === url)?.title || "") });
       } catch { /* Unresolved citations retain the native copy output. */ }
     }
