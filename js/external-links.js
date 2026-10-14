@@ -646,6 +646,14 @@
     sidebar.dataset.href = url.href;
   }
 
+  function removeLinkActions(link, actions) {
+    actions?.remove();
+    const group = link.parentElement;
+    if (group?.classList.contains("ghrc-link-with-actions")) {
+      group.replaceWith(...group.childNodes);
+    }
+  }
+
   function ensureLinkActions(link) {
     const existing = linkActions.get(link);
     const url = externalUrlForLink(link);
@@ -653,12 +661,21 @@
     // Only decorate the original chat link, not its popup copy.
     if (!splitViewEnabled || !url || !link.closest('main')
         || link.closest('[role="tooltip"], [data-radix-popper-content-wrapper]')) {
-      existing?.remove();
+      removeLinkActions(link, existing);
       return;
     }
     if (existing?.isConnected) {
       updateLinkActions(link, url, existing);
       return;
+    }
+    // Keep a text link and its action together as the chat narrows. Preserve
+    // the original anchor (including ChatGPT's handlers and external icon).
+    if (!link.querySelector("img, picture, video, canvas")
+        && !link.parentElement?.classList.contains("ghrc-link-with-actions")) {
+      const group = document.createElement("span");
+      group.className = "ghrc-link-with-actions";
+      link.before(group);
+      group.append(link);
     }
     link.after(createLinkActions(link, url));
   }
@@ -697,6 +714,7 @@
     });
     if (!splitViewEnabled) {
       document.querySelectorAll(".ghrc-link-actions").forEach(actions => actions.remove());
+      document.querySelectorAll(".ghrc-link-with-actions").forEach(group => group.replaceWith(...group.childNodes));
       document.querySelectorAll('.ghrc-citation-source').forEach(button => button.classList.remove('ghrc-citation-source'));
       return;
     }

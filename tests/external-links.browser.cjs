@@ -85,6 +85,39 @@ test('normal link click keeps the configured new-tab behavior and sidebar contro
   await page.close();
 });
 
+test('long links wrap beside their button without overflowing a narrow chat', async () => {
+  const page = await fixture({ openExternalLinksInSplitView: true });
+  await page.locator('.ghrc-link-with-actions').waitFor();
+  await page.locator('#source').evaluate(link => {
+    link.textContent = 'https://commons.wikimedia.org/wiki/Special:Random/File/averylongunbrokenfilename';
+    link.style.cssText = 'display:inline-flex;white-space:nowrap';
+  });
+  for (const width of [240, 320, 520]) {
+    await page.setViewportSize({ width, height: 800 });
+    const boxes = await page.evaluate(() => {
+      const link = document.querySelector('#source');
+      const group = link.parentElement;
+      const action = group.querySelector('.ghrc-link-actions');
+      const text = document.createRange();
+      text.selectNodeContents(link);
+      const lastLine = [...text.getClientRects()].at(-1);
+      return { group: group.getBoundingClientRect().toJSON(), link: link.getBoundingClientRect().toJSON(),
+        action: action.getBoundingClientRect().toJSON(), scrollWidth: document.documentElement.scrollWidth,
+        lastLine: lastLine.toJSON(), viewport: innerWidth, count: document.querySelectorAll('.ghrc-link-actions').length };
+    });
+    assert.ok(boxes.scrollWidth <= boxes.viewport, JSON.stringify(boxes));
+    assert.ok(boxes.action.right <= boxes.viewport);
+    assert.ok(boxes.action.x - boxes.lastLine.right >= 0, JSON.stringify(boxes));
+    assert.ok(boxes.action.x - boxes.lastLine.right < 6, JSON.stringify(boxes));
+    assert.ok(Math.abs(boxes.action.bottom - boxes.lastLine.bottom) < 4, JSON.stringify(boxes));
+    assert.equal(boxes.count, 1);
+  }
+  await page.evaluate(() => settingsListeners.forEach(fn => fn({ openExternalLinksInSplitView: { newValue: false } }, 'local')));
+  assert.equal(await page.locator('.ghrc-link-with-actions').count(), 0);
+  assert.equal(await page.locator('#source').count(), 1);
+  await page.close();
+});
+
 test('sidebar mode adds only the sidebar action and preserves normal new-tab clicks', async () => {
   const page = await fixture({ openExternalLinksInSplitView: true });
   const actions = page.locator('.ghrc-link-actions');
