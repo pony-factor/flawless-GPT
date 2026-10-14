@@ -21,6 +21,7 @@ The dashboard:
 - can skip ChatGPT's external-site warning and dismiss its history rate-limit
   modal independently;
 - hides ChatGPT's usage remaining / credits card by default;
+- optionally hides promotional ChatGPT plan-upgrade banners such as the Astra Pro upsell, without removing conversation content;
 - queues follow-up messages locally while ChatGPT is responding, keeps them editable and reorderable, and sends them FIFO only after the active response fully completes;
 - adds columns for any other GitHub accounts the connected tokens can access;
 - pins important repositories at the top of their user or organization column;
