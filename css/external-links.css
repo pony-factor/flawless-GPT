@@ -19,6 +19,14 @@ html[data-ghrc-link-preview="left"] {
   vertical-align: bottom;
 }
 
+/* ChatGPT's link wrapper can reserve only one line even after the URL wraps. */
+main span:has(> .ghrc-link-with-actions) {
+  display: inline !important;
+  height: auto !important;
+  max-height: none !important;
+  white-space: normal !important;
+}
+
 .ghrc-link-with-actions > a {
   display: inline !important;
   white-space: normal !important;

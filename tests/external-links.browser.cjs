@@ -118,6 +118,26 @@ test('long links wrap beside their button without overflowing a narrow chat', as
   await page.close();
 });
 
+test('wrapped documentation links reserve their height above the next list item', async () => {
+  const page = await fixture({ openExternalLinksInSplitView: true });
+  await page.evaluate(() => {
+    const list = document.createElement('ul');
+    list.style.cssText = 'font:16px/26px sans-serif;margin:0;padding-left:24px';
+    list.innerHTML = '<li>Stacked Pull Requests: <span style="display:inline-flex;height:26px;max-height:26px;white-space:nowrap"><a id="stacked" href="https://docs.github.com/en/pull-requests/reference/stacked-pull-requests-apis-and-webhooks">https://docs.github.com/en/pull-requests/reference/stacked-pull-requests-apis-and-webhooks</a></span></li><li id="next-item">GitHub Branches: https://docs.github.com/en/rest/branches</li>';
+    document.querySelector('main').replaceChildren(list);
+  });
+  await page.locator('#stacked + .ghrc-link-actions').waitFor();
+  for (const width of [240, 320, 520, 768]) {
+    await page.setViewportSize({ width, height: 800 });
+    const boxes = await page.evaluate(() => {
+      const group = document.getElementById('stacked').parentElement;
+      return { wrapped: group.getBoundingClientRect().toJSON(), next: document.getElementById('next-item').getBoundingClientRect().toJSON() };
+    });
+    assert.ok(boxes.next.top >= boxes.wrapped.bottom, JSON.stringify(boxes));
+  }
+  await page.close();
+});
+
 test('sidebar mode adds only the sidebar action and preserves normal new-tab clicks', async () => {
   const page = await fixture({ openExternalLinksInSplitView: true });
   const actions = page.locator('.ghrc-link-actions');
