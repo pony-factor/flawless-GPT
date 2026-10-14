@@ -205,12 +205,14 @@ test('inline citation icons open the first source while the citation keeps its c
     chip.setAttribute('data-d-component', 'popover-trigger');
     chip.setAttribute('aria-haspopup', 'dialog');
     chip.textContent = 'GitHub Docs +1';
-    chip.__reactFiber$fixture = { memoizedProps: { __dilHostElement: { props: { children: 'GitHub Docs +1' } } }, return: {
-      memoizedProps: { __dilHostElement: { props: { content: [
+    let fiber = {
+      memoizedProps: { __dilHostElement: { props: { children: [
         { props: { onVisibleKey: 'https://docs.github.com/en/rest/branches' } },
         { props: { onVisibleKey: 'https://docs.github.com/en/rest/commits' } },
       ] } } },
-    } };
+    };
+    for (let level = 0; level < 19; level++) fiber = { memoizedProps: {}, return: fiber };
+    chip.__reactFiber$fixture = fiber;
     window.citationOpens = 0;
     const showSources = () => {
       citationOpens++;

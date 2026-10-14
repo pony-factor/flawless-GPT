@@ -4,7 +4,7 @@
   document.addEventListener("ghrc-resolve-citation-url", (event) => {
     const button = event.target;
     if (!(button instanceof Element)
-        || !(button.matches('[data-d-component="popover-trigger"]') && button.closest('main')
+        || !(button.matches('[data-d-component="popover-trigger"]') && button.closest('main') && !button.querySelector('a[href]')
           || button.matches('button[data-d-component="pressable"][aria-label^="Open "]')
             && button.closest('[role="dialog"]'))) return;
     button.removeAttribute("data-ghrc-citation-url");
@@ -34,7 +34,7 @@
       }
       return null;
     }
-    for (let level = 0; fiber && level < 10; level++, fiber = fiber.return) {
+    for (let level = 0; fiber && level < 32; level++, fiber = fiber.return) {
       // Do not search the response or conversation for an unrelated source.
       if (fiber.stateNode !== button
           && fiber.stateNode?.matches?.('main, [data-message-author-role], [data-dil-message-id]')) break;

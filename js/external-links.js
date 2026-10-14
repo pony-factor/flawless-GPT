@@ -690,7 +690,8 @@
   }
 
   function ensureCitationActions(button) {
-    const inline = button.matches('[data-d-component="popover-trigger"]') && Boolean(button.closest('main'));
+    const inline = button.matches('[data-d-component="popover-trigger"]')
+      && Boolean(button.closest('main')) && !button.querySelector('a[href]');
     if (!splitViewEnabled || (!inline && !button.closest('[role="dialog"]'))) return;
     button.dispatchEvent(new Event("ghrc-resolve-citation-url", { bubbles: true }));
     const href = button.getAttribute("data-ghrc-citation-url");
