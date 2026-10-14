@@ -46,7 +46,7 @@ test('response Copy preserves all citation destinations in text and HTML and sta
     assert.match(copied, /\[scooch.example\]\(https:\/\/scooch.example\/drop\)/);
     assert.match(copied, /\[amazon.example\]\(https:\/\/amazon.example\/listing\)/);
     assert.doesNotMatch(copied, /\+2|wrong-turn|unrelated|utm_source/);
-    assert.match(copied, /moneymate\)\n\[scooch.example\].*\n\[amazon.example\]/);
+    assert.match(copied, /moneymate\)  \n\[scooch.example\].*  \n\[amazon.example\]/);
     assert.match(copied, /\[View listing\]\(https:\/\/amazon.example\/listing\)/);
     await page.locator('#code-copy').click();
     assert.equal(await page.evaluate(() => writes[1]), 'Scooch\n+2');

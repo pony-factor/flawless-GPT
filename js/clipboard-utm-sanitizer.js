@@ -231,7 +231,7 @@
       const links = urls.map((url, index) => {
         const title = titles?.[index] || (index ? new URL(url).hostname : label);
         return `[${title.replace(/([\\[\]])/g, "\\$1")}](${url.replace(/\(/g, "%28").replace(/\)/g, "%29")})`;
-      }).join(value.includes("\r\n") ? "\r\n" : "\n");
+      }).join(value.includes("\r\n") ? "  \r\n" : "  \n");
       // Native copy emits chips on their own lines, including the +N count.
       // Do not turn ordinary mentions of the publisher in prose into links.
       const escapeLabel = label.split(/\s+/).map(part => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("\\s+");

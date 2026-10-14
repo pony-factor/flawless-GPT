@@ -346,7 +346,7 @@ test('keeps repeated publisher chips tied to their own source groups', () => {
   assert.equal(restoreCopiedCitations(input, [
     { text: 'Scooch', urls: ['https://scooch.example/first'] },
     { text: 'Scooch+2', urls: ['https://scooch.example/second', 'https://other.example/a', 'https://other.example/b'] },
-  ]), 'Consider Scooch.\n[Scooch](https://scooch.example/first)\n\nMore options.\n[Scooch](https://scooch.example/second)\n[other.example](https://other.example/a)\n[other.example](https://other.example/b)');
+  ]), 'Consider Scooch.\n[Scooch](https://scooch.example/first)\n\nMore options.\n[Scooch](https://scooch.example/second)  \n[other.example](https://other.example/a)  \n[other.example](https://other.example/b)');
 });
 
 test('repairs schemeless GitHub destinations from native response Copy', () => {
@@ -360,5 +360,5 @@ test('copies split domain/count citations as titled links with at most one blank
     text: 'venaproducts.com +1',
     urls: ['https://venaproducts.com/case', 'https://bestbuy.example/case'],
     titles: ['Vena vCommute wallet case', 'Vena case specifications'],
-  }]), 'Before.\n\n[Vena vCommute wallet case](https://venaproducts.com/case)\n[Vena case specifications](https://bestbuy.example/case)\n\nAfter.');
+  }]), 'Before.\n\n[Vena vCommute wallet case](https://venaproducts.com/case)  \n[Vena case specifications](https://bestbuy.example/case)\n\nAfter.');
 });
