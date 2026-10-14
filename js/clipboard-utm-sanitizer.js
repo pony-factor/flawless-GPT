@@ -140,14 +140,18 @@
         const node = candidates.find(node => !candidates.includes(node.parentElement));
         if (node) {
           const label = citation.text.replace(/\s*\+\s*\d+\s*$/, "").trim();
-          node.replaceChildren();
+          const list = parsed.createElement("ul");
+          list.style.marginTop = "0";
+          list.style.marginBottom = "0";
           citation.urls.forEach((url, index) => {
-            if (index) node.append(parsed.createElement("br"));
+            const item = parsed.createElement("li");
             const anchor = parsed.createElement("a");
             anchor.href = url;
             anchor.textContent = citation.titles?.[index] || (index ? new URL(url).hostname : label);
-            node.append(anchor);
+            item.append(anchor);
+            list.append(item);
           });
+          node.replaceWith(list);
         }
       }
       result = parsed.body.innerHTML;
@@ -230,8 +234,8 @@
       const label = text.replace(/\s*\+\s*\d+\s*$/, "").trim();
       const links = urls.map((url, index) => {
         const title = titles?.[index] || (index ? new URL(url).hostname : label);
-        return `[${title.replace(/([\\[\]])/g, "\\$1")}](${url.replace(/\(/g, "%28").replace(/\)/g, "%29")})`;
-      }).join(value.includes("\r\n") ? "  \r\n" : "  \n");
+        return `- [${title.replace(/([\\[\]])/g, "\\$1")}](${url.replace(/\(/g, "%28").replace(/\)/g, "%29")})`;
+      }).join(value.includes("\r\n") ? "\r\n" : "\n");
       // Native copy emits chips on their own lines, including the +N count.
       // Do not turn ordinary mentions of the publisher in prose into links.
       const escapeLabel = label.split(/\s+/).map(part => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("\\s+");
@@ -254,8 +258,24 @@
   }
 
   function sanitizeCopiedText(value, options = {}, citations = []) {
+    if (typeof value !== "string" || !value) return value;
     const settings = normalizedCopyOptions(options);
-    let result = stripCitationPreviewThumbnails(convertReferenceLinksToInlineMarkdown(restoreCopiedCitations(value, citations)));
+    // Some rich-text serializers expose encoded spaces in their Markdown output.
+    const decoded = value.replace(/&#(?:x0*20|0*32);/gi, " ");
+    let result = stripCitationPreviewThumbnails(convertReferenceLinksToInlineMarkdown(restoreCopiedCitations(decoded, citations)));
+    // Native card copies can prefix stand-alone links with two spaces. Keep
+    // their lines flush left without changing list nesting or indented code.
+    let fence = null;
+    result = result.split(/(?<=\n)/).map(line => {
+      const marker = line.match(/^[ \t]{0,3}(`{3,}|~{3,})/);
+      if (marker) {
+        if (!fence) fence = marker[1];
+        else if (marker[1][0] === fence[0] && marker[1].length >= fence.length) fence = null;
+        return line;
+      }
+      if (fence) return line;
+      return line.replace(/^ {1,3}(?=\[[^\]\r\n]+\]\(https?:\/\/)/, "");
+    }).join("");
     if (settings.stripBold) result = stripMarkdownBold(result);
     if (settings.underscoreItalics) result = normalizeMarkdownItalics(result);
     if (settings.plainQuotes) result = normalizeSmartQuotes(result);

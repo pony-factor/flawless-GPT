@@ -42,11 +42,11 @@ test('response Copy preserves all citation destinations in text and HTML and sta
     }
     await page.locator('[data-testid="copy-turn-btn"]').click();
     const copied = await page.evaluate(() => writes[0]);
-    assert.match(copied, /^Consider Scooch\.\n\[Scooch\]\(https:\/\/scooch\.example\/moneymate\)/);
+    assert.match(copied, /^Consider Scooch\.\n- \[Scooch\]\(https:\/\/scooch\.example\/moneymate\)/);
     assert.match(copied, /\[scooch.example\]\(https:\/\/scooch.example\/drop\)/);
     assert.match(copied, /\[amazon.example\]\(https:\/\/amazon.example\/listing\)/);
     assert.doesNotMatch(copied, /\+2|wrong-turn|unrelated|utm_source/);
-    assert.match(copied, /moneymate\)  \n\[scooch.example\].*  \n\[amazon.example\]/);
+    assert.match(copied, /moneymate\)\n- \[scooch.example\].*\n- \[amazon.example\]/);
     assert.match(copied, /\[View listing\]\(https:\/\/amazon.example\/listing\)/);
     await page.locator('#code-copy').click();
     assert.equal(await page.evaluate(() => writes[1]), 'Scooch\n+2');
@@ -60,7 +60,7 @@ test('response Copy preserves all citation destinations in text and HTML and sta
     await page.waitForFunction(() => writes.length === 3);
     const rich = await page.evaluate(() => writes[2]);
     assert.equal((rich['text/html'].match(/<a /g) || []).length, 3);
-    assert.equal((rich['text/html'].match(/<\/a><br><a /g) || []).length, 2);
+    assert.equal((rich['text/html'].match(/<li><a /g) || []).length, 3);
     assert.match(rich['text/html'], /<p>Consider Scooch\.<\/p>/);
     assert.doesNotMatch(rich['text/html'], /\+2|utm_source|wrong-turn/);
     assert.match(rich['text/plain'], /\[Scooch\]\(https:\/\/scooch.example\/moneymate\)/);
@@ -103,7 +103,7 @@ test('response Copy preserves all citation destinations in text and HTML and sta
     });
     await page.locator('[data-testid="copy-turn-btn"]').click();
     const stopped = await page.evaluate(() => writes[4]);
-    assert.match(stopped.text, /Before\.\n\n\[Scooch\]/);
+    assert.match(stopped.text, /Before\.\n\n- \[Scooch\]/);
     assert.doesNotMatch(stopped.text, /\n{3}|\+2/);
     assert.equal((stopped.html.match(/<a /g) || []).length, 3);
   } finally { await browser.close(); }
