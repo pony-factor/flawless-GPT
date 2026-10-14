@@ -23,6 +23,8 @@
   let previewWidthPx = null;
   let githubPreviewGeneration = 0;
   const linkActions = new WeakMap();
+  const actionSources = new WeakMap();
+  const linkPunctuation = new WeakMap();
 
   async function savePreviewWidth() {
     if (!Number.isFinite(previewWidthPx)) return;
@@ -591,17 +593,19 @@
     }
   }
 
-  async function openNativeSplitView(href, link) {
+  async function openNativeSplitView(href, link, nativeGuide = true) {
     closeLinkPreview(false);
     const request = ++nativeSplitRequest;
     try {
-      const result = await chrome.runtime.sendMessage({ type: "open-native-split-view", url: href });
+      const result = await chrome.runtime.sendMessage({
+        type: "open-native-split-view", url: href, onLeft: splitViewOnLeft,
+      });
       if (request !== nativeSplitRequest) return;
       if (result?.ok) return;
     } catch {
       // Older browsers cannot create a native split through the extension API.
     }
-    if (request === nativeSplitRequest) showLinkPreview(href, link, true);
+    if (request === nativeSplitRequest) showLinkPreview(href, link, nativeGuide);
   }
 
   function showNativeSplitGuide(href, content) {
@@ -634,6 +638,7 @@
 
     actions.append(sidebar);
     linkActions.set(link, actions);
+    actionSources.set(actions, link);
     updateLinkActions(link, url, actions);
     return actions;
   }
@@ -644,57 +649,142 @@
     sidebar.dataset.href = url.href;
   }
 
+  function removeLinkActions(link, actions) {
+    restoreLinkPunctuation(link);
+    actions?.remove();
+    const group = link.parentElement;
+    if (group?.classList.contains("ghrc-link-with-actions")) {
+      group.replaceWith(...group.childNodes);
+    }
+  }
+
+  function restoreLinkPunctuation(link) {
+    const punctuation = linkPunctuation.get(link);
+    if (!punctuation) return;
+    if (punctuation.textNode.isConnected) {
+      punctuation.textNode.data = punctuation.text + punctuation.textNode.data;
+      punctuation.span.remove();
+    }
+    link.parentElement?.classList.remove('ghrc-link-has-punctuation');
+    linkPunctuation.delete(link);
+  }
+
+  function placeLinkActionsAfterPunctuation(link, actions) {
+    const group = link.parentElement;
+    if (!group?.classList.contains('ghrc-link-with-actions') || linkPunctuation.has(link)) return;
+    let tail = group;
+    // ChatGPT may wrap the anchor in an inline popover before the sentence's
+    // punctuation. Keep the native wrapper and its handlers intact.
+    for (let depth = 0; !tail.nextSibling && tail.parentElement?.matches('span') && depth < 5; depth++) {
+      tail = tail.parentElement;
+    }
+    const textNode = tail.nextSibling;
+    if (textNode?.nodeType !== 3) return;
+    const text = /^[.,;:!?…\)\]\}"'»”’]+/u.exec(textNode.data)?.[0];
+    if (!text) return;
+    const span = document.createElement('span');
+    span.className = 'ghrc-link-trailing-punctuation';
+    span.textContent = text;
+    linkPunctuation.set(link, { span, textNode, text });
+    textNode.data = textNode.data.slice(text.length);
+    actions.before(span);
+    group.classList.add('ghrc-link-has-punctuation');
+  }
+
   function ensureLinkActions(link) {
     const existing = linkActions.get(link);
     const url = externalUrlForLink(link);
+    if (url && link.closest('main') && link.textContent.trim()
+        && !link.querySelector('img, picture, video, canvas')) {
+      // Native text links append their new-tab SVG after the link label.
+      const icons = link.querySelectorAll('svg');
+      if (icons.length === 1) {
+        const icon = icons[0];
+        const wrapper = icon.parentElement;
+        // Hide the icon's empty layout wrapper too; hiding only its SVG can
+        // leave a reserved icon-width gap before the sentence punctuation.
+        const arrow = wrapper !== link && wrapper.childElementCount === 1
+          && [...wrapper.childNodes].every(node => node === icon || (node.nodeType === 3 && !node.textContent.trim()))
+          ? wrapper : icon;
+        arrow.setAttribute('data-ghrc-external-link-arrow', '');
+      }
+    }
     // Native hover cards repeat the URL in a portal outside the conversation.
     // Only decorate the original chat link, not its popup copy.
     if (!splitViewEnabled || !url || !link.closest('main')
         || link.closest('[role="tooltip"], [data-radix-popper-content-wrapper]')) {
-      existing?.remove();
+      removeLinkActions(link, existing);
       return;
     }
     if (existing?.isConnected) {
       updateLinkActions(link, url, existing);
+      placeLinkActionsAfterPunctuation(link, existing);
       return;
     }
-    link.after(createLinkActions(link, url));
+    // Keep a text link and its action together as the chat narrows. Preserve
+    // the original anchor (including ChatGPT's handlers and external icon).
+    if (!link.querySelector("img, picture, video, canvas")
+        && !link.parentElement?.classList.contains("ghrc-link-with-actions")) {
+      const group = document.createElement("span");
+      group.className = "ghrc-link-with-actions";
+      link.before(group);
+      group.append(link);
+    }
+    const actions = createLinkActions(link, url);
+    link.after(actions);
+    placeLinkActionsAfterPunctuation(link, actions);
   }
 
   function decorateExternalLinks(node) {
     if (!(node instanceof Element)) return;
     if (node.matches("a[href]")) ensureLinkActions(node);
     node.querySelectorAll("a[href]").forEach(ensureLinkActions);
-    const selector = 'button[data-d-component="pressable"][aria-label^="Open "]';
+    const selector = 'button[data-d-component="pressable"][aria-label^="Open "], [data-d-component="popover-trigger"]';
     if (node.matches(selector)) ensureCitationActions(node);
     node.querySelectorAll(selector).forEach(ensureCitationActions);
   }
 
   function ensureCitationActions(button) {
-    if (!splitViewEnabled || !button.closest('[role="dialog"]')) return;
+    const inline = button.matches('[data-d-component="popover-trigger"]')
+      && Boolean(button.closest('main')) && !button.querySelector('a[href]');
+    if (!splitViewEnabled || (!inline && !button.closest('[role="dialog"]'))) {
+      linkActions.get(button)?.remove();
+      button.classList.remove("ghrc-citation-source");
+      return;
+    }
     button.dispatchEvent(new Event("ghrc-resolve-citation-url", { bubbles: true }));
     const href = button.getAttribute("data-ghrc-citation-url");
     let url;
-    try { url = new URL(href); } catch { return; }
+    try { url = new URL(href); } catch {
+      linkActions.get(button)?.remove();
+      button.classList.remove("ghrc-citation-source");
+      return;
+    }
     if (!["http:", "https:"].includes(url.protocol)) return;
     let actions = linkActions.get(button);
     if (!actions?.isConnected) {
       actions = createLinkActions(button, url);
-      actions.classList.add("ghrc-citation-actions");
+      actions.classList.add(inline ? "ghrc-inline-citation-actions" : "ghrc-citation-actions");
       button.after(actions);
     } else updateLinkActions(button, url, actions);
     button.classList.add("ghrc-citation-source");
-    button.parentElement.classList.add("ghrc-citation-sources");
-    actions.style.top = `${button.offsetTop + 12}px`;
+    if (!inline) {
+      button.parentElement.classList.add("ghrc-citation-sources");
+      actions.style.top = `${button.offsetTop + 12}px`;
+    }
   }
 
   function refreshLinkActions() {
     document.querySelectorAll(".ghrc-link-actions").forEach((actions) => {
-      if (!(actions.previousSibling instanceof HTMLAnchorElement)
-          && !actions.previousSibling?.matches?.('.ghrc-citation-source')) actions.remove();
+      if (!actionSources.get(actions)?.isConnected) actions.remove();
     });
     if (!splitViewEnabled) {
       document.querySelectorAll(".ghrc-link-actions").forEach(actions => actions.remove());
+      document.querySelectorAll(".ghrc-link-with-actions").forEach(group => {
+        const link = group.querySelector('a[href]');
+        if (link) restoreLinkPunctuation(link);
+        group.replaceWith(...group.childNodes);
+      });
       document.querySelectorAll('.ghrc-citation-source').forEach(button => button.classList.remove('ghrc-citation-source'));
       return;
     }
@@ -722,6 +812,8 @@
 
   function inspectMutationNode(node) {
     if (!(node instanceof Element)) return;
+    const containingLink = node.closest('a[href]');
+    if (containingLink) ensureLinkActions(containingLink);
     inspectDialogs(node);
     stripTrackingFromLinks(node);
     decorateExternalLinks(node);
@@ -758,6 +850,10 @@
     decorateExternalLinks(document.documentElement);
     new MutationObserver((mutations) => {
       for (const mutation of mutations) {
+        if (mutation.type === "characterData") {
+          queueMutationNode(mutation.target.parentElement);
+          continue;
+        }
         if (mutation.type === "attributes") {
           queueMutationNode(mutation.target);
           continue;
@@ -766,6 +862,7 @@
       }
     }).observe(document.documentElement, {
       childList: true,
+      characterData: true,
       subtree: true,
       attributes: true,
       attributeFilter: ["href"],
@@ -781,6 +878,7 @@
       linkPreviewWidth: null,
       [HISTORY_MODAL_SETTING_KEY]: true,
       [STRIP_UTM_TRACKING_SETTING_KEY]: true,
+      hideExternalLinkArrows: false,
     });
     newTabsEnabled = settings.openExternalLinksInNewTabs !== false;
     splitViewEnabled = Boolean(settings.openExternalLinksInSplitView);
@@ -790,6 +888,7 @@
     externalWarningEnabled = Boolean(settings[EXTERNAL_WARNING_SETTING_KEY]);
     historyModalEnabled = Boolean(settings[HISTORY_MODAL_SETTING_KEY]);
     stripUtmTrackingEnabled = Boolean(settings[STRIP_UTM_TRACKING_SETTING_KEY]);
+    document.documentElement.toggleAttribute('data-ghrc-hide-external-link-arrows', Boolean(settings.hideExternalLinkArrows));
     if (document.documentElement) {
       inspectDialogs(document.documentElement);
       suppressHistoryRateLimitModal();
@@ -800,6 +899,9 @@
 
   chrome.storage.onChanged.addListener((changes, areaName) => {
     if (areaName !== "local") return;
+    if (changes.hideExternalLinkArrows) {
+      document.documentElement.toggleAttribute('data-ghrc-hide-external-link-arrows', Boolean(changes.hideExternalLinkArrows.newValue));
+    }
     if (changes.openExternalLinksInNewTabs) {
       newTabsEnabled = changes.openExternalLinksInNewTabs.newValue !== false;
       refreshLinkActions();
@@ -843,8 +945,8 @@
       event.preventDefault();
       event.stopImmediatePropagation();
       const href = sidebar.dataset.href;
-      const source = sidebar.closest(".ghrc-link-actions")?.previousSibling;
-      if (href) showLinkPreview(href, source);
+      const source = actionSources.get(sidebar.closest(".ghrc-link-actions"));
+      if (href) void openNativeSplitView(href, source, false);
       return;
     }
     const link = event.target.closest?.("a[href]");

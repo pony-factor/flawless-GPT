@@ -39,6 +39,11 @@ test('unsupported browsers do not create an ordinary tab disguised as a split', 
   assert.equal((await f.context.openNativeSplit('https://github.com/owner/repo', 10)).unavailable, true);
   assert.equal(f.calls.length, 0);
 });
+test('places the website before the chat when the left-side setting is enabled', async () => {
+  const f = fixture();
+  assert.equal((await f.context.openNativeSplit('https://docs.github.com/en', 10, true)).ok, true);
+  assert.deepEqual(f.calls.find(call => call[0] === 'split'), ['split', [20, 10]]);
+});
 test('reuses the GitHub half of an existing split', async () => {
   const f = fixture({ source: { splitViewId: 8 }, partner: { id: 20, splitViewId: 8, url: 'https://github.com/owner/repo' } });
   f.session['nativeSplitPane:10'] = 20;
@@ -51,6 +56,15 @@ test('preserves an unrelated website in an existing split', async () => {
   const f = fixture({ source: { splitViewId: 8 }, partner: { id: 20, splitViewId: 8, url: 'https://example.org/' } });
   assert.equal((await f.context.openNativeSplit('https://github.com/owner/repo', 10)).unavailable, true);
   assert.equal(f.calls.length, 0);
+});
+test('successive websites and GitHub documentation reuse the owned pane without changing its placement', async () => {
+  const f = fixture({ source: { splitViewId: 8 }, partner: { id: 20, splitViewId: 8 } });
+  f.session['nativeSplitPane:10'] = 20;
+  for (const url of ['https://www.random.org/', 'https://en.wikipedia.org/wiki/Special:Random', 'https://docs.github.com/en']) {
+    const result = await f.context.openNativeSplit(url, 10);
+    assert.equal(result.ok, true);
+  }
+  assert.deepEqual(f.calls.map(call => call.slice(0, 2)), [['update', 20], ['update', 20], ['update', 20]]);
 });
 test('split failure keeps the full page available and reports the fallback honestly', async () => {
   const f = fixture({ fail: true });

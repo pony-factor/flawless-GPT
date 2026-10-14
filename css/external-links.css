@@ -1,3 +1,7 @@
+html[data-ghrc-hide-external-link-arrows] [data-ghrc-external-link-arrow] {
+  display: none !important;
+}
+
 html[data-ghrc-link-preview] {
   --ghrc-preview-width: min(48vw, 800px);
   width: calc(100% - var(--ghrc-preview-width));
@@ -11,6 +15,42 @@ html[data-ghrc-link-preview] #root > [class*="Layout-"] {
 
 html[data-ghrc-link-preview="left"] {
   margin-left: var(--ghrc-preview-width);
+}
+
+.ghrc-link-with-actions {
+  display: inline-block;
+  max-width: 100%;
+  vertical-align: bottom;
+}
+
+/* ChatGPT's link wrapper can reserve only one line even after the URL wraps. */
+main span:has(> .ghrc-link-with-actions) {
+  display: inline !important;
+  height: auto !important;
+  max-height: none !important;
+  white-space: normal !important;
+}
+
+.ghrc-link-with-actions > a {
+  display: inline !important;
+  white-space: normal !important;
+  overflow-wrap: anywhere !important;
+  word-break: normal;
+  padding-inline-end: 30px;
+}
+
+.ghrc-link-with-actions > .ghrc-link-actions {
+  /* Occupy the link's trailing padding so the button follows its final line. */
+  margin-inline: -27px 1px;
+}
+
+.ghrc-link-has-punctuation > a {
+  padding-inline-end: 0 !important;
+  margin-inline-end: 0 !important;
+}
+
+.ghrc-link-trailing-punctuation {
+  padding-inline-end: 30px;
 }
 
 .ghrc-link-actions {
@@ -58,6 +98,11 @@ html[data-ghrc-link-preview="left"] {
 
 .ghrc-citation-sources {
   position: relative;
+}
+
+.ghrc-inline-citation-actions {
+  vertical-align: middle;
+  margin-inline: 3px 1px;
 }
 
 .ghrc-citation-actions {

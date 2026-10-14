@@ -11,7 +11,7 @@ before(async () => {
 });
 after(async () => { await browser?.close(); });
 
-async function fixture(settings = {}, githubResponse = null) {
+async function fixture(settings = {}, githubResponse = null, nativeSplitSupported = false) {
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
   await page.route('https://chatgpt.com/**', route => route.fulfill({
     contentType: 'text/html',
@@ -22,13 +22,14 @@ async function fixture(settings = {}, githubResponse = null) {
     contentType: 'text/html', body: '<body><script>' + read('js/link-preview-host.js') + '</script></body>',
   }));
   await page.goto('https://chatgpt.com/c/example');
-  await page.evaluate(({ settings, githubResponse }) => {
+  await page.evaluate(({ settings, githubResponse, nativeSplitSupported }) => {
     window.settingsListeners = [];
     window.runtimeListeners = [];
     window.previewRequests = [];
     window.storageWrites = [];
     window.openedLinks = [];
     window.copiedLinks = [];
+    window.nativeSplitSupported = nativeSplitSupported;
     window.open = (...args) => openedLinks.push(args);
     Object.defineProperty(navigator, 'clipboard', {
       configurable: true,
@@ -41,7 +42,7 @@ async function fixture(settings = {}, githubResponse = null) {
         sendMessage: async message => {
           previewRequests.push(message);
           if (message.type === 'load-github-link-preview') return githubResponse;
-          if (message.type === 'open-native-split-view') return { ok: true };
+          if (message.type === 'open-native-split-view') return { ok: window.nativeSplitSupported };
           return { ok: true };
         },
       },
@@ -53,12 +54,27 @@ async function fixture(settings = {}, githubResponse = null) {
         onChanged: { addListener: listener => settingsListeners.push(listener) },
       },
     };
-  }, { settings, githubResponse });
+  }, { settings, githubResponse, nativeSplitSupported });
   await page.addStyleTag({ content: read('css/external-links.css') });
   await page.addScriptTag({ content: read('js/citation-links-main.js') });
   await page.addScriptTag({ content: read('js/external-links.js') });
   return page;
 }
+
+test('all sidebar buttons prefer the same native split, including GitHub documentation', async () => {
+  const page = await fixture({ openExternalLinksInSplitView: true, openExternalLinksInSplitViewOnLeft: true }, null, true);
+  for (const href of ['https://www.random.org/', 'https://en.wikipedia.org/wiki/Special:Random', 'https://github.com/owner/repo/blob/main/README.md', 'https://docs.github.com/en']) {
+    await page.locator('#source').evaluate((link, href) => { link.href = href; }, href);
+    await page.waitForFunction(href => document.querySelector('.ghrc-link-sidebar-button')?.dataset.href === href, href);
+    await page.locator('.ghrc-link-sidebar-button').click();
+    await page.waitForFunction(href => previewRequests.some(message => message.type === 'open-native-split-view' && message.url === href), href);
+    assert.equal(await page.locator('#ghrc-link-preview').count(), 0);
+  }
+  const requests = await page.evaluate(() => previewRequests);
+  assert.equal(requests.length, 4);
+  assert.ok(requests.every(message => message.type === 'open-native-split-view' && message.onLeft === true));
+  await page.close();
+});
 
 test('normal link click keeps the configured new-tab behavior and sidebar controls are opt-in', async () => {
   const page = await fixture();
@@ -66,6 +82,128 @@ test('normal link click keeps the configured new-tab behavior and sidebar contro
   assert.deepEqual(await page.evaluate(() => openedLinks), [['https://example.org/source?keep=1#section', '_blank', 'noopener,noreferrer']]);
   assert.equal(await page.locator('.ghrc-link-actions').count(), 0);
   assert.equal(page.url(), 'https://chatgpt.com/c/example');
+  await page.close();
+});
+
+test('external-link arrows can be hidden and restored without hiding sidebar buttons or changing navigation', async () => {
+  const page = await fixture({ openExternalLinksInSplitView: true, hideExternalLinkArrows: true });
+  await page.locator('#source').evaluate(link => {
+    link.innerHTML = 'Source reference <svg id="external-arrow" aria-hidden="true" width="14" height="14"><path d="M3 11L11 3M3 3h8v8"/></svg>';
+  });
+  await page.locator('#external-arrow[data-ghrc-external-link-arrow]').waitFor({ state: 'attached' });
+  assert.equal(await page.locator('#external-arrow').isVisible(), false);
+  assert.equal(await page.locator('.ghrc-link-sidebar-button svg').isVisible(), true);
+  await page.locator('#source').click();
+  assert.equal((await page.evaluate(() => openedLinks)).length, 1);
+  await page.evaluate(() => settingsListeners.forEach(fn => fn({ hideExternalLinkArrows: { newValue: false } }, 'local')));
+  assert.equal(await page.locator('#external-arrow').isVisible(), true);
+  await page.close();
+});
+
+test('hidden arrow wrappers leave no gap before trailing punctuation', async () => {
+  const page = await fixture({ openExternalLinksInSplitView: true, hideExternalLinkArrows: true });
+  await page.locator('.ghrc-link-with-actions').waitFor();
+  await page.evaluate(() => {
+    const link = document.getElementById('source');
+    link.innerHTML = 'Source reference<span id="native-arrow-wrapper" style="display:inline-block;width:14px;margin-left:4px"><svg width="14" height="14"><path d="M3 11L11 3"/></svg></span>';
+    link.parentElement.after(document.createTextNode(', next phrase.'));
+  });
+  await page.locator('.ghrc-link-trailing-punctuation').waitFor();
+  const gap = await page.evaluate(() => {
+    const range = document.createRange();
+    range.selectNodeContents(document.getElementById('source').firstChild);
+    const labelEnd = range.getBoundingClientRect().right;
+    range.selectNodeContents(document.querySelector('.ghrc-link-trailing-punctuation'));
+    return range.getBoundingClientRect().left - labelEnd;
+  });
+  assert.ok(Math.abs(gap) < 1, `Unwanted gap before punctuation: ${gap}px`);
+  assert.equal(await page.locator('#native-arrow-wrapper').isVisible(), false);
+  assert.equal(await page.locator('.ghrc-link-sidebar-button').isVisible(), true);
+  await page.close();
+});
+
+test('sidebar icons follow trailing punctuation without changing the sentence or destination', async () => {
+  const page = await fixture({ openExternalLinksInSplitView: true }, null, true);
+  await page.locator('.ghrc-link-with-actions').waitFor();
+  await page.evaluate(() => {
+    const group = document.getElementById('source').parentElement;
+    const trigger = document.createElement('span');
+    trigger.setAttribute('data-d-component', 'popover-trigger');
+    group.before(trigger);
+    trigger.append(group);
+    trigger.after(document.createTextNode('). Next sentence.'));
+  });
+  await page.locator('.ghrc-link-trailing-punctuation').waitFor();
+  assert.equal(await page.locator('.ghrc-link-trailing-punctuation').textContent(), ').');
+  assert.equal(await page.locator('#source').getAttribute('href'), 'https://example.org/source?keep=1#section');
+  assert.ok((await page.locator('#source').locator('xpath=ancestor::p').textContent()).endsWith('). Next sentence.'));
+  await page.setViewportSize({ width: 320, height: 800 });
+  const geometry = await page.evaluate(() => {
+    const punctuation = document.querySelector('.ghrc-link-trailing-punctuation');
+    const range = document.createRange();
+    range.selectNodeContents(punctuation);
+    return { text: range.getBoundingClientRect().toJSON(), action: document.querySelector('.ghrc-link-actions').getBoundingClientRect().toJSON() };
+  });
+  assert.ok(geometry.action.x >= geometry.text.right);
+  assert.ok(geometry.action.x - geometry.text.right < 6);
+  await page.locator('.ghrc-link-sidebar-button').click();
+  assert.equal((await page.evaluate(() => previewRequests)).at(-1).url, 'https://example.org/source?keep=1#section');
+  await page.evaluate(() => settingsListeners.forEach(fn => fn({ openExternalLinksInSplitView: { newValue: false } }, 'local')));
+  assert.equal(await page.locator('.ghrc-link-trailing-punctuation').count(), 0);
+  assert.ok((await page.locator('#source').locator('xpath=ancestor::p').textContent()).endsWith('). Next sentence.'));
+  await page.close();
+});
+
+test('long links wrap beside their button without overflowing a narrow chat', async () => {
+  const page = await fixture({ openExternalLinksInSplitView: true });
+  await page.locator('.ghrc-link-with-actions').waitFor();
+  await page.locator('#source').evaluate(link => {
+    link.textContent = 'https://commons.wikimedia.org/wiki/Special:Random/File/averylongunbrokenfilename';
+    link.style.cssText = 'display:inline-flex;white-space:nowrap';
+  });
+  for (const width of [240, 320, 520]) {
+    await page.setViewportSize({ width, height: 800 });
+    const boxes = await page.evaluate(() => {
+      const link = document.querySelector('#source');
+      const group = link.parentElement;
+      const action = group.querySelector('.ghrc-link-actions');
+      const text = document.createRange();
+      text.selectNodeContents(link);
+      const lastLine = [...text.getClientRects()].at(-1);
+      return { group: group.getBoundingClientRect().toJSON(), link: link.getBoundingClientRect().toJSON(),
+        action: action.getBoundingClientRect().toJSON(), scrollWidth: document.documentElement.scrollWidth,
+        lastLine: lastLine.toJSON(), viewport: innerWidth, count: document.querySelectorAll('.ghrc-link-actions').length };
+    });
+    assert.ok(boxes.scrollWidth <= boxes.viewport, JSON.stringify(boxes));
+    assert.ok(boxes.action.right <= boxes.viewport);
+    assert.ok(boxes.action.x - boxes.lastLine.right >= 0, JSON.stringify(boxes));
+    assert.ok(boxes.action.x - boxes.lastLine.right < 6, JSON.stringify(boxes));
+    assert.ok(Math.abs(boxes.action.bottom - boxes.lastLine.bottom) < 4, JSON.stringify(boxes));
+    assert.equal(boxes.count, 1);
+  }
+  await page.evaluate(() => settingsListeners.forEach(fn => fn({ openExternalLinksInSplitView: { newValue: false } }, 'local')));
+  assert.equal(await page.locator('.ghrc-link-with-actions').count(), 0);
+  assert.equal(await page.locator('#source').count(), 1);
+  await page.close();
+});
+
+test('wrapped documentation links reserve their height above the next list item', async () => {
+  const page = await fixture({ openExternalLinksInSplitView: true });
+  await page.evaluate(() => {
+    const list = document.createElement('ul');
+    list.style.cssText = 'font:16px/26px sans-serif;margin:0;padding-left:24px';
+    list.innerHTML = '<li>Stacked Pull Requests: <span style="display:inline-flex;height:26px;max-height:26px;white-space:nowrap"><a id="stacked" href="https://docs.github.com/en/pull-requests/reference/stacked-pull-requests-apis-and-webhooks">https://docs.github.com/en/pull-requests/reference/stacked-pull-requests-apis-and-webhooks</a></span></li><li id="next-item">GitHub Branches: https://docs.github.com/en/rest/branches</li>';
+    document.querySelector('main').replaceChildren(list);
+  });
+  await page.locator('#stacked + .ghrc-link-actions').waitFor();
+  for (const width of [240, 320, 520, 768]) {
+    await page.setViewportSize({ width, height: 800 });
+    const boxes = await page.evaluate(() => {
+      const group = document.getElementById('stacked').parentElement;
+      return { wrapped: group.getBoundingClientRect().toJSON(), next: document.getElementById('next-item').getBoundingClientRect().toJSON() };
+    });
+    assert.ok(boxes.next.top >= boxes.wrapped.bottom, JSON.stringify(boxes));
+  }
   await page.close();
 });
 
@@ -125,6 +263,67 @@ test('image card capture handlers cannot intercept the sidebar icon', async () =
   await page.frameLocator('#ghrc-link-preview iframe').frameLocator('iframe').locator('h1').waitFor();
   assert.equal(await page.evaluate(() => imageViewerClicks), 0);
   assert.equal((await page.evaluate(() => openedLinks)).length, 0);
+  await page.close();
+});
+
+test('ordinary link popovers keep a single sidebar icon', async () => {
+  const page = await fixture({ openExternalLinksInSplitView: true });
+  await page.locator('.ghrc-link-with-actions').waitFor();
+  await page.evaluate(() => {
+    const group = document.getElementById('source').parentElement;
+    const trigger = document.createElement('span');
+    trigger.setAttribute('data-d-component', 'popover-trigger');
+    trigger.__reactFiber$fixture = { memoizedProps: { __dilHostElement: { props: { onVisibleKey: 'https://example.org/source' } } } };
+    group.before(trigger);
+    trigger.append(group);
+  });
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  assert.equal(await page.locator('.ghrc-link-sidebar-button').count(), 1);
+  await page.close();
+});
+
+test('inline citation icons open the first source while the citation keeps its complete source list', async () => {
+  const page = await fixture({ openExternalLinksInSplitView: true }, null, true);
+  await page.evaluate(() => {
+    const chip = document.createElement('button');
+    chip.id = 'inline-citation';
+    chip.setAttribute('data-d-component', 'popover-trigger');
+    chip.setAttribute('aria-haspopup', 'dialog');
+    chip.textContent = 'GitHub Docs +1';
+    let fiber = {
+      memoizedProps: { __dilHostElement: { props: { children: [
+        { props: { onVisibleKey: 'https://docs.github.com/en/rest/branches' } },
+        { props: { onVisibleKey: 'https://docs.github.com/en/rest/commits' } },
+      ] } } },
+    };
+    for (let level = 0; level < 19; level++) fiber = { memoizedProps: {}, return: fiber };
+    chip.__reactFiber$fixture = fiber;
+    window.citationOpens = 0;
+    const showSources = () => {
+      citationOpens++;
+      if (document.getElementById('citation-list')) return;
+      const list = document.createElement('div');
+      list.id = 'citation-list';
+      list.setAttribute('role', 'dialog');
+      list.textContent = 'Branches documentation; Commits documentation';
+      document.body.append(list);
+    };
+    chip.addEventListener('click', showSources);
+    chip.addEventListener('mouseenter', showSources);
+    document.querySelector('main').append(chip);
+  });
+  const icon = page.locator('#inline-citation + .ghrc-inline-citation-actions button');
+  await icon.waitFor();
+  assert.equal(await icon.getAttribute('data-href'), 'https://docs.github.com/en/rest/branches');
+  await icon.click();
+  assert.equal(await page.evaluate(() => citationOpens), 0);
+  assert.equal((await page.evaluate(() => previewRequests)).at(-1).url, 'https://docs.github.com/en/rest/branches');
+  await page.locator('#inline-citation').hover();
+  assert.equal(await page.locator('#citation-list').textContent(), 'Branches documentation; Commits documentation');
+  await page.locator('#inline-citation').click();
+  assert.equal(await page.evaluate(() => citationOpens), 2);
+  await page.evaluate(() => settingsListeners.forEach(fn => fn({ openExternalLinksInSplitView: { newValue: false } }, 'local')));
+  assert.equal(await page.locator('.ghrc-inline-citation-actions').count(), 0);
   await page.close();
 });
 
@@ -273,12 +472,15 @@ test('blocked embedded previews can still fall back to the browser native split'
   await page.frameLocator('#ghrc-link-preview iframe').frameLocator('iframe').locator('h1').waitFor();
   const watch = (await page.evaluate(() => previewRequests)).find(message => message.type === 'watch-link-preview');
   assert.ok(watch);
-  await page.evaluate(watch => runtimeListeners.forEach(fn => fn({
-    type: 'link-preview-navigation-error',
-    previewId: watch.previewId,
-    url: watch.url,
-  })), watch);
-  await page.waitForFunction(() => previewRequests.some(message => message.type === 'open-native-split-view'));
+  await page.evaluate(watch => {
+    window.nativeSplitSupported = true;
+    runtimeListeners.forEach(fn => fn({
+      type: 'link-preview-navigation-error',
+      previewId: watch.previewId,
+      url: watch.url,
+    }));
+  }, watch);
+  await page.waitForFunction(() => previewRequests.filter(message => message.type === 'open-native-split-view').length === 2);
   assert.equal(await page.locator('#ghrc-link-preview').count(), 0);
   await page.close();
 });

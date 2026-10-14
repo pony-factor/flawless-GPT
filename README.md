@@ -174,26 +174,31 @@ their selection. The external-site setting clicks ChatGPT's own **Open link**
 confirmation when the exact external-site dialog appears. **Open links in new
 tabs** is enabled by default and keeps external links, including search
 references, from replacing the chat. Disable it to reuse the current tab when
-warning bypass is enabled. **Open links beside the response** takes precedence
-and shows a website preview in a right-hand pane. Close it with **Close** or
-**Escape**. Websites or ChatGPT security policies may block embedded previews;
-the pane always provides **Open in new tab**. This extension preview is separate
-from the browser’s native split-tab view. Modifier clicks keep browser behavior.
+warning bypass is enabled. **Open links beside the response** adds a separate
+button beside external chat links. Each button opens the full website in the
+browser’s native split view, on your selected side. Clicking another button
+replaces the website in that same pane, preserving its placement and width.
+Close it with the browser’s **Close This View** control. Browsers without native
+split support use an embedded preview; close that preview with **Close** or
+**Escape**. Websites may block embedding, so the preview also provides
+**Open in new tab**. Modifier clicks keep browser behavior.
 The history setting hides the known conversation-history rate-limit modal, clears the page locks it
 leaves behind, and preserves native wheel and touch scrolling if stale modal
 listeners remain. Link previews load the destination in a sandboxed iframe.
 
 ### Browsing GitHub pages inside the sidebar
 
-GitHub prevents other sites from embedding its pages. With **Open links beside the response**
-enabled, Flawless instead loads GitHub pages through the GitHub API immediately. It can
+GitHub links, including documentation, open the full website in the same native
+split pane as other links. GitHub prevents other sites from embedding its pages.
+On browsers without native split support, Flawless loads GitHub repository pages
+through the GitHub API. This fallback can
 display repositories and their root files, individual files (including JSON, Markdown,
 source code, and small images), directories, branches, tags, issues, pull requests,
 commits, releases, workflow runs, and Discussions. The existing pull-request diff
 viewer remains available, with issue/PR comments where GitHub permits access.
 
-GitHub directories and lists include links you can follow **inside the same panel**.
-The GitHub pane has Back and Forward controls, a parent-directory link when applicable,
+In the API fallback, GitHub directories and lists include links you can follow **inside the same panel**.
+That pane has Back and Forward controls, a parent-directory link when applicable,
 and its usual Copy link and Open in new tab actions for the currently viewed page.
 Paths are loaded for the branch or tag in the URL, including ref names containing slashes.
 

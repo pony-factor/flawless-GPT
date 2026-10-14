@@ -351,6 +351,13 @@
         <fieldset id="chatgpt-link-settings" aria-label="Link settings">
           <legend>Links</legend>
           <label class="preference">
+            <input id="hide-external-link-arrows" type="checkbox" />
+            <span>
+              <strong>Hide external-link arrows</strong>
+              <small>Hides the little new-tab arrow on text links in chat. Links and beside-chat buttons still work.</small>
+            </span>
+          </label>
+          <label class="preference">
             <input id="strip-utm-tracking" type="checkbox" checked />
             <span>
               <strong>Strip UTM tracking from links</strong>
@@ -368,7 +375,7 @@
             <input id="open-external-links-in-split-view" type="checkbox" />
             <span>
               <strong>Show beside-chat link buttons</strong>
-              <small>Keeps normal link clicks in your chosen new-tab or current-tab mode and adds a separate button for opening external chat links in a resizable sidebar. GitHub uses the API change view; blocked sites can fall back to native split view.</small>
+              <small>Keeps normal link clicks in your chosen new-tab or current-tab mode and adds a separate button for opening websites beside chat. Buttons reuse the same resizable browser split view. Browsers without split-view support use an embedded preview, with an API preview for GitHub.</small>
             </span>
           </label>
           <label class="preference">
