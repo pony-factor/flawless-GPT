@@ -126,10 +126,50 @@
     };
   }
 
-  function sanitizeCopiedHtml(value, options = {}) {
+  function sanitizeCopiedHtml(value, options = {}, citations = []) {
     if (typeof value !== "string" || !value) return value;
     const settings = normalizedCopyOptions(options);
     let result = stripCitationPreviewHtml(value);
+    if (citations.length && typeof DOMParser !== "undefined") {
+      const parsed = new DOMParser().parseFromString(result, "text/html");
+      const compact = text => text.replace(/\s+/g, "").trim();
+      for (const citation of citations) {
+        const candidates = [...parsed.body.querySelectorAll("*")].filter(node =>
+          !node.closest("a, pre, code") && compact(node.textContent) === compact(citation.text));
+        // Replace the outer chip once, keeping all of its additional sources.
+        const node = candidates.find(node => !candidates.includes(node.parentElement));
+        if (node) {
+          const label = citation.text.replace(/\s*\+\s*\d+\s*$/, "").trim();
+          if (citation.kind === "item") {
+            const anchor = parsed.createElement("a");
+            anchor.href = citation.urls[0];
+            anchor.textContent = citation.text.trim();
+            node.replaceChildren(anchor);
+            continue;
+          }
+          let separator = node.previousSibling;
+          while (separator && !separator.textContent.trim()) separator = separator.previousSibling;
+          if (separator && separator.textContent.trim() === "·") {
+            let preceding = separator.previousSibling;
+            while (preceding && !preceding.textContent.trim()) preceding = preceding.previousSibling;
+            if (preceding?.nodeType === 1 && (preceding.matches("a[href]") || preceding.querySelector("a[href]"))) separator.remove();
+          }
+          const list = parsed.createElement("ul");
+          list.style.marginTop = "0";
+          list.style.marginBottom = "0";
+          citation.urls.forEach((url, index) => {
+            const item = parsed.createElement("li");
+            const anchor = parsed.createElement("a");
+            anchor.href = url;
+            anchor.textContent = citation.titles?.[index] || (index ? new URL(url).hostname : label);
+            item.append(anchor);
+            list.append(item);
+          });
+          node.replaceWith(list);
+        }
+      }
+      result = parsed.body.innerHTML;
+    }
     if (settings.stripBold) {
       result = result.replace(/<\/?(?:strong|b)\b[^>]*>/gi, "");
     }
@@ -140,6 +180,7 @@
     }
     if (settings.plainQuotes) result = normalizeSmartQuotes(result);
     if (settings.stripTracking) result = stripTrackingFromText(result);
+    result = result.replace(/(\bhref=["'])github\.com\//gi, "$1https://github.com/");
     return result;
   }
 
@@ -200,13 +241,77 @@
       .join(lineEnding);
   }
 
-  function sanitizeCopiedText(value, options = {}) {
+  function restoreCopiedCitations(value, citations = []) {
+    let cursor = 0;
+    for (const { text, urls, titles, kind } of citations) {
+      if (!text || !urls.length) continue;
+      if (kind === "item") {
+        const label = text.trim();
+        const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        const expression = new RegExp(`(^|\\n)([ \\t]{0,3}(?:#{1,6}[ \\t]+|[-*+][ \\t]+)?(?:\\*\\*|__)?)(?:${escaped})((?:\\*\\*|__)?[ \\t]*)(?=\\r?$|\\n)`, "m");
+        const match = expression.exec(value.slice(cursor));
+        if (!match) continue;
+        const link = `[${label.replace(/([\\[\]])/g, "\\$1")}](${urls[0].replace(/\(/g, "%28").replace(/\)/g, "%29")})`;
+        const start = cursor + match.index;
+        const replacement = match[1] + match[2] + link + match[3];
+        value = value.slice(0, start) + replacement + value.slice(start + match[0].length);
+        cursor = start + replacement.length;
+        continue;
+      }
+      const label = text.replace(/\s*\+\s*\d+\s*$/, "").trim();
+      const links = urls.map((url, index) => {
+        const title = titles?.[index] || (index ? new URL(url).hostname : label);
+        return `- [${title.replace(/([\\[\]])/g, "\\$1")}](${url.replace(/\(/g, "%28").replace(/\)/g, "%29")})`;
+      }).join(value.includes("\r\n") ? "\r\n" : "\n");
+      // Native copy emits chips on their own lines, including the +N count.
+      // Do not turn ordinary mentions of the publisher in prose into links.
+      const escapeLabel = label.split(/\s+/).map(part => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("\\s+");
+      const count = text.match(/\+\s*(\d+)\s*$/)?.[1];
+      const pattern = escapeLabel + (count ? `\\s*\\+\\s*${count}` : "");
+      const ending = value.includes("\r\n") ? "\r\n" : "\n";
+      // The middle dot separated the original link and inline citation chip.
+      // The citation is now a list, so that decorative separator has no role.
+      const separator = new RegExp(`(\\]\\([^\\r\\n]*?\\)|\\]\\[[^\\]\\r\\n]*\\])[ \\t]*·[ \\t]*(?:\\r?\\n[ \\t]*)*(?=${pattern}[ \\t]*(?:\\r?$|\\n))`, "gm");
+      value = value.slice(0, cursor) + value.slice(cursor).replace(separator, (_, link) => link + ending);
+      const expression = new RegExp(`(^|(?:\\r?\\n[ \\t]*)+)[ \\t]*${pattern}[ \\t]*(?=\\r?$|\\n)${count ? "" : "(?!\\s*\\+\\s*\\d+)"}(?:\\r?\\n[ \\t]*)*`, "m");
+      const tail = value.slice(cursor);
+      const match = expression.exec(tail);
+      if (!match) continue;
+      const start = cursor + match.index;
+      const before = Math.min(2, (match[1].match(/\n/g) || []).length);
+      const trailing = match[0].match(/(?:\r?\n[ \t]*)+$/)?.[0] || "";
+      const after = Math.min(2, (trailing.match(/\n/g) || []).length);
+      const replacement = ending.repeat(before) + links + ending.repeat(after);
+      value = value.slice(0, start) + replacement + value.slice(start + match[0].length);
+      cursor = start + replacement.length;
+    }
+    return value;
+  }
+
+  function sanitizeCopiedText(value, options = {}, citations = []) {
+    if (typeof value !== "string" || !value) return value;
     const settings = normalizedCopyOptions(options);
-    let result = stripCitationPreviewThumbnails(convertReferenceLinksToInlineMarkdown(value));
+    // Some rich-text serializers expose encoded spaces in their Markdown output.
+    const decoded = value.replace(/&#(?:x0*20|0*32);/gi, " ");
+    let result = stripCitationPreviewThumbnails(convertReferenceLinksToInlineMarkdown(restoreCopiedCitations(decoded, citations)));
+    // Native card copies can prefix stand-alone links with two spaces. Keep
+    // their lines flush left without changing list nesting or indented code.
+    let fence = null;
+    result = result.split(/(?<=\n)/).map(line => {
+      const marker = line.match(/^[ \t]{0,3}(`{3,}|~{3,})/);
+      if (marker) {
+        if (!fence) fence = marker[1];
+        else if (marker[1][0] === fence[0] && marker[1].length >= fence.length) fence = null;
+        return line;
+      }
+      if (fence) return line;
+      return line.replace(/^ {1,3}(?=\[[^\]\r\n]+\]\(https?:\/\/)/, "");
+    }).join("");
     if (settings.stripBold) result = stripMarkdownBold(result);
     if (settings.underscoreItalics) result = normalizeMarkdownItalics(result);
     if (settings.plainQuotes) result = normalizeSmartQuotes(result);
     if (settings.stripTracking) result = stripTrackingFromText(result);
+    result = result.replace(/(\]\()github\.com\//gi, "$1https://github.com/");
     return result;
   }
 
@@ -222,6 +327,7 @@
       stripCitationPreviewHtml,
       sanitizeCopiedText,
       sanitizeCopiedHtml,
+      restoreCopiedCitations,
     };
     return;
   }
@@ -270,13 +376,92 @@
   });
 
   const clipboard = navigator.clipboard;
+  const sourceControlSelector = '[data-d-component="popover-trigger"], [data-d-component="pressable"]';
+  function sourceControls(parent) {
+    return [...parent.querySelectorAll(sourceControlSelector)].filter(control => {
+      const item = !control.matches('[data-d-component="popover-trigger"]');
+      if (item && /^(?:Copy|Copy response|Share|More actions|Sources|Read aloud)$/i.test(control.getAttribute("aria-label") || control.textContent.trim())) return false;
+      control.dispatchEvent(new Event(item ? "ghrc-resolve-item-url" : "ghrc-resolve-citation-url", { bubbles: true }));
+      return control.hasAttribute("data-ghrc-citation-url");
+    });
+  }
+  let copiedCitations = [];
+  const nativeCopies = new WeakMap();
+  document.addEventListener?.("copy", (event) => {
+    if (copiedCitations.length && event.clipboardData) {
+      nativeCopies.set(event.clipboardData, copiedCitations);
+      copiedCitations = [];
+    }
+  }, true);
+  if (typeof DataTransfer !== "undefined") {
+    patchMethod(DataTransfer.prototype, "setData", (original) => function setData(type, value) {
+      const citations = nativeCopies.get(this);
+      if (citations) {
+        if (type.toLowerCase() === "text/plain") value = sanitizeCopiedText(value, copyFormattingOptions(), citations);
+        if (type.toLowerCase() === "text/html") value = sanitizeCopiedHtml(value, copyFormattingOptions(), citations);
+      }
+      return original.call(this, type, value);
+    });
+  }
+  document.addEventListener?.("click", (event) => {
+    copiedCitations = [];
+    const button = event.target?.closest?.('button, [role="button"], [data-d-component="pressable"]');
+    if (!button || !(button.matches('[data-testid="copy-turn-btn"]')
+        || /^(?:Copy|Copy response)$/i.test(button.getAttribute("aria-label") || button.textContent.trim()))) return;
+    if (button.closest("pre")) return;
+    let turn = button.closest('article, [data-testid^="conversation-turn-"], [data-turn="assistant"], [data-dil-message-id]');
+    if (!turn || !sourceControls(turn).length) {
+      // DIL places the toolbar outside its message element. Find the smallest
+      // common container with citations and exactly this response's Copy control.
+      turn = null;
+      for (let parent = button.parentElement; parent && !parent.matches("main, body"); parent = parent.parentElement) {
+        const copies = [...parent.querySelectorAll('button, [role="button"]')].filter(control =>
+          !control.closest("pre") && /^(?:Copy|Copy response)$/i.test(control.getAttribute("aria-label") || control.textContent.trim()));
+        if (copies.length > 1) break;
+        if (sourceControls(parent).length) { turn = parent; break; }
+      }
+    }
+    if (!turn) return;
+    for (const chip of sourceControls(turn)) {
+      const item = !chip.matches('[data-d-component="popover-trigger"]');
+      try {
+        const urls = JSON.parse(chip.getAttribute("data-ghrc-citation-urls") || "[]");
+        const sources = JSON.parse(chip.getAttribute("data-ghrc-citation-sources") || "[]");
+        if (urls.length) copiedCitations.push({ text: chip.innerText || chip.textContent, urls,
+          kind: item ? "item" : "citation",
+          titles: urls.map(url => sources.find(source => source.url === url)?.title || "") });
+      } catch { /* Unresolved citations retain the native copy output. */ }
+    }
+  }, true);
+  window.addEventListener?.("copy", (event) => {
+    const citations = event.clipboardData && nativeCopies.get(event.clipboardData);
+    if (!citations?.length) return;
+    const selection = window.getSelection();
+    const field = document.activeElement;
+    const text = event.clipboardData.getData("text/plain")
+      || (typeof field?.value === "string" && field.selectionStart != null
+        ? field.value.slice(field.selectionStart, field.selectionEnd) : selection?.toString());
+    if (!text) return;
+    let html = event.clipboardData.getData("text/html");
+    if (!html && selection?.rangeCount) {
+      const container = document.createElement("div");
+      container.append(selection.getRangeAt(0).cloneContents());
+      html = container.innerHTML;
+    }
+    const options = copyFormattingOptions();
+    event.clipboardData.setData("text/plain", sanitizeCopiedText(text, options, citations));
+    if (html) event.clipboardData.setData("text/html", sanitizeCopiedHtml(html, options, citations));
+    event.preventDefault();
+  });
   const clipboardPrototype = typeof Clipboard !== "undefined"
     ? Clipboard.prototype
     : (clipboard && Object.getPrototypeOf(clipboard));
 
   if (clipboardPrototype) {
     patchMethod(clipboardPrototype, "writeText", (original) => function writeText(text) {
-      const value = sanitizeCopiedText(String(text), copyFormattingOptions());
+      const citations = copiedCitations;
+      copiedCitations = [];
+      const value = sanitizeCopiedText(String(text), copyFormattingOptions(), citations);
       return original.call(this, value);
     });
 
@@ -284,18 +469,20 @@
       patchMethod(clipboardPrototype, "write", (original) => function write(items) {
         try {
           const options = copyFormattingOptions();
+          const citations = copiedCitations;
+          copiedCitations = [];
           const sanitizedItems = Array.from(items, (item) => {
             const data = {};
             for (const type of item.types) {
               const blob = item.getType(type);
               if (type === "text/plain") {
                 data[type] = blob.then(async (value) => new Blob(
-                  [sanitizeCopiedText(await value.text(), options)],
+                  [sanitizeCopiedText(await value.text(), options, citations)],
                   { type: value.type || type },
                 ));
               } else if (type === "text/html") {
                 data[type] = blob.then(async (value) => new Blob(
-                  [sanitizeCopiedHtml(await value.text(), options)],
+                  [sanitizeCopiedHtml(await value.text(), options, citations)],
                   { type: value.type || type },
                 ));
               } else {

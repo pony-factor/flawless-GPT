@@ -339,3 +339,53 @@ test('rich clipboard keeps explicitly disabled formatting while removing citatio
   assert.equal(await (await copy.getType('text/html')).text(), '<strong>Important</strong>');
   assert.equal(await (await copy.getType('text/plain')).text(), '**Important**');
 });
+
+test('keeps repeated publisher chips tied to their own source groups', () => {
+  const { restoreCopiedCitations } = require(sourcePath);
+  const input = 'Consider Scooch.\nScooch\n\nMore options.\nScooch\n+2';
+  assert.equal(restoreCopiedCitations(input, [
+    { text: 'Scooch', urls: ['https://scooch.example/first'] },
+    { text: 'Scooch+2', urls: ['https://scooch.example/second', 'https://other.example/a', 'https://other.example/b'] },
+  ]), 'Consider Scooch.\n- [Scooch](https://scooch.example/first)\n\nMore options.\n- [Scooch](https://scooch.example/second)\n- [other.example](https://other.example/a)\n- [other.example](https://other.example/b)');
+});
+
+test('repairs schemeless GitHub destinations from native response Copy', () => {
+  assert.equal(sanitizeCopiedText('[PR](github.com/example/repo/pull/5)'), '[PR](https://github.com/example/repo/pull/5)');
+  assert.equal(sanitizeCopiedHtml('<a href="github.com/example/repo/pull/5">PR</a>'), '<a href="https://github.com/example/repo/pull/5">PR</a>');
+});
+
+test('copies split domain/count citations as titled links with at most one blank line', () => {
+  const input = 'Before.\n\n\n\nvenaproducts.com\n\n+1\n\n\n\nAfter.';
+  assert.equal(sanitizeCopiedText(input, {}, [{
+    text: 'venaproducts.com +1',
+    urls: ['https://venaproducts.com/case', 'https://bestbuy.example/case'],
+    titles: ['Vena vCommute wallet case', 'Vena case specifications'],
+  }]), 'Before.\n\n- [Vena vCommute wallet case](https://venaproducts.com/case)\n- [Vena case specifications](https://bestbuy.example/case)\n\nAfter.');
+});
+
+
+test('copies encoded spaces as real spaces without leaking HTML entities', () => {
+  assert.equal(sanitizeCopiedText('Source&#x20;title and&#32;another&#X0020;source'), 'Source title and another source');
+});
+
+test('removes leading spaces from standalone copied card links while preserving code and lists', () => {
+  const input = '[First](https://example.com/first)\\\n  [Second](https://example.com/second)\n&#x20;&#x20;[Third](https://example.com/third)\n\n- [List](https://example.com/list)\n    [Code](https://example.com/code)\n```md\n  [Example](https://example.com/example)\n```';
+  assert.equal(sanitizeCopiedText(input), '[First](https://example.com/first)\\\n[Second](https://example.com/second)\n[Third](https://example.com/third)\n\n- [List](https://example.com/list)\n    [Code](https://example.com/code)\n```md\n  [Example](https://example.com/example)\n```');
+});
+
+test('restores item-header links without making the heading a citation bullet', () => {
+  const input = 'I compared Scooch Wingmate earlier.\n\n### **Scooch Wingmate**\nDetails about the case.';
+  assert.equal(sanitizeCopiedText(input, {}, [{
+    text: 'Scooch Wingmate', kind: 'item', urls: ['https://scooch.example/wingmate'],
+  }]), 'I compared Scooch Wingmate earlier.\n\n### [Scooch Wingmate](https://scooch.example/wingmate)\nDetails about the case.');
+});
+
+test('removes the middle dot between a copied link and a restored citation card', () => {
+  const citations = [{ text: 'Scooch +1', urls: ['https://scooch.example/case', 'https://scooch.example/specs'] }];
+  for (const gap of [' ', '\n', '\n\n']) {
+    assert.equal(sanitizeCopiedText('[Official store](https://scooch.example/store) ·' + gap + 'Scooch\n+1', {}, citations),
+      '[Official store](https://scooch.example/store)\n- [Scooch](https://scooch.example/case)\n- [scooch.example](https://scooch.example/specs)');
+  }
+  assert.equal(sanitizeCopiedText('[One](https://example.com/one) · [Two](https://example.com/two)'),
+    '[One](https://example.com/one) · [Two](https://example.com/two)');
+});
