@@ -75,6 +75,7 @@
         "css/chat-display.css",
         "css/worked-duration.css",
         "css/composer-colors.css",
+        "css/file-drop.css",
         "css/sidebar-chat-dates.css",
         "css/styles.css",
         "css/hide-dictation.css",
@@ -145,6 +146,7 @@
         "js/2048.js",
         "js/clipboard-send.js",
         "js/message-queue.js",
+        "js/file-drop.js",
         "js/temporary-chat-inline.js",
         "js/highlighted-pages.js",
         "js/deep-research-tracker.js"

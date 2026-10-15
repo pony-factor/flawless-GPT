@@ -1,0 +1,61 @@
+/* A window-wide file drop target; the upload itself remains ChatGPT-native.
+   Honor custom composer swatches and otherwise inherit the active page theme. */
+#ghrc-file-drop-overlay {
+  --ghrc-drop-accent: var(--ghrc-composer-focus-ring, var(--text-accent, #a97dee));
+  --ghrc-drop-surface: var(--ghrc-composer-surface, var(--main-surface-primary, #fff));
+  --ghrc-drop-text: var(--ghrc-composer-text, var(--text-primary, #202020));
+  position: fixed;
+  inset: 0;
+  z-index: 2147483646;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  box-sizing: border-box;
+  pointer-events: none;
+  background: color-mix(in srgb, var(--ghrc-drop-accent) 15%, transparent);
+  backdrop-filter: blur(3px);
+}
+#ghrc-file-drop-overlay[hidden] { display: none !important; }
+#ghrc-file-drop-overlay .ghrc-file-drop-card {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  width: min(520px, 100%);
+  padding: 46px 30px;
+  border: 3px dashed var(--ghrc-drop-accent);
+  border-radius: 22px;
+  box-shadow: 0 16px 70px rgb(0 0 0 / 20%);
+  background: var(--ghrc-drop-surface);
+  color: var(--ghrc-drop-text);
+  font: 500 15px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  text-align: center;
+}
+#ghrc-file-drop-overlay .ghrc-file-drop-icon {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 17px;
+  background: color-mix(in srgb, var(--ghrc-drop-accent) 15%, var(--ghrc-drop-surface));
+  color: var(--ghrc-drop-accent);
+  font-size: 36px;
+  line-height: 1;
+}
+#ghrc-file-drop-overlay .ghrc-file-drop-title {
+  font-size: 21px;
+  font-weight: 650;
+}
+#ghrc-file-drop-overlay .ghrc-file-drop-detail { opacity: .76; }
+#ghrc-file-drop-overlay[data-ghrc-drop-error] .ghrc-file-drop-card {
+  border-style: solid;
+}
+html.dark #ghrc-file-drop-overlay {
+  --ghrc-drop-surface: var(--ghrc-composer-surface, var(--main-surface-primary, #262626));
+  --ghrc-drop-text: var(--ghrc-composer-text, var(--text-primary, #f7f7f7));
+}
+@media (prefers-reduced-motion: reduce) {
+  #ghrc-file-drop-overlay { backdrop-filter: none; }
+}
