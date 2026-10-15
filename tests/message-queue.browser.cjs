@@ -1305,11 +1305,12 @@ test('Steer preserves draft edits made while waiting for the response to stop', 
   await p.close();
 });
 
-async function attachmentFixture(page, { images = false } = {}) {
-  await page.evaluate(({ images }) => {
+async function attachmentFixture(page, { images = false, portalInput = false, genericRemove = false } = {}) {
+  await page.evaluate(({ images, portalInput, genericRemove }) => {
     document.querySelector('form').insertAdjacentHTML('afterbegin', '<input type="file" aria-label="Attach files" multiple><div data-composer-attachments></div>');
     window.sentContexts = [];
     const input = document.querySelector('input[type=file]');
+    if (portalInput) document.body.append(input);
     const renderFiles = files => {
       const surface = document.querySelector('[data-composer-attachments]');
       for (const file of files) {
@@ -1322,7 +1323,7 @@ async function attachmentFixture(page, { images = false } = {}) {
           chip.append(image);
         } else chip.textContent = file.name;
         const remove = document.createElement('button');
-        remove.type = 'button'; remove.setAttribute('aria-label', images ? 'Remove image' : `Remove file ${file.name}`);
+        remove.type = 'button'; remove.setAttribute('aria-label', genericRemove ? 'Remove' : (images ? 'Remove image' : `Remove file ${file.name}`));
         remove.addEventListener('click', () => chip.remove());
         chip.append(remove); surface.append(chip);
       }
@@ -1358,8 +1359,51 @@ async function attachmentFixture(page, { images = false } = {}) {
         update();
       });
     }
-  }, { images });
+  }, { images, portalInput, genericRemove });
 }
+
+test('a portal-mounted upload input and generic remove control queue the real file bytes', async () => {
+  const p = await fixture({ active: true });
+  await attachmentFixture(p, { portalInput: true, genericRemove: true });
+  const bytes = Buffer.from('Attachment uploaded outside the composer');
+  await p.locator('input[type=file]').setInputFiles({ name: 'portal.txt', mimeType: 'text/plain', buffer: bytes });
+  await enqueue(p, 'Read attached file', true);
+  await p.waitForFunction(() => storage.queuedChatMessages?.['conversation:test']?.length === 1);
+  const item = await p.evaluate(() => storage.queuedChatMessages['conversation:test'][0]);
+  assert.deepEqual(Buffer.from(item.attachments[0].dataUrl.split(',')[1], 'base64'), bytes);
+  assert.equal(await p.locator('[data-composer-attachments]').textContent(), '');
+  await p.evaluate(() => finish());
+  await sentCount(p, 1);
+  assert.deepEqual(await p.evaluate(() => sentContexts), [['portal.txt']]);
+  assert.deepEqual(p.errors, []);
+  await p.close();
+});
+
+test('a React replacement of an attachment chip during queue save does not strand the file', async () => {
+  const p = await fixture({ active: true });
+  await attachmentFixture(p);
+  await p.locator('input[type=file]').setInputFiles({ name: 'rerender.txt', mimeType: 'text/plain', buffer: Buffer.from('Keep these exact bytes') });
+  await p.locator('[data-composer-markdown]').fill('Keep the attachment');
+  await p.evaluate(() => { window.delayQueueSave = true; });
+  await p.locator('[data-composer-markdown]').press('Enter');
+  await p.waitForFunction(() => typeof window.resolveQueueSave === 'function');
+  await p.evaluate(() => {
+    const chip = document.querySelector('[data-composer-attachments]').firstElementChild;
+    const next = chip.cloneNode(true);
+    next.querySelector('button').addEventListener('click', () => next.remove());
+    chip.replaceWith(next);
+    window.delayQueueSave = false;
+    resolveQueueSave();
+  });
+  await p.waitForFunction(() => storage.queuedChatMessages?.['conversation:test']?.length === 1
+    && !document.querySelector('[data-composer-attachments]').childElementCount);
+  assert.notEqual(await p.evaluate(() => storage.queuedChatMessagesPaused?.['conversation:test']), true);
+  await p.evaluate(() => finish());
+  await sentCount(p, 1);
+  assert.deepEqual(await p.evaluate(() => sentContexts), [['rerender.txt']]);
+  assert.deepEqual(p.errors, []);
+  await p.close();
+});
 
 for (const gesture of ['Enter', 'button', 'paste']) for (const prompt of ['', 'Describe this image']) test(`queues an image ${prompt ? 'with text' : 'without text'} using ${gesture}`, async () => {
   const p = await fixture({ active: true });
