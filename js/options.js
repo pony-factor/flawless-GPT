@@ -391,7 +391,7 @@ async function loadSettings() {
     openExternalLinksInSplitViewOnLeft: false,
     dismissHistoryRateLimitModal: true,
     hideUsageCard: true,
-    hideUpgradePromotions: false,
+    hideUpgradePromotions: true,
     blockChatgptDesktopNotifications: true,
     hideCookiePreferences: false,
     showChatgptDisclaimer: false,

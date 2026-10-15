@@ -107,10 +107,10 @@
   });
 
   chrome.storage.onChanged.addListener((changes, area) => {
-    if (area === "local" && changes[SETTING_KEY]) setEnabled(changes[SETTING_KEY].newValue);
+    if (area === "local" && changes[SETTING_KEY]) setEnabled(changes[SETTING_KEY].newValue ?? true);
   });
 
-  void chrome.storage.local.get({ [SETTING_KEY]: false }).then((settings) => {
+  void chrome.storage.local.get({ [SETTING_KEY]: true }).then((settings) => {
     if (context?.active() !== false) setEnabled(settings[SETTING_KEY]);
   }).catch((error) => context?.handleError(error));
 })();
