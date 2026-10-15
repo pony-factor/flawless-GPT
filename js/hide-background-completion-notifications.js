@@ -75,7 +75,7 @@
 
   function hideNotice(toast) {
     if (!toast || toast.hasAttribute(HIDDEN) || containsConversationContent(toast)) return;
-    toast.setAttribute(ORIGINAL_ARIA_HIDDEN, toast.getAttribute('aria-hidden') ?? 'unset');
+    toast.setAttribute(ORIGINAL_ARIA_HIDDEN, toast.getAttribute?.('aria-hidden') ?? 'unset');
     toast.setAttribute(HIDDEN, '');
     toast.setAttribute('aria-hidden', 'true');
   }
