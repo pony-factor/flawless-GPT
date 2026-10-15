@@ -43,23 +43,59 @@
   let nativeSubmission = null;
   const capturedFiles = new Map();
 
+  // ChatGPT sometimes mounts the upload input in a portal outside the form.
+  // Prefer the composer's own input; use an orphaned input only if unambiguous.
+  function findAttachmentInput(composer = findComposerInput()) {
+    const form = findComposerForm(composer);
+    const ownInput = form?.querySelector('input[type="file"]');
+    if (ownInput) return ownInput;
+    if (!form) return null;
+    const outsideInputs = [...document.querySelectorAll('input[type="file"]')]
+      .filter(input => !input.closest("form"));
+    return outsideInputs.length === 1 ? outsideInputs[0] : null;
+  }
+
+  function attachmentCard(button) {
+    return button.closest('[data-filename], [data-file-name], .group\\/composer-attachment')
+      || button.parentElement;
+  }
+
+  function capturedFileForButton(button) {
+    const card = attachmentCard(button);
+    if (!card) return null;
+    const labels = [button.getAttribute("aria-label") || "", card.textContent || ""];
+    for (const node of [card, ...card.querySelectorAll('[title], [data-filename], [data-file-name], img')]) {
+      labels.push(node.getAttribute("title") || "", node.getAttribute("data-filename") || "",
+        node.getAttribute("data-file-name") || "", node.getAttribute("alt") || "");
+    }
+    // Ambiguous filenames must not result in the wrong file being sent.
+    const matches = [...capturedFiles.values()].filter(file =>
+      labels.some(label => label.includes(file.name)));
+    return matches.length === 1 ? matches[0] : null;
+  }
+
   function composerContext(composer = findComposerInput()) {
     const form = findComposerForm(composer);
     if (!form) return { files: [], selections: [], quote: null, mentions: [] };
+    const attachmentSurface = form.querySelector('[data-composer-attachments], [data-testid="composer-attachments"]');
     const files = [...form.querySelectorAll('button[aria-label*="Remove" i]')]
-      .filter(button => /file|attachment|image|upload/i.test(button.getAttribute("aria-label") || ""));
+      .filter(button => {
+        const label = button.getAttribute("aria-label") || "";
+        return !/selected text|quote|quoted/i.test(label)
+          && (/file|attachment|image|upload/i.test(label) || attachmentSurface?.contains(button));
+      });
+    const fileTokens = files.map(capturedFileForButton);
     const quoteRoot = form.querySelector('[data-composer-quote], [data-testid="composer-reply-preview"], [data-testid="composer-quote"], blockquote');
     const quoteButton = quoteRoot?.querySelector("button") || form.querySelector('button[aria-label*="Remove quote" i], button[aria-label*="Remove quoted" i], button[aria-label*="Clear quote" i]');
     const quote = quoteRoot || quoteButton?.closest('[data-composer-quote], blockquote')
       || quoteButton?.parentElement;
-    const attachmentSurface = form.querySelector('[data-composer-attachments]');
     const selections = [...form.querySelectorAll('button[aria-label^="Remove selected text" i]')]
       .map(button => ({
         button,
         root: button.parentElement,
         text: button.parentElement?.querySelector('.whitespace-pre-wrap')?.textContent || "",
       }));
-    return { files, selections, quote, quoteButton, mentions: composerMentions(composer), unknown: Boolean(attachmentSurface?.childElementCount && !files.length && !quote && !selections.length) };
+    return { files, fileTokens, selections, quote, quoteButton, mentions: composerMentions(composer), unknown: Boolean(attachmentSurface?.childElementCount && !files.length && !quote && !selections.length) };
   }
 
   function hasComposerContext(composer) {
@@ -71,12 +107,8 @@
     const state = composerContext(composer);
     if (state.unknown) return null;
     const attachments = [];
-    for (const button of state.files) {
-      const label = button.getAttribute("aria-label") || "";
-      const card = button.closest('.group\\/composer-attachment') || button.parentElement;
-      const imageNames = [...card.querySelectorAll("img")].flatMap(image => [image.alt, image.title]);
-      const file = [...capturedFiles.values()].find(file => label.includes(file.name)
-        || card.textContent.includes(file.name) || imageNames.includes(file.name));
+    for (const [index] of state.files.entries()) {
+      const file = state.fileTokens[index];
       if (!file) return null;
       const dataUrl = await new Promise((resolve, reject) => {
         const reader = new FileReader();
@@ -97,7 +129,11 @@
   }
 
   async function clearComposerContext(snapshot, composer) {
-    for (const button of [...snapshot.state.files, snapshot.state.quoteButton, ...snapshot.state.selections.map(selection => selection.button)].filter(Boolean)) button.click();
+    // Upload chips may be replaced by React while file bytes are read/saved.
+    // Click the current controls only if they still represent this snapshot.
+    if (!contextMatches(snapshot.state, composer)) return false;
+    const current = composerContext(composer);
+    for (const button of [...current.files, current.quoteButton, ...current.selections.map(selection => selection.button)].filter(Boolean)) button.click();
     await new Promise(resolve => window.setTimeout(resolve, 80));
     return !hasComposerContext(composer);
   }
@@ -110,13 +146,14 @@
       && current.selections.every((selection, index) => selection.button === snapshot.selections[index].button
         && selection.root === snapshot.selections[index].root && selection.text === snapshot.selections[index].text)
       && current.files.length === snapshot.files.length
-      && current.files.every((button, index) => button === snapshot.files[index]);
+      && current.files.every((button, index) => button === snapshot.files[index]
+        || (snapshot.fileTokens[index] && current.fileTokens[index] === snapshot.fileTokens[index]));
   }
 
   async function restoreAttachments(item, composer) {
     const key = activeKey;
     if (!item.attachments?.length) return true;
-    const input = findComposerForm(composer)?.querySelector('input[type="file"][aria-label="Attach files"], input[type="file"]');
+    const input = findAttachmentInput(composer);
     if (!input) return false;
     const transfer = new DataTransfer();
     for (const attachment of item.attachments) {
@@ -305,8 +342,10 @@
   for (const type of ["change", "drop", "paste"]) {
     document.addEventListener(type, event => {
       const form = findComposerForm();
-      if (!form?.contains(event.target)) return;
-      const files = event.target?.files || event.dataTransfer?.files || event.clipboardData?.files;
+      const target = event.target;
+      const composerInput = findAttachmentInput();
+      if (!form || !(form.contains(target) || (type === "change" && target === composerInput))) return;
+      const files = target?.files || event.dataTransfer?.files || event.clipboardData?.files;
       for (const file of files || []) capturedFiles.set(file.name, file);
     }, true);
   }
