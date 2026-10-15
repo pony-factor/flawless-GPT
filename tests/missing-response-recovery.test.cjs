@@ -14,12 +14,18 @@ const answer = (id, parent, text = 'Saved reply') => ({ id, parent, message: {
 
 test('only the observed completed prefix-only state is a candidate', () => {
   assert.equal(missingAnswer(prefix()), true);
+  const withSteps = prefix();
+  withSteps.turn.items[1].items = Array.from({ length: 4 }, () => ({ type: 'reasoning', completed: true }));
+  assert.equal(missingAnswer(withSteps), true);
   for (const mutate of [
     e => { e.turn.status = 'in_progress'; },
     e => { e.errorMessage = 'Cancelled'; },
     e => { e.turn.items.push({ type: 'assistant-message' }); },
     e => { e.turn.items.push({ type: 'image-generation' }); },
     e => { e.turn.items[1].items.push({ type: 'reasoning' }); },
+    e => { e.turn.items[1].items.push({ type: 'reasoning', completed: false }); },
+    e => { e.turn.items[1].items.push({ type: 'assistant-message', completed: true }); },
+    e => { e.turn.items[1].items.push({ type: 'future-renderer', completed: true }); },
     e => { e.turn.items[1].completed = false; },
     e => { e.turn.items.pop(); },
   ]) {

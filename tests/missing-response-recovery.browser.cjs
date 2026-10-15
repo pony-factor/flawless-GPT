@@ -10,7 +10,7 @@ before(async () => {
 });
 after(async () => { await browser?.close(); });
 
-async function fixture({ draft = '', active = false, queued = false, fail = false, delayed = false, remainBroken = false } = {}) {
+async function fixture({ draft = '', active = false, queued = false, fail = false, delayed = false, remainBroken = false, reasoningSteps = 0, earlierMissing = false } = {}) {
   const p = await browser.newPage();
   let loads = 0;
   let reads = 0;
@@ -30,7 +30,8 @@ async function fixture({ draft = '', active = false, queued = false, fail = fals
       if (delayed) await held;
       return route.fulfill({ status: fail ? 429 : 200, json: {
         current_node: 'a', mapping: {
-          u: { id: 'u', parent: null, message: { author: { role: 'user' } } },
+          earlier: { id: 'earlier', parent: null, message: { author: { role: 'user' } } },
+          u: { id: 'u', parent: earlierMissing ? 'earlier' : null, message: { author: { role: 'user' } } },
           a: { id: 'a', parent: 'u', message: { id: 'a', author: { role: 'assistant' }, channel: 'final',
             status: 'finished_successfully', content: { content_type: 'text', parts: ['Saved answer'] } } },
         },
@@ -46,9 +47,15 @@ async function fixture({ draft = '', active = false, queued = false, fail = fals
       <script>
         const turn = document.querySelector('[data-turn-key]');
         const restored = sessionStorage.getItem('ghrc-missing-response-recovery:test');
-        const items = [{type:'user-message'}, {type:'chatgpt-reasoning-group',completed:true,items:[]}];
+        const items = [{type:'user-message'}, {type:'chatgpt-reasoning-group',completed:true,items:Array.from({length:${reasoningSteps}},()=>({type:'reasoning',completed:true}))}];
         if(restored && !${remainBroken}) { items.push({type:'assistant-message'}); document.getElementById('answer').textContent = 'Saved answer'; }
         turn.__reactFiber$fixture = {memoizedProps:{entry:{turn:{status:'complete',items}}}};
+        if (${earlierMissing}) {
+          const earlier = document.createElement('div');
+          earlier.dataset.turnKey = 'earlier';
+          earlier.__reactFiber$fixture = {memoizedProps:{entry:{turn:{status:'complete',items:[{type:'user-message'},{type:'chatgpt-reasoning-group',completed:true,items:[]}]}}}};
+          turn.before(earlier);
+        }
         document.querySelector('[data-app-action-timeline-scroll]').scrollTop = restored ? 0 : 180;
       </script>` });
   });
@@ -71,6 +78,16 @@ test('recovers a saved missing answer once and restores the viewport', async () 
   assert.equal(await f.p.locator('[data-app-action-timeline-scroll]').evaluate(e => e.scrollTop), 180);
   await settle(f.p);
   assert.equal(f.loads(), 2);
+  assert.deepEqual(f.errors, []);
+  await f.p.close();
+});
+
+test('recovers completed reasoning despite an earlier turn with no saved answer', async () => {
+  const f = await fixture({ reasoningSteps: 4, earlierMissing: true });
+  await settle(f.p);
+  await f.p.waitForFunction(() => document.getElementById('answer')?.textContent === 'Saved answer');
+  assert.equal(f.loads(), 2);
+  assert.equal(f.reads(), 1);
   assert.deepEqual(f.errors, []);
   await f.p.close();
 });

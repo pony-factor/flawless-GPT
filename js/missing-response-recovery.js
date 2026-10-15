@@ -10,11 +10,14 @@
     const turn = entry?.turn;
     if (turn?.status !== "complete" || entry.errorMessage || !Array.isArray(turn.items)) return false;
     // Unknown item kinds may be answers (images, tools, future renderers).
-    // Only the observed, completed prefix-only state is a recovery candidate.
+    // Completed reasoning can contain steps even when the final answer is absent.
+    // Keep unknown or unfinished children out of this conservative recovery path.
     return turn.items.some(item => item.type === "user-message")
       && turn.items.some(item => item.type === "chatgpt-reasoning-group" && item.completed)
       && turn.items.every(item => item.type === "user-message"
-        || item.type === "chatgpt-reasoning-group" && item.completed && item.items?.length === 0);
+        || item.type === "chatgpt-reasoning-group" && item.completed
+          && Array.isArray(item.items)
+          && item.items.every(step => step.type === "reasoning" && step.completed === true));
   }
 
   function answerForTurn(payload, userId) {
@@ -125,9 +128,9 @@
     try {
       // One refresh per conversation per tab session, including failed repairs.
       if (sessionStorage.getItem(STORAGE_PREFIX + id)) return;
-      const element = [...document.querySelectorAll(TURN_SELECTOR)]
-        .find(element => missingAnswer(entryFor(element)));
-      const userId = element?.getAttribute("data-turn-key") || "";
+      const elements = [...document.querySelectorAll(TURN_SELECTOR)]
+        .filter(element => missingAnswer(entryFor(element)));
+      const userId = elements[0]?.getAttribute("data-turn-key") || "";
       if (!userId) { candidate = ""; return; }
       const signature = `${id}:${userId}`;
       if ((attempts.get(signature) || 0) >= 3) return;
@@ -141,10 +144,12 @@
       attempts.set(signature, (attempts.get(signature) || 0) + 1);
       retryAfter = Date.now() + 60_000;
       const saved = await loadSavedConversation(id);
-      const answerId = answerForTurn(saved, userId);
+      // An earlier turn may never have saved a final answer. It must not block
+      // recovery of a later turn whose final answer is available.
+      const element = elements.find(element => answerForTurn(saved, element.getAttribute("data-turn-key")));
       // Recheck after both network reads: a route change, draft, new response,
       // or late native answer must cancel recovery rather than interrupt it.
-      if (!answerId || conversationId() !== id || !idle() || !element.isConnected
+      if (!element || conversationId() !== id || !idle() || !element.isConnected
           || !missingAnswer(entryFor(element))) return;
       sessionStorage.setItem(STORAGE_PREFIX + id, JSON.stringify({ viewport: viewport(), restore: true }));
       location.reload();
