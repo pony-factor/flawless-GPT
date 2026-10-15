@@ -1,32 +1,20 @@
-const YOUTUBE_SEARCH_TAB_ID_KEY = "youtubeSearchTabId";
-
-async function openYouTubeSearch(urlValue) {
+async function openYouTubeSearch(urlValue, sender) {
+  let source;
+  try { source = new URL(sender?.url); } catch { /* Invalid sender. */ }
+  if (source?.origin !== "https://chatgpt.com" || sender?.frameId !== 0
+      || !Number.isInteger(sender?.tab?.id)) {
+    throw new Error("YouTube searches must originate from a ChatGPT tab");
+  }
   const url = new URL(urlValue);
   if (url.origin !== "https://www.youtube.com" || url.pathname !== "/results") {
     throw new Error("Only YouTube search result URLs can be opened");
   }
-
-  const stored = await chrome.storage.session.get({ [YOUTUBE_SEARCH_TAB_ID_KEY]: null });
-  const existingTabId = stored[YOUTUBE_SEARCH_TAB_ID_KEY];
-  if (Number.isInteger(existingTabId)) {
-    try {
-      await chrome.tabs.update(existingTabId, { active: true, url: url.toString() });
-      return;
-    } catch {
-      await chrome.storage.session.remove(YOUTUBE_SEARCH_TAB_ID_KEY);
-    }
-  }
-
-  const tab = await chrome.tabs.create({ active: true, url: url.toString() });
-  if (Number.isInteger(tab.id)) {
-    await chrome.storage.session.set({ [YOUTUBE_SEARCH_TAB_ID_KEY]: tab.id });
-  }
+  await chrome.tabs.update(sender.tab.id, { url: url.toString() });
 }
 
-chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message?.type !== "open-youtube-search") return false;
-
-  openYouTubeSearch(message.url)
+  openYouTubeSearch(message.url, sender)
     .then(() => sendResponse({ ok: true }))
     .catch((error) => sendResponse({ ok: false, error: error.message }));
   return true;
