@@ -10,6 +10,17 @@
     '[data-testid*="toast" i]',
     '[data-testid*="notification" i]',
     '[class*="toast" i]',
+    '[data-ghrc-hidden-background-completion]',
+  ].join(',');
+
+  const HIDDEN = 'data-ghrc-hidden-background-completion';
+  const ORIGINAL_ARIA_HIDDEN = 'data-ghrc-original-background-completion-aria-hidden';
+  const CONVERSATION_SELECTOR = [
+    'main',
+    '[data-testid^="conversation-turn-"]',
+    '[data-message-author-role]',
+    '[data-content-search-unit-key]',
+    '[data-testid="generated-image-gallery"]',
   ].join(',');
 
   const COMPLETION_TEXT = /\b(?:complete|completed|finished|ready|done)\b/i;
@@ -37,8 +48,18 @@
     }
   }
 
+  // Live answer/status regions can contain phrases such as "Your response is ready".
+  // They must never be mistaken for floating notification toasts.
+  function containsConversationContent(element) {
+    if (!element) return false;
+    if (element.closest?.(CONVERSATION_SELECTOR)) return true;
+    if (element.querySelector?.(CONVERSATION_SELECTOR)) return true;
+    const main = typeof document === 'undefined' ? null : document.querySelector?.('main');
+    return Boolean(main && element.contains?.(main));
+  }
+
   function isBackgroundCompletionNotice(toast) {
-    if (!toast) return false;
+    if (!toast || containsConversationContent(toast)) return false;
     const text = toast.textContent || '';
     if (!COMPLETION_TEXT.test(text)) return false;
 
@@ -53,9 +74,19 @@
   }
 
   function hideNotice(toast) {
-    if (!toast || toast.hasAttribute('data-ghrc-hidden-background-completion')) return;
-    toast.setAttribute('data-ghrc-hidden-background-completion', '');
+    if (!toast || toast.hasAttribute(HIDDEN) || containsConversationContent(toast)) return;
+    toast.setAttribute(ORIGINAL_ARIA_HIDDEN, toast.getAttribute('aria-hidden') ?? 'unset');
+    toast.setAttribute(HIDDEN, '');
     toast.setAttribute('aria-hidden', 'true');
+  }
+
+  function restoreNotice(toast) {
+    if (!toast?.hasAttribute(HIDDEN)) return;
+    const original = toast.getAttribute(ORIGINAL_ARIA_HIDDEN);
+    toast.removeAttribute(HIDDEN);
+    toast.removeAttribute(ORIGINAL_ARIA_HIDDEN);
+    if (original === null || original === 'unset') toast.removeAttribute('aria-hidden');
+    else toast.setAttribute('aria-hidden', original);
   }
 
   function candidateToasts(node) {
@@ -77,6 +108,7 @@
   function scan(node) {
     for (const toast of candidateToasts(node)) {
       if (isBackgroundCompletionNotice(toast)) hideNotice(toast);
+      else restoreNotice(toast);
     }
   }
 
@@ -84,7 +116,9 @@
     conversationIdFromPath,
     isDifferentConversationHref,
     isBackgroundCompletionNotice,
+    containsConversationContent,
     candidateToasts,
+    scan,
   };
 
   if (globalThis.__GHRC_TEST__) {

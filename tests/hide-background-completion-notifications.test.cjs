@@ -172,3 +172,79 @@ test('hides a toast when its text changes after insertion', () => {
   assert.equal(toast.hasAttribute('data-ghrc-hidden-background-completion'), true);
   assert.equal(toast.hasAttribute('aria-hidden'), true);
 });
+
+
+test('keeps completed assistant responses visible inside status and conversation regions', () => {
+  const a = api();
+  const liveStatus = new FakeToast('Your response is ready');
+  liveStatus.closest = () => ({ tagName: 'MAIN' });
+  assert.equal(a.isBackgroundCompletionNotice(liveStatus), false);
+
+  // An enclosing status container must not hide the whole answer either.
+  const enclosingStatus = new FakeToast('Your thinking session has finished');
+  enclosingStatus.querySelector = () => ({ getAttribute() { return 'assistant'; } });
+  assert.equal(a.isBackgroundCompletionNotice(enclosingStatus), false);
+
+  // Floating notifications outside the conversation still get suppressed.
+  assert.equal(a.isBackgroundCompletionNotice(new FakeToast('Your response is ready')), true);
+});
+
+test('does not hide a status wrapper containing the entire main conversation', () => {
+  const testApi = {};
+  const main = {};
+  const context = {
+    __GHRC_TEST__: testApi,
+    location: { pathname: '/c/current-chat', origin: 'https://chatgpt.com' },
+    document: { querySelector(selector) { return selector === 'main' ? main : null; } },
+    URL,
+  };
+  vm.createContext(context);
+  vm.runInContext(source, context);
+  const wrapper = new FakeToast('Your response is ready');
+  wrapper.contains = child => child === main;
+  assert.equal(testApi.isBackgroundCompletionNotice(wrapper), false);
+});
+
+test('restores hidden content when a notification node becomes part of a conversation', () => {
+  const testApi = {};
+  class MutableStatus extends FakeToast {
+    constructor(text) {
+      super(text);
+      this.attributes = new Map();
+      this.inConversation = false;
+    }
+    hasAttribute(name) { return this.attributes.has(name); }
+    getAttribute(name) { return this.attributes.get(name) ?? null; }
+    setAttribute(name, value) { this.attributes.set(name, value); }
+    removeAttribute(name) { this.attributes.delete(name); }
+    closest() { return this.inConversation ? {} : null; }
+  }
+  class FakeElement {
+    constructor(status) { this.status = status; }
+    closest() { return this.status; }
+    matches() { return false; }
+    querySelectorAll() { return []; }
+  }
+  const context = {
+    __GHRC_TEST__: testApi,
+    location: { pathname: '/c/current-chat', origin: 'https://chatgpt.com' },
+    Element: FakeElement,
+    URL,
+  };
+  vm.createContext(context);
+  vm.runInContext(source, context);
+
+  for (const prior of [null, 'false']) {
+    const status = new MutableStatus('Your thinking session has finished');
+    if (prior !== null) status.setAttribute('aria-hidden', prior);
+    const node = new FakeElement(status);
+    testApi.scan(node);
+    assert.equal(status.hasAttribute('data-ghrc-hidden-background-completion'), true);
+    assert.equal(status.getAttribute('aria-hidden'), 'true');
+
+    status.inConversation = true;
+    testApi.scan(node);
+    assert.equal(status.hasAttribute('data-ghrc-hidden-background-completion'), false);
+    assert.equal(status.getAttribute('aria-hidden'), prior);
+  }
+});
