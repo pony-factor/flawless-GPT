@@ -165,3 +165,38 @@ test('stale report scripts explain recovery instead of exposing a missing runtim
     assert.equal(await page.getByRole('dialog').count(), 0);
   } finally { await browser.close(); }
 });
+
+
+test('automatic import exposes lookup and terminal errors, then resumes after recovery', async () => {
+  const browser = await chromium.launch({ executablePath: '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser', headless: true });
+  try {
+    const page = await browser.newPage();
+    await page.setContent('<section><div><button aria-label="Export">Export</button><button aria-label="Expand">Expand</button></div><article class="_reportPage_fixture"><h1>Recovered report</h1><p>Complete evidence.</p></article></section>');
+    await page.evaluate(() => {
+      window.mode = 'lookup-error';
+      window.imports = 0;
+      window.chrome = { storage: { local: { get: async d => ({ ...d, researchPublisherEnabled: true }) }, onChanged: { addListener() {} } }, runtime: { sendMessage: async m => {
+        if (m.type === 'research-launch-job') {
+          if (mode === 'lookup-error') return { ok: false, error: 'Research page is reconnecting. Retrying automatic import…' };
+          if (mode === 'terminal-error') return { ok: true, job: { state: 'import-error', error: 'The linked repository changed during research.' } };
+          if (mode === 'complete') return { ok: true, job: { state: 'complete', result: { repository: 'Research', branch: 'main', path: 'recovered.md' } } };
+          return { ok: true, job: { id: 'recovered', state: 'submitted' } };
+        }
+        if (m.type === 'publish-research-report') {
+          imports++;
+          window.mode = 'complete';
+          return { ok: true, repository: 'Research', branch: 'main', path: 'recovered.md' };
+        }
+      } } };
+    });
+    for (const file of ['vendor/turndown.js', 'vendor/turndown-plugin-gfm.js', 'js/research-import-dialog.js', 'js/research-publisher.js'])
+      await page.addScriptTag({ content: fs.readFileSync(file, 'utf8') });
+    await page.waitForFunction(() => document.querySelector('.ghrc-report-status')?.textContent.includes('reconnecting'));
+    await page.evaluate(() => { window.mode = 'terminal-error'; });
+    await page.waitForFunction(() => document.querySelector('.ghrc-report-status')?.textContent.includes('repository changed'));
+    await page.evaluate(() => { window.mode = 'recovered'; });
+    await page.waitForFunction(() => window.imports === 1, null, { timeout: 15000 });
+    assert.match(await page.locator('.ghrc-report-status').innerText(), /Imported: Research \/ recovered.md/);
+    assert.equal(await page.evaluate(() => imports), 1);
+  } finally { await browser.close(); }
+});
