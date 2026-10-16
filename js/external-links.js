@@ -328,6 +328,7 @@
         event.preventDefault();
         event.stopImmediatePropagation();
         window.open(currentPreviewHref, "_blank", "noopener,noreferrer");
+        if (control === open) closeLinkPreview(false);
       });
     }
     const close = document.createElement("button");
@@ -337,7 +338,7 @@
     close.title = "Close website preview";
     close.setAttribute("aria-label", "Close website preview");
     close.addEventListener("click", closeLinkPreview);
-    header.append(destination, copy, open, close);
+    header.append(close, copy, open, destination);
     panel.append(resizer, header);
 
     if (nativeGuide) {
@@ -366,7 +367,7 @@
         button.setAttribute("aria-label", label);
         navigation.append(button);
       }
-      header.prepend(navigation);
+      header.insertBefore(navigation, destination);
       const content = document.createElement("div");
       content.className = "ghrc-preview-content";
       content.setAttribute("aria-live", "polite");

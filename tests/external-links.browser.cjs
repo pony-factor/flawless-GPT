@@ -466,6 +466,31 @@ test('GitHub embeds the website first and uses the API only after the active fra
 });
 
 
+test('fallback preview puts close, copy, and open before the URL and closes after opening a tab', async () => {
+  for (const onLeft of [false, true]) {
+    const page = await fixture({
+      openExternalLinksInSplitView: true,
+      openExternalLinksInSplitViewOnLeft: onLeft,
+    });
+    await page.locator('.ghrc-link-sidebar-button').click();
+    const preview = page.locator('#ghrc-link-preview');
+    await preview.waitFor();
+    const order = await preview.locator('header').evaluate(header =>
+      [...header.children].map(child => child.getAttribute('aria-label') || child.className));
+    assert.deepEqual(order, [
+      'Close website preview', 'Copy link', 'Open in new tab', 'ghrc-preview-destination',
+    ]);
+    await preview.getByRole('link', { name: 'Open in new tab' }).click();
+    assert.deepEqual(await page.evaluate(() => openedLinks), [
+      ['https://example.org/source?keep=1#section', '_blank', 'noopener,noreferrer'],
+    ]);
+    assert.equal(await preview.count(), 0);
+    assert.equal(await page.evaluate(() => document.documentElement.hasAttribute('data-ghrc-link-preview')), false);
+    assert.equal(page.url(), 'https://chatgpt.com/c/example');
+    await page.close();
+  }
+});
+
 test('GitHub fallback shows history arrows beside the URL and readable theme colors', async () => {
   const page = await fixture({ openExternalLinksInSplitView: true }, {
     ok: true, title: 'Repository preview',
@@ -478,7 +503,7 @@ test('GitHub fallback shows history arrows beside the URL and readable theme col
   const headerChildren = await preview.locator('header').evaluate(header =>
     [...header.children].map(child => child.getAttribute('aria-label') || child.className));
   assert.deepEqual(headerChildren, [
-    'Preview history', 'ghrc-preview-destination', 'Copy link', 'Open in new tab', 'Close website preview',
+    'Close website preview', 'Copy link', 'Open in new tab', 'Preview history', 'ghrc-preview-destination',
   ]);
   assert.equal(await preview.locator('.ghrc-preview-navigation svg').count(), 2);
   const back = preview.getByRole('button', { name: 'Back' });
@@ -520,6 +545,11 @@ test('GitHub fallback shows history arrows beside the URL and readable theme col
   assert.notEqual(light.controls, dark.controls);
   await page.setViewportSize({ width: 320, height: 800 });
   assert.equal(await preview.locator('header').evaluate(header => header.scrollWidth <= header.clientWidth), true);
+  await preview.getByRole('link', { name: 'Open in new tab' }).click();
+  assert.deepEqual(await page.evaluate(() => openedLinks), [
+    ['https://github.com/owner/repo/issues', '_blank', 'noopener,noreferrer'],
+  ]);
+  assert.equal(await preview.count(), 0);
   await page.close();
 });
 
