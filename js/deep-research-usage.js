@@ -33,9 +33,13 @@
   window.fetch = function(...args) {
     let request = null;
     try {
-      const url = new URL(args[0] instanceof Request ? args[0].url : String(args[0]), location.href);
-      if (url.origin === location.origin && url.pathname === '/backend-api/conversation/init') {
-        request = new Request(args[0] instanceof Request ? args[0].clone() : url.href, args[1]);
+      const input = args[0];
+      // Optional observation must not repeat native fetch's arbitrary input coercion.
+      if (typeof input === 'string' || input instanceof Request || input instanceof URL) {
+        const url = new URL(input instanceof Request ? input.url : String(input), location.href);
+        if (url.origin === location.origin && url.pathname === '/backend-api/conversation/init') {
+          request = new Request(input instanceof Request ? input.clone() : url.href, args[1]);
+        }
       }
     } catch { /* Do not interfere with native fetch validation. */ }
     const result = nativeFetch.apply(this, args);

@@ -29,18 +29,21 @@
     publish([...dates].map(([id, createTime]) => ({ id, createTime })));
   });
 
-  window.fetch = async function flawlessConversationDateFetch(...args) {
-    const response = await Reflect.apply(nativeFetch, this, args);
+  window.fetch = function flawlessConversationDateFetch(...args) {
+    const result = Reflect.apply(nativeFetch, this, args);
     try {
       const input = args[0];
+      // Do not coerce arbitrary inputs again after native fetch has handled them.
+      if (typeof input !== "string" && !(input instanceof Request) && !(input instanceof URL)) return result;
       const requestUrl = input instanceof Request ? input.url : String(input);
       const url = new URL(requestUrl, location.href);
       if (url.origin === location.origin && url.pathname === "/backend-api/conversations") {
-        void response.clone().json().then(payload => publish(normalizeItems(payload))).catch(() => {});
+        void result.then(response => response.clone().json())
+          .then(payload => publish(normalizeItems(payload))).catch(() => {});
       }
     } catch {
       // Conversation dates are an optional display enhancement.
     }
-    return response;
+    return result;
   };
 })();
