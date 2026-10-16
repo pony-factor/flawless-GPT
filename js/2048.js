@@ -122,6 +122,7 @@
       moveBoard,
       canMove,
       newGame,
+      tileClass,
     };
     return;
   }
@@ -209,7 +210,11 @@
   }
 
   function tileClass(value) {
-    return value <= 2048 ? `ghrc-2048-tile-${value}` : "ghrc-2048-tile-super";
+    const exponent = Math.log2(value);
+    if (!Number.isInteger(exponent) || exponent < 1) return "ghrc-2048-tile-super";
+    // Use each sampled color through 4194304, then cycle the distinct high-tier palette.
+    const colorExponent = exponent <= 22 ? exponent : 12 + ((exponent - 23) % 11);
+    return `ghrc-2048-tile-${2 ** colorExponent}`;
   }
 
   function openGame() {
@@ -279,8 +284,12 @@
     const render = () => {
       game.board.flat().forEach((value, index) => {
         const tile = tiles[index];
+        const numberSize = value >= 1000000 ? "micro"
+          : value >= 10000 ? "tiny"
+          : value >= 1000 ? "small"
+          : value >= 128 ? "medium" : "";
         tile.className = value
-          ? `ghrc-2048-tile ${tileClass(value)}`
+          ? `ghrc-2048-tile ${tileClass(value)}${numberSize ? ` ghrc-2048-tile-${numberSize}` : ""}`
           : "ghrc-2048-tile ghrc-2048-tile-empty";
         tile.textContent = value || "";
         tile.setAttribute("aria-label", value ? String(value) : "Empty");
