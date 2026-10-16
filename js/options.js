@@ -72,6 +72,14 @@ const disableManualWebSearchInput = document.getElementById("disable-manual-web-
 const showSpellcheckGptLauncherInput = document.getElementById("show-spellcheck-gpt-launcher");
 const show2048LauncherInput = document.getElementById("show-2048-launcher");
 const showDeepResearchTrackerInput = document.getElementById("show-deep-research-tracker");
+const showDeepResearchHomepageInput = document.getElementById("show-deep-research-homepage");
+const showDeepResearchComposerInput = document.getElementById("show-deep-research-composer");
+const showDeepResearchHomepageCountInput = document.getElementById("show-deep-research-homepage-count");
+const showDeepResearchHomepageResetInput = document.getElementById("show-deep-research-homepage-reset");
+const showDeepResearchComposerCountInput = document.getElementById("show-deep-research-composer-count");
+const showDeepResearchComposerResetInput = document.getElementById("show-deep-research-composer-reset");
+const deepResearchHomepageVisibilityInput = document.getElementById("deep-research-homepage-visibility");
+const deepResearchHomepageWindowDaysInput = document.getElementById("deep-research-homepage-window-days");
 const stripUtmTrackingInput = document.getElementById("strip-utm-tracking");
 const hideExternalLinkArrowsInput = document.getElementById("hide-external-link-arrows");
 const stripCopiedBoldInput = document.getElementById("strip-copied-bold");
@@ -211,6 +219,26 @@ githubAccountList.addEventListener("dragend", () => {
   updateGithubAccountControls();
   void queueSettingsSave();
 });
+
+function normalizedResearchWindowDays(value) {
+  const days = Number(value);
+  return Number.isInteger(days) && days >= 1 && days <= 365 ? days : 5;
+}
+
+function updateResearchSettingsControls() {
+  const enabled = showDeepResearchTrackerInput.checked;
+  const homepage = enabled && showDeepResearchHomepageInput.checked;
+  const composer = enabled && showDeepResearchComposerInput.checked;
+  showDeepResearchHomepageInput.disabled = !enabled;
+  showDeepResearchComposerInput.disabled = !enabled;
+  showDeepResearchHomepageCountInput.disabled = !homepage;
+  showDeepResearchHomepageResetInput.disabled = !homepage;
+  deepResearchHomepageVisibilityInput.disabled = !homepage;
+  deepResearchHomepageWindowDaysInput.disabled =
+    !homepage || deepResearchHomepageVisibilityInput.value !== "near-reset";
+  showDeepResearchComposerCountInput.disabled = !composer;
+  showDeepResearchComposerResetInput.disabled = !composer;
+}
 
 function normalizedOwnerGroupsPerPage(value) {
   const parsed = Number.parseInt(value, 10);
@@ -380,6 +408,14 @@ async function loadSettings() {
     showSpellcheckGptLauncher: false,
     show2048Launcher: false,
     showDeepResearchTracker: true,
+    showDeepResearchHomepage: true,
+    showDeepResearchComposer: true,
+    showDeepResearchHomepageCount: true,
+    showDeepResearchHomepageReset: true,
+    showDeepResearchComposerCount: true,
+    showDeepResearchComposerReset: true,
+    deepResearchHomepageVisibility: "near-reset",
+    deepResearchHomepageWindowDays: 5,
     stripUtmTracking: true,
     hideExternalLinkArrows: false,
     stripCopiedBold: true,
@@ -435,6 +471,16 @@ async function loadSettings() {
   showSpellcheckGptLauncherInput.checked = Boolean(settings.showSpellcheckGptLauncher);
   show2048LauncherInput.checked = Boolean(settings.show2048Launcher);
   showDeepResearchTrackerInput.checked = settings.showDeepResearchTracker !== false;
+  showDeepResearchHomepageInput.checked = settings.showDeepResearchHomepage !== false;
+  showDeepResearchComposerInput.checked = settings.showDeepResearchComposer !== false;
+  showDeepResearchHomepageCountInput.checked = settings.showDeepResearchHomepageCount !== false;
+  showDeepResearchHomepageResetInput.checked = settings.showDeepResearchHomepageReset !== false;
+  showDeepResearchComposerCountInput.checked = settings.showDeepResearchComposerCount !== false;
+  showDeepResearchComposerResetInput.checked = settings.showDeepResearchComposerReset !== false;
+  deepResearchHomepageVisibilityInput.value =
+    settings.deepResearchHomepageVisibility === "always" ? "always" : "near-reset";
+  deepResearchHomepageWindowDaysInput.value = normalizedResearchWindowDays(settings.deepResearchHomepageWindowDays);
+  updateResearchSettingsControls();
   stripUtmTrackingInput.checked = settings.stripUtmTracking !== false;
   hideExternalLinkArrowsInput.checked = Boolean(settings.hideExternalLinkArrows);
   stripCopiedBoldInput.checked = settings.stripCopiedBold !== false;
@@ -536,6 +582,14 @@ async function saveSettings() {
       showSpellcheckGptLauncher: showSpellcheckGptLauncherInput.checked,
       show2048Launcher: show2048LauncherInput.checked,
       showDeepResearchTracker: showDeepResearchTrackerInput.checked,
+      showDeepResearchHomepage: showDeepResearchHomepageInput.checked,
+      showDeepResearchComposer: showDeepResearchComposerInput.checked,
+      showDeepResearchHomepageCount: showDeepResearchHomepageCountInput.checked,
+      showDeepResearchHomepageReset: showDeepResearchHomepageResetInput.checked,
+      showDeepResearchComposerCount: showDeepResearchComposerCountInput.checked,
+      showDeepResearchComposerReset: showDeepResearchComposerResetInput.checked,
+      deepResearchHomepageVisibility: deepResearchHomepageVisibilityInput.value,
+      deepResearchHomepageWindowDays: normalizedResearchWindowDays(deepResearchHomepageWindowDaysInput.value),
       stripUtmTracking: stripUtmTrackingInput.checked,
       hideExternalLinkArrows: hideExternalLinkArrowsInput.checked,
       stripCopiedBold: stripCopiedBoldInput.checked,
@@ -561,6 +615,7 @@ async function saveSettings() {
     });
     ownerListDirty = false;
     ownerGroupsPerPageInput.value = ownerGroupsPerPage;
+    deepResearchHomepageWindowDaysInput.value = normalizedResearchWindowDays(deepResearchHomepageWindowDaysInput.value);
     updateTokenSummary();
     showStatus(
       tokenStateLoaded
@@ -584,6 +639,7 @@ form.addEventListener("submit", (event) => {
 });
 
 form.addEventListener("change", (event) => {
+  updateResearchSettingsControls();
   if (event.target.closest(".token-row")) tokenInputsDirty = true;
   if (event.target.closest(".github-account")) ownerListDirty = true;
   void queueSettingsSave();

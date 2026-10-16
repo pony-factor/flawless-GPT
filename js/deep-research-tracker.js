@@ -29,9 +29,20 @@
   const ID = 'ghrc-deep-research-tracker';
   const DASHBOARD_ID = 'ghrc-deep-research-dashboard';
   const COMPOSER_ID = `${ID}-composer`;
-  const SETTING_KEY = 'showDeepResearchTracker';
   const USAGE_ATTRIBUTE = 'data-ghrc-deep-research-usage';
-  const DASHBOARD_COUNT_WINDOW_MS = 5 * 24 * 60 * 60_000;
+  const DAY_MS = 24 * 60 * 60_000;
+  const SETTINGS_DEFAULTS = Object.freeze({
+    showDeepResearchTracker: true,
+    showDeepResearchHomepage: true,
+    showDeepResearchComposer: true,
+    showDeepResearchHomepageCount: true,
+    showDeepResearchHomepageReset: true,
+    showDeepResearchComposerCount: true,
+    showDeepResearchComposerReset: true,
+    deepResearchHomepageVisibility: 'near-reset',
+    deepResearchHomepageWindowDays: 5,
+  });
+  let preferences = { ...SETTINGS_DEFAULTS };
   let enabled = !globalThis.chrome?.storage?.local;
   let allowance = { remaining: null, full: false, reset: '' };
   let observedAt = 0;
@@ -48,12 +59,13 @@
   }
 
   function dashboardVisible() {
+    if (preferences.deepResearchHomepageVisibility === 'always') return true;
     if (!serverQuota || serverQuota.resetAt === null) return false;
     const remainingMs = serverQuota.resetAt - Date.now();
-    return remainingMs >= 0 && remainingMs <= DASHBOARD_COUNT_WINDOW_MS;
+    return remainingMs >= 0 && remainingMs <= preferences.deepResearchHomepageWindowDays * DAY_MS;
   }
 
-  function serverText(includeCount = true) {
+  function serverText(includeCount, includeReset) {
     if (!serverQuota) return null;
     const stale = Date.now() - serverQuota.observedAt > 10 * 60_000
       || (serverQuota.resetAt !== null && serverQuota.resetAt <= Date.now());
@@ -72,7 +84,7 @@
         reset = `resets ${value}${unit}`;
       }
     }
-    return ['Deep Research', ...(includeCount ? [count] : []), reset].join(' · ');
+    return ['Deep Research', ...(includeCount ? [count] : []), ...(includeReset ? [reset] : [])].join(' · ');
   }
 
   function visible(element) {
@@ -146,16 +158,20 @@
       ? `${allowance.remaining} left`
       : 'Check allowance';
     const reset = fresh && allowance.reset ? allowance.reset : 'Reset unknown';
-    const includeCount = id !== ID || dashboardVisible();
-    const text = serverText(includeCount)
-      || ['Deep Research', ...(includeCount ? [count] : []), reset].join(' · ');
+    const homepage = id === ID;
+    const includeCount = homepage
+      ? preferences.showDeepResearchHomepageCount !== false
+      : preferences.showDeepResearchComposerCount !== false;
+    const includeReset = homepage
+      ? preferences.showDeepResearchHomepageReset !== false
+      : preferences.showDeepResearchComposerReset !== false;
+    const text = serverText(includeCount, includeReset)
+      || ['Deep Research', ...(includeCount ? [count] : []), ...(includeReset ? [reset] : [])].join(' · ');
     const label = widget.querySelector('.ghrc-research-allowance');
-    const visibleText = text.replace(/^Deep Research · /, '');
+    const visibleText = text === 'Deep Research' ? '' : text.replace(/^Deep Research · /, '');
     if (label.textContent !== visibleText) label.textContent = visibleText;
     if (widget.getAttribute('aria-label') !== text) widget.setAttribute('aria-label', text);
-    widget.title = serverQuota
-      ? 'ChatGPT’s Deep Research report allowance. Click to refresh. Lightweight allowances are excluded. Reset countdown uses days above 36 hours, hours down to one hour, then minutes.'
-      : 'Waiting for ChatGPT’s research allowance. Click to check again or open the native tools menu.';
+    widget.title = 'Deep Research allowance. Click to refresh or open the native tools menu. Lightweight allowances are excluded.';
     return widget;
   }
 
@@ -165,7 +181,7 @@
     readServerQuota();
     readAllowance();
     const repositories = document.getElementById('github-repositories-for-chatgpt');
-    if (enabled && repositories && visible(repositories) && dashboardVisible()) {
+    if (enabled && preferences.showDeepResearchHomepage !== false && repositories && visible(repositories) && dashboardVisible()) {
       let row = document.getElementById(DASHBOARD_ID);
       if (!row) {
         row = document.createElement('div');
@@ -188,7 +204,7 @@
       '[data-prompt-link-label="$deep-research"]',
     ].join(',')));
     const composer = researchPrompt?.closest('form, [data-type="unified-composer"]');
-    if (enabled && composer?.parentElement) {
+    if (enabled && preferences.showDeepResearchComposer !== false && composer?.parentElement) {
       const widget = renderWidget(COMPOSER_ID);
       if (widget.nextElementSibling !== composer) composer.before(widget);
     } else document.getElementById(COMPOSER_ID)?.remove();
@@ -204,17 +220,30 @@
   document.addEventListener('pointerover', schedule);
   document.addEventListener('focusin', schedule);
   window.addEventListener('resize', schedule);
-  function settingsChanged(changes, area) {
-    if (area !== 'local' || !changes[SETTING_KEY]) return;
-    enabled = changes[SETTING_KEY].newValue !== false;
+  function applySettings(next) {
+    preferences = { ...SETTINGS_DEFAULTS, ...next };
+    if (preferences.deepResearchHomepageVisibility !== 'always') {
+      preferences.deepResearchHomepageVisibility = 'near-reset';
+    }
+    const days = preferences.deepResearchHomepageWindowDays;
+    preferences.deepResearchHomepageWindowDays =
+      Number.isInteger(days) && days >= 1 && days <= 365 ? days : 5;
+    enabled = preferences.showDeepResearchTracker !== false;
     schedule();
+  }
+
+  function settingsChanged(changes, area) {
+    if (area !== 'local') return;
+    const keys = Object.keys(SETTINGS_DEFAULTS).filter(key => changes[key]);
+    if (!keys.length) return;
+    const next = { ...preferences };
+    for (const key of keys) next[key] = changes[key].newValue;
+    applySettings(next);
   }
   globalThis.chrome?.storage?.onChanged?.addListener(settingsChanged);
   if (globalThis.chrome?.storage?.local) {
-    void chrome.storage.local.get({ [SETTING_KEY]: true }).then(settings => {
-      enabled = settings[SETTING_KEY] !== false;
-      schedule();
-    }).catch(error => context.handleError?.(error));
+    void chrome.storage.local.get(SETTINGS_DEFAULTS).then(applySettings)
+      .catch(error => context.handleError?.(error));
   }
   const timer = setInterval(() => {
     if (enabled && document.visibilityState === 'visible' && serverQuota && Date.now() - serverQuota.observedAt > 5 * 60_000) {

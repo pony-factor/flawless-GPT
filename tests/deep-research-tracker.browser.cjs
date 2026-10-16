@@ -168,3 +168,66 @@ test('native initialization fills the tracker automatically and clicking refresh
     assert.equal(await page.locator('#prompt-textarea').innerText(), 'My draft');
   } finally { await browser.close(); }
 });
+
+test('Research options independently control homepage, composer, counts, reset labels, and reset window', async () => {
+  const browser = await chromium.launch({ executablePath: '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser', headless: true });
+  try {
+    const page = await browser.newPage();
+    const errors = [];
+    page.on('pageerror', error => errors.push(error.message));
+    await page.setContent('<main><section><form><div id="prompt-textarea" contenteditable="true"><span contenteditable="false" data-prompt-link-href="app://connector_openai_deep_research">Research</span></div></form><section id="github-repositories-for-chatgpt">Repositories</section></section></main>');
+    await page.evaluate(() => {
+      window.__ghrcExtensionContext = { active: () => true, onStop() {} };
+      window.settings = {
+        showDeepResearchTracker: true, showDeepResearchHomepage: true, showDeepResearchComposer: true,
+        showDeepResearchHomepageCount: true, showDeepResearchHomepageReset: false,
+        showDeepResearchComposerCount: false, showDeepResearchComposerReset: true,
+        deepResearchHomepageVisibility: 'always', deepResearchHomepageWindowDays: 5,
+      };
+      window.listeners = [];
+      window.chrome = { storage: { local: { async get(defaults) { return { ...defaults, ...window.settings }; } }, onChanged: {
+        addListener(listener) { window.listeners.push(listener); }, removeListener() {},
+      } } };
+      window.changeResearchSetting = (key, value) => {
+        window.settings[key] = value;
+        window.listeners.forEach(listener => listener({ [key]: { newValue: value } }, 'local'));
+      };
+      document.documentElement.setAttribute('data-ghrc-deep-research-usage', JSON.stringify({
+        remaining: 13, resetAt: Date.now() + 10 * 24 * 3600_000, observedAt: Date.now(),
+      }));
+    });
+    await page.addScriptTag({ content: fs.readFileSync(path.join(__dirname, '../js/deep-research-tracker.js'), 'utf8') });
+    const homepage = page.locator('#ghrc-deep-research-tracker');
+    const composer = page.locator('#ghrc-deep-research-tracker-composer');
+    await homepage.waitFor();
+    await composer.waitFor();
+    assert.match(await homepage.innerText(), /13 left/);
+    assert.doesNotMatch(await homepage.innerText(), /reset/i);
+    assert.doesNotMatch(await homepage.getAttribute('aria-label'), /reset/i);
+    assert.match(await composer.innerText(), /resets \d+d/);
+    assert.doesNotMatch(await composer.innerText(), /13 left/);
+
+    await page.evaluate(() => window.changeResearchSetting('deepResearchHomepageVisibility', 'near-reset'));
+    await page.waitForFunction(() => !document.getElementById('ghrc-deep-research-tracker'));
+    await page.evaluate(() => window.changeResearchSetting('deepResearchHomepageWindowDays', 14));
+    await homepage.waitFor();
+    assert.match(await homepage.innerText(), /13 left/);
+    await page.evaluate(() => window.changeResearchSetting('showDeepResearchHomepageCount', false));
+    await page.waitForFunction(() => document.getElementById('ghrc-deep-research-tracker')?.getAttribute('aria-label') === 'Deep Research');
+    assert.equal(await homepage.innerText(), '');
+    await page.evaluate(() => window.changeResearchSetting('showDeepResearchHomepageReset', true));
+    await page.waitForFunction(() => document.getElementById('ghrc-deep-research-tracker')?.textContent.includes('resets'));
+    assert.doesNotMatch(await homepage.innerText(), /13 left/);
+    await page.evaluate(() => window.changeResearchSetting('showDeepResearchHomepage', false));
+    await page.waitForFunction(() => !document.getElementById('ghrc-deep-research-tracker'));
+    assert.equal(await composer.count(), 1);
+    await page.evaluate(() => window.changeResearchSetting('showDeepResearchComposer', false));
+    await page.waitForFunction(() => !document.getElementById('ghrc-deep-research-tracker-composer'));
+    await page.evaluate(() => window.changeResearchSetting('showDeepResearchHomepage', true));
+    await homepage.waitFor();
+    await page.evaluate(() => window.changeResearchSetting('showDeepResearchTracker', false));
+    await page.waitForFunction(() => !document.getElementById('ghrc-deep-research-tracker'));
+    assert.equal(await composer.count(), 0);
+    assert.deepEqual(errors, []);
+  } finally { await browser.close(); }
+});
