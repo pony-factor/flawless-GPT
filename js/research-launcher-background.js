@@ -10,8 +10,14 @@
   const RECOVERY_KEY = 'researchLaunchRecovery';
   const activeImports = new Set();
   let recoveryWrites = Promise.resolve();
+  const temporaryConversation = url => {
+    try {
+      const value = new URL(url);
+      return value.origin === 'https://chatgpt.com' && /^\/c\/local-chatgpt(?::|%3a)/i.test(value.pathname);
+    } catch { return false; }
+  };
   const conversation = url => {
-    try { const value = new URL(url); return value.origin === 'https://chatgpt.com' && value.pathname.startsWith('/c/') ? value.origin + value.pathname : null; }
+    try { const value = new URL(url); return value.origin === 'https://chatgpt.com' && value.pathname.startsWith('/c/') && !temporaryConversation(url) ? value.origin + value.pathname : null; }
     catch { return null; }
   };
   async function updateRecovery(tabId, job) {
@@ -26,8 +32,10 @@
     return result;
   }
   async function recover(tabId) {
-    const saved = (await chrome.storage.local.get(RECOVERY_KEY))[RECOVERY_KEY]?.[tabId];
+    let saved = (await chrome.storage.local.get(RECOVERY_KEY))[RECOVERY_KEY]?.[tabId];
     if (!saved) return null;
+    // Older versions pinned runs to ChatGPT's optimistic, temporary chat ID.
+    if (temporaryConversation(saved.conversationUrl)) saved = { ...saved, conversationUrl: undefined };
     let tab;
     try { tab = await chrome.tabs.get(tabId); }
     catch {
@@ -47,7 +55,7 @@
       // Send can navigate before its acknowledgement. Only this dedicated
       // popup may recover an unbound submission; never send the prompt again.
       if (!saved.conversationUrl && ['sending', 'submitted'].includes(saved.state)
-        && (url || frame.url === 'https://chatgpt.com/')) {
+        && (url || temporaryConversation(frame.url) || frame.url === 'https://chatgpt.com/')) {
         const recovered = { ...saved, conversationUrl: url };
         await updateRecovery(tabId, recovered);
         return recovered;
@@ -59,9 +67,10 @@
   async function get(tabId) {
     const existing = (await chrome.storage.session.get(key(tabId)))[key(tabId)];
     let job = existing || await recover(tabId);
+    if (temporaryConversation(job?.conversationUrl)) job = { ...job, conversationUrl: undefined };
     // A worker interrupted during publishing must retry the idempotent native import.
     if (job?.state === 'importing' && !activeImports.has(job.id)) job = { ...job, state: 'submitted' };
-    if (job && job !== existing) await chrome.storage.session.set({ [key(tabId)]: job });
+    if (job && job !== existing) await put(job);
     return job || null;
   }
   async function put(job) {

@@ -321,3 +321,37 @@ test('unbound recovery refuses a different window and updates refresh a sending 
   assert.equal((await a.send({ type: 'research-launch-job' }, sender)).job, null);
   assert.equal(a.local.researchLaunchRecovery[job.tabId], undefined);
 });
+
+test('temporary local-chatgpt routes bind to the permanent conversation after submission', async () => {
+  for (const temporary of ['local-chatgpt%3A8d71d401-59f0-4708-943a-b5b4c109b2f4', 'local-chatgpt:8d71d401-59f0-4708-943a-b5b4c109b2f4']) {
+    const a = app();
+    const { job } = await a.start();
+    const sender = a.host(job.tabId);
+    sender.url = sender.tab.url = a.tabs.get(job.tabId).url = 'https://chatgpt.com/c/' + temporary;
+    await a.send({ type: 'claim-research-launch', id: job.id }, sender);
+    await a.send({ type: 'research-launch-sending', id: job.id }, sender);
+    await a.send({ type: 'research-launch-submitted', id: job.id }, sender);
+    assert.equal((await a.send({ type: 'research-launch-job' }, sender)).job.state, 'submitted');
+    a.tabs.get(job.tabId).url = 'https://chatgpt.com/c/research';
+    assert.equal((await a.send({ type: 'research-launch-job' }, a.report(job.tabId))).job?.state, 'submitted');
+    assert.equal(a.local.researchLaunchRecovery[job.tabId].conversationUrl, 'https://chatgpt.com/c/research');
+    assert.equal((await a.send(publish(job), a.report(job.tabId))).ok, true);
+  }
+});
+
+test('legacy jobs pinned to temporary routes recover with and without session storage', async () => {
+  for (const clearSession of [false, true]) {
+    const a = app();
+    const job = await submitted(a);
+    const temporary = 'https://chatgpt.com/c/local-chatgpt%3A8d71d401-59f0-4708-943a-b5b4c109b2f4';
+    a.local.researchLaunchRecovery[job.tabId].conversationUrl = temporary;
+    a.session['researchLaunch:' + job.tabId].conversationUrl = temporary;
+    if (clearSession) delete a.session['researchLaunch:' + job.tabId];
+    a.restart();
+    assert.equal((await a.send({ type: 'research-launch-job' }, a.report(job.tabId))).job?.state, 'submitted');
+    assert.equal(a.local.researchLaunchRecovery[job.tabId].conversationUrl, 'https://chatgpt.com/c/research');
+    assert.equal((await a.send(publish(job), a.report(job.tabId))).ok, true);
+    a.tabs.get(job.tabId).url = 'https://chatgpt.com/c/unrelated';
+    assert.equal((await a.send({ type: 'research-launch-job' }, a.report(job.tabId))).job, null);
+  }
+});
