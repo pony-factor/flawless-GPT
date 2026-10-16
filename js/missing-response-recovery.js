@@ -91,24 +91,72 @@
     return response.ok ? response.json() : null;
   }
 
+  // Recovered content is stored Markdown, not already-rendered chat HTML.
+  // Parse it with the bundled converter and sanitize it before insertion.
+  const markdownConverter = typeof showdown !== "undefined"
+    ? new showdown.Converter({
+      tables: true, strikethrough: true, tasklists: true, ghCodeBlocks: true,
+      openLinksInNewWindow: false,
+    }) : null;
+  function renderMarkdown(answer, text) {
+    if (!markdownConverter || typeof DOMPurify === "undefined" || typeof DOMPurify.sanitize !== "function") {
+      // Remain safe and readable if one of the bundled libraries fails to load.
+      answer.textContent = text;
+      answer.style.whiteSpace = "pre-wrap";
+      return;
+    }
+    const fragment = DOMPurify.sanitize(markdownConverter.makeHtml(text), {
+      RETURN_DOM_FRAGMENT: true,
+      ALLOWED_TAGS: [
+        "h1", "h2", "h3", "h4", "h5", "h6", "p", "br", "hr",
+        "strong", "b", "em", "i", "del", "s", "sup", "sub", "span",
+        "ul", "ol", "li", "blockquote", "pre", "code",
+        "table", "thead", "tbody", "tr", "th", "td",
+        "a", "img", "input",
+      ],
+      ALLOWED_ATTR: ["href", "title", "src", "alt", "class", "type", "checked", "disabled", "start", "align"],
+    });
+    for (const input of fragment.querySelectorAll("input")) {
+      // GFM task list markers must remain inert, not interactive form fields.
+      if (input.getAttribute("type") !== "checkbox") { input.remove(); continue; }
+      input.disabled = true;
+      input.tabIndex = -1;
+      input.setAttribute("aria-hidden", "true");
+    }
+    for (const link of fragment.querySelectorAll("a[href]")) {
+      const href = link.getAttribute("href") || "";
+      // Only safe web links, email links and local document anchors.
+      if (!/^(?:https?:\/\/|mailto:|#|\/(?!\/))/i.test(href)) link.removeAttribute("href");
+      else link.rel = "noopener noreferrer";
+    }
+    for (const image of fragment.querySelectorAll("img")) {
+      // Disallow data/blob/relative image URLs and avoid leaking referrers.
+      if (!/^https?:\/\//i.test(image.getAttribute("src") || "")) { image.remove(); continue; }
+      image.loading = "lazy";
+      image.referrerPolicy = "no-referrer";
+    }
+    answer.replaceChildren(fragment);
+    answer.style.whiteSpace = "";
+  }
+
   function renderAnswer(element, message) {
     const text = message.content.parts.filter(part => typeof part === "string").join("\n\n");
     let answer = element.querySelector("[data-ghrc-recovered-answer]");
-    if (answer?.dataset.messageId === message.id && answer.textContent === text) return;
+    if (answer?.dataset.messageId === message.id && answer.__ghrcSourceMarkdown === text) return;
     const scroll = scroller();
     const previousTop = scroll?.scrollTop;
     if (!answer) {
       answer = document.createElement("div");
       answer.dataset.ghrcRecoveredAnswer = "";
+      answer.className = "markdown prose dark:prose-invert w-full break-words";
       answer.setAttribute("data-message-author-role", "assistant");
       answer.setAttribute("aria-label", "Recovered ChatGPT response");
-      // Render saved text as text, never HTML: answers may contain arbitrary
-      // code or markup. Keep paragraphs and code indentation readable.
-      answer.style.cssText = "white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.6;margin-block:1rem;user-select:text";
       element.append(answer);
     }
     answer.dataset.messageId = message.id;
-    answer.textContent = text;
+    renderMarkdown(answer, text);
+    // textContent no longer equals the Markdown source after formatting.
+    answer.__ghrcSourceMarkdown = text;
     if (scroll) scroll.scrollTop = previousTop;
   }
 
