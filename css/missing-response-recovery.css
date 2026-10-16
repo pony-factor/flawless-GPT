@@ -1,0 +1,20 @@
+/* Fallback typography for saved answers recovered outside ChatGPT's React Markdown tree. */
+[data-ghrc-recovered-answer] { line-height: 1.65; margin-block: 1rem; overflow-wrap: anywhere; user-select: text; }
+[data-ghrc-recovered-answer] :is(h1,h2,h3,h4,h5,h6) { font-weight: 650; line-height: 1.3; margin-block: 1.2em .5em; }
+[data-ghrc-recovered-answer] h1 { font-size: 1.75em; }
+[data-ghrc-recovered-answer] h2 { font-size: 1.45em; }
+[data-ghrc-recovered-answer] h3 { font-size: 1.2em; }
+[data-ghrc-recovered-answer] :is(p,ul,ol,blockquote,pre,table) { margin-block: .65em; }
+[data-ghrc-recovered-answer] ul { list-style: disc; padding-inline-start: 1.6em; }
+[data-ghrc-recovered-answer] ol { list-style: decimal; padding-inline-start: 1.6em; }
+[data-ghrc-recovered-answer] li { margin-block: .25em; }
+[data-ghrc-recovered-answer] blockquote { border-inline-start: 3px solid currentColor; padding-inline-start: 1em; opacity: .85; }
+[data-ghrc-recovered-answer] a { text-decoration: underline; text-underline-offset: 2px; }
+[data-ghrc-recovered-answer] :is(pre,code) { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+[data-ghrc-recovered-answer] pre { overflow-x: auto; white-space: pre; padding: .8em 1em; border-radius: .5em; background: color-mix(in srgb, currentColor 6%, transparent); }
+[data-ghrc-recovered-answer] :not(pre) > code { padding: .1em .25em; border-radius: .25em; background: color-mix(in srgb, currentColor 6%, transparent); }
+[data-ghrc-recovered-answer] table { display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; }
+[data-ghrc-recovered-answer] :is(th,td) { border: 1px solid color-mix(in srgb, currentColor 25%, transparent); padding: .35em .65em; }
+[data-ghrc-recovered-answer] th { font-weight: 650; }
+[data-ghrc-recovered-answer] img { max-width: 100%; height: auto; }
+[data-ghrc-recovered-answer] input[type="checkbox"] { margin-inline-end: .5em; }

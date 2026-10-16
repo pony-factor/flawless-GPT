@@ -3,7 +3,11 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const { chromium } = require('playwright');
-const source = fs.readFileSync(path.join(__dirname, '../js/missing-response-recovery.js'), 'utf8');
+const source = [
+  'vendor/showdown.min.js',
+  'vendor/purify.min.js',
+  'js/missing-response-recovery.js',
+].map(file => fs.readFileSync(path.join(__dirname, '..', file), 'utf8')).join('\n;\n');
 let browser;
 before(async () => {
   browser = await chromium.launch({ executablePath: '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser', headless: true });
@@ -171,7 +175,8 @@ test('restores full saved text safely when only the mapping node has an ID', asy
   const text = '# Heading\n\n<script>throw new Error("unsafe")</script>\n\n    indented code';
   const f = await fixture({ savedText: text, noMessageId: true, active: true, queued: true, draft: 'Keep this' });
   await settle(f.p);
-  assert.equal(await f.p.locator('[data-ghrc-recovered-answer]').textContent(), text);
+  assert.equal(await f.p.locator('[data-ghrc-recovered-answer] h1').textContent(), 'Heading');
+  assert.equal(await f.p.locator('[data-ghrc-recovered-answer] pre code').textContent(), 'indented code\n');
   assert.equal(await f.p.locator('[data-ghrc-recovered-answer] script').count(), 0);
   await f.p.clock.runFor(60_000);
   assert.equal(f.reads(), 1);
@@ -187,5 +192,45 @@ test('navigation during a saved-answer read cancels insertion', async () => {
   f.release();
   await f.p.waitForTimeout(150);
   assert.equal(await f.p.locator('[data-ghrc-recovered-answer]').count(), 0);
+  await f.p.close();
+});
+
+test('renders headings, links, lists, tables, checkboxes and fenced code as safe Markdown', async () => {
+  const text = [
+    '## Formatted reply',
+    '',
+    '**Bold**, *italic*, ~~removed~~, and [source](https://example.com/filing).',
+    '',
+    '- First item',
+    '- [x] Completed item',
+    '',
+    '| Item | Value |',
+    '| --- | --- |',
+    '| Shares | 10 |',
+    '',
+    '~~~js',
+    '<script>window.__ghrcUnsafe = true</script>',
+    '~~~',
+    '',
+    '[unsafe](javascript:alert(1))',
+    '<img src="x" onerror="window.__ghrcUnsafe = true">',
+  ].join('\n');
+  const f = await fixture({ savedText: text });
+  await settle(f.p);
+  const root = f.p.locator('[data-ghrc-recovered-answer]');
+  assert.equal(await root.locator('h2').textContent(), 'Formatted reply');
+  assert.equal(await root.locator('strong').textContent(), 'Bold');
+  assert.equal(await root.locator('em').textContent(), 'italic');
+  assert.equal(await root.locator('del').textContent(), 'removed');
+  assert.equal(await root.locator('a[href="https://example.com/filing"]').textContent(), 'source');
+  assert.equal(await root.locator('li').count(), 2);
+  assert.equal(await root.locator('input[type="checkbox"]:disabled:checked').count(), 1);
+  assert.equal(await root.locator('table tbody tr td').first().textContent(), 'Shares');
+  assert.match(await root.locator('pre code').textContent(), /<script>window\.__ghrcUnsafe = true<\/script>/);
+  assert.equal(await root.locator('a').last().getAttribute('href'), null);
+  assert.equal(await root.locator('img').count(), 0);
+  assert.equal(await root.locator('script').count(), 0);
+  assert.equal(await f.p.evaluate(() => window.__ghrcUnsafe), undefined);
+  assert.deepEqual(f.errors, []);
   await f.p.close();
 });
