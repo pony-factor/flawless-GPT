@@ -16,8 +16,9 @@
 
 #github-repositories-for-chatgpt .ghrc-owner-header {
   display: grid;
-  grid-template-columns: 32px minmax(0, 1fr) 32px;
+  grid-template-columns: 32px minmax(0, max-content);
   column-gap: 9px;
+  justify-content: center;
 }
 
 #github-repositories-for-chatgpt .ghrc-owner-header > div {
