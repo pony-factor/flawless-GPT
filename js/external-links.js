@@ -108,6 +108,15 @@
     }
   }
 
+  function stripTrackingFromUrl(url) {
+    if (!stripUtmTrackingEnabled || !["http:", "https:"].includes(url.protocol)) return url;
+
+    for (const name of [...url.searchParams.keys()]) {
+      if (name.toLowerCase().startsWith("utm_")) url.searchParams.delete(name);
+    }
+    return url;
+  }
+
   function stripTrackingFromLink(link) {
     if (!stripUtmTrackingEnabled || !(link instanceof HTMLAnchorElement)) return;
 
@@ -117,14 +126,8 @@
     } catch {
       return;
     }
-    if (!["http:", "https:"].includes(url.protocol)) return;
-
-    const trackingParameters = [...url.searchParams.keys()]
-      .filter((name) => name.toLowerCase().startsWith("utm_"));
-    if (!trackingParameters.length) return;
-
-    trackingParameters.forEach((name) => url.searchParams.delete(name));
-    link.href = url.href;
+    const cleanHref = stripTrackingFromUrl(url).href;
+    if (cleanHref !== link.href) link.href = cleanHref;
   }
 
   function stripTrackingFromLinks(node) {
@@ -609,6 +612,7 @@
   }
 
   async function openNativeSplitView(href, link, nativeGuide = true) {
+    href = stripTrackingFromUrl(new URL(href)).href;
     closeLinkPreview(false);
     const request = ++nativeSplitRequest;
     try {
@@ -661,7 +665,7 @@
   function updateLinkActions(link, url, actions = linkActions.get(link)) {
     const sidebar = actions?.querySelector(".ghrc-link-sidebar-button");
     if (!sidebar) return;
-    sidebar.dataset.href = url.href;
+    sidebar.dataset.href = stripTrackingFromUrl(url).href;
   }
 
   function removeLinkActions(link, actions) {
@@ -949,6 +953,7 @@
       if (stripUtmTrackingEnabled && document.documentElement) {
         stripTrackingFromLinks(document.documentElement);
       }
+      refreshLinkActions();
     }
   });
 
