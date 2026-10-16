@@ -155,8 +155,8 @@ test("opt-in dots render one per minute and switch live", async () => {
   f.update("Worked for 1h 3m 12s");
   const dots = f.element.getAttribute("data-ghrc-worked-dots");
   assert.equal(dots.split("•").length - 1, 63);
-  assert.equal(dots.split("\n").length, 6);
-  assert.equal(dots.split("\n")[0].split("•").length - 1, 12);
+  assert.equal(dots, Array(63).fill("•").join(" "));
+  assert.equal(dots.includes("\n"), false);
 
   f.toggleDots(false);
   assert.equal(f.element.hasAttribute("data-ghrc-worked-dots-mode"), false);
@@ -186,4 +186,11 @@ test("dot display is an opt-in preference exposed in both settings pages", () =>
   assert.match(js, /workedDurationDots: workedDurationDotsInput\.checked/);
   assert.match(style, /content:\s*attr\(data-ghrc-worked-dots\)/);
   assert.match(style, /\[data-ghrc-worked-duration\]\[data-ghrc-worked-dots-mode\]::after/);
+});
+
+test("cannonballs flow across the chat width instead of breaking at twelve", () => {
+  assert.match(style, /max-width:\s*100%/);
+  assert.match(style, /min-width:\s*0/);
+  assert.match(style, /white-space:\s*normal/);
+  assert.doesNotMatch(source, /start \+= 12/);
 });
