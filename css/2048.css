@@ -197,74 +197,142 @@
   user-select: none;
 }
 
+/* Windsor Flight's original 23-color sampled palette: empty tile plus 2–4194304. */
 .ghrc-2048-tile-empty {
-  background: #303844;
-}
+  background: #C9CBCF;
+  }
 
 .ghrc-2048-tile-2 {
-  background: #34404a;
-  color: #e6edf3;
-}
+  background: #F6E0EA;
+  color: #453940;
+  }
 
 .ghrc-2048-tile-4 {
-  background: #3f4b55;
-  color: #f0f6fc;
-}
+  background: #7F7BD7;
+  color: #FFFFFF;
+  }
 
 .ghrc-2048-tile-8 {
-  background: #8f5a30;
-  color: #f9f6f2;
-}
+  background: #F4A081;
+  color: #453940;
+  }
 
 .ghrc-2048-tile-16 {
-  background: #99502f;
-  color: #f9f6f2;
-}
+  background: #DC72C4;
+  color: #453940;
+  }
 
 .ghrc-2048-tile-32 {
-  background: #9d4237;
-  color: #f9f6f2;
-}
+  background: #F8E96F;
+  color: #453940;
+  }
 
 .ghrc-2048-tile-64 {
-  background: #9f3327;
-  color: #f9f6f2;
-}
+  background: #9F5EC1;
+  color: #FFFFFF;
+  }
 
 .ghrc-2048-tile-128 {
-  background: #8f7429;
-  color: #f9f6f2;
-  font-size: clamp(14px, 7cqw, 42px);
-}
+  background: #A3EAD7;
+  color: #453940;
+  }
 
 .ghrc-2048-tile-256 {
-  background: #92731f;
-  color: #f9f6f2;
-  font-size: clamp(14px, 7cqw, 42px);
-}
+  background: #D969C1;
+  color: #453940;
+  }
 
 .ghrc-2048-tile-512 {
-  background: #956d16;
-  color: #f9f6f2;
+  background: #7599E4;
+  color: #453940;
+  }
+
+.ghrc-2048-tile-1024 {
+  background: #F9BD6D;
+  color: #453940;
+  }
+
+.ghrc-2048-tile-2048 {
+  background: #C188E7;
+  color: #453940;
+  }
+
+.ghrc-2048-tile-4096 {
+  background: #6F6BCB;
+  color: #FFFFFF;
+  }
+
+.ghrc-2048-tile-8192 {
+  background: #E0886D;
+  color: #453940;
+  }
+
+.ghrc-2048-tile-16384 {
+  background: #F4C3EC;
+  color: #453940;
+  }
+
+.ghrc-2048-tile-32768 {
+  background: #F2AE67;
+  color: #453940;
+  }
+
+.ghrc-2048-tile-65536 {
+  background: #9F737C;
+  color: #FFFFFF;
+  }
+
+.ghrc-2048-tile-131072 {
+  background: #D0D4D7;
+  color: #453940;
+  }
+
+.ghrc-2048-tile-262144 {
+  background: #BFC3C6;
+  color: #453940;
+  }
+
+.ghrc-2048-tile-524288 {
+  background: #EC729A;
+  color: #453940;
+  }
+
+.ghrc-2048-tile-1048576 {
+  background: #64625F;
+  color: #FFFFFF;
+  }
+
+.ghrc-2048-tile-2097152 {
+  background: #453940;
+  color: #FFFFFF;
+  }
+
+.ghrc-2048-tile-4194304 {
+  background: #FFFFFF;
+  color: #453940;
+  }
+
+/* Keep number sizes legible as tiles grow beyond 2048. */
+.ghrc-2048-tile-medium {
   font-size: clamp(14px, 7cqw, 42px);
 }
 
-.ghrc-2048-tile-1024 {
-  background: #96640f;
-  color: #f9f6f2;
+.ghrc-2048-tile-small {
   font-size: clamp(12px, 6cqw, 36px);
 }
 
-.ghrc-2048-tile-2048 {
-  background: #985b08;
-  color: #f9f6f2;
-  font-size: clamp(12px, 6cqw, 36px);
+.ghrc-2048-tile-tiny {
+  font-size: clamp(10px, 4.7cqw, 28px);
+}
+
+.ghrc-2048-tile-micro {
+  font-size: clamp(8px, 3.4cqw, 20px);
 }
 
 .ghrc-2048-tile-super {
-  background: #2b3139;
-  color: #f9f6f2;
-  font-size: clamp(10px, 5cqw, 30px);
+  background: #453940;
+  color: #FFFFFF;
+  font-size: clamp(8px, 3.4cqw, 20px);
 }
 
 .ghrc-2048-status {
