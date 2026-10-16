@@ -1,10 +1,9 @@
 (() => {
   "use strict";
 
-  const SETTLE_MS = 8_000;
-  const STORAGE_PREFIX = "ghrc-missing-response-recovery:";
+  const POLL_MS = 2_000;
+  const REFRESH_MS = 15_000;
   const TURN_SELECTOR = "[data-turn-key]";
-  const COMPOSER_SELECTOR = '#prompt-textarea, [data-composer-markdown][contenteditable="true"]';
 
   function missingAnswer(entry) {
     const turn = entry?.turn;
@@ -65,32 +64,15 @@
     return;
   }
 
-  if (window.__ghrcMissingResponseRecovery) return;
-  window.__ghrcMissingResponseRecovery = true;
+  if (window.__ghrcMissingResponseRecoveryV2) return;
+  window.__ghrcMissingResponseRecoveryV2 = true;
   let pending = false;
-  let lastInput = Date.now();
-  let candidate = "";
-  let candidateSince = 0;
   let retryAfter = 0;
-  let composing = false;
-  const attempts = new Map();
+  let savedConversation = null;
+  let savedId = "";
 
   const conversationId = () => location.pathname.match(/^\/c\/([a-zA-Z0-9-]+)$/)?.[1] || "";
   const scroller = () => document.querySelector("[data-app-action-timeline-scroll]");
-
-  function idle() {
-    if (composing || document.visibilityState !== "visible" || Date.now() - lastInput < SETTLE_MS) return false;
-    const composer = [...document.querySelectorAll(COMPOSER_SELECTOR)]
-      .find(element => element.getClientRects().length);
-    if (!composer || (composer.value ?? composer.textContent ?? "").trim()) return false;
-    if (document.getElementById("ghrc-message-queue")) return false;
-    const form = composer.closest('form, [data-type="unified-composer"]');
-    if (!form || [...document.querySelectorAll('input[type="file"]')].some(input => input.files?.length)) return false;
-    if (form.querySelector('[data-composer-attachments]:not(:empty), [data-composer-quote], [data-testid="composer-reply-preview"], button[aria-label*="Remove" i], [aria-busy="true"]')) return false;
-    if (document.querySelector('button[data-testid="stop-button"], button[aria-label="Stop" i], button[aria-label*="Stop generating" i], button[aria-label*="Stop response" i]')) return false;
-    const turns = [...document.querySelectorAll(TURN_SELECTOR)];
-    return turns.length > 0 && turns.every(element => entryFor(element)?.turn.status === "complete");
-  }
 
   async function loadSavedConversation(id) {
     // Keep authentication inside the page, as with personalization reads.
@@ -109,85 +91,77 @@
     return response.ok ? response.json() : null;
   }
 
-  function viewport() {
+  function renderAnswer(element, message) {
+    const text = message.content.parts.filter(part => typeof part === "string").join("\n\n");
+    let answer = element.querySelector("[data-ghrc-recovered-answer]");
+    if (answer?.dataset.messageId === message.id && answer.textContent === text) return;
     const scroll = scroller();
-    if (!scroll) return null;
-    const top = scroll.getBoundingClientRect().top;
-    const anchor = [...scroll.querySelectorAll(TURN_SELECTOR)]
-      .find(element => element.getBoundingClientRect().bottom > top);
-    return {
-      top: scroll.scrollTop,
-      turn: anchor?.getAttribute("data-turn-key"),
-      offset: anchor ? anchor.getBoundingClientRect().top - top : 0,
-    };
+    const previousTop = scroll?.scrollTop;
+    if (!answer) {
+      answer = document.createElement("div");
+      answer.dataset.ghrcRecoveredAnswer = "";
+      answer.setAttribute("data-message-author-role", "assistant");
+      answer.setAttribute("aria-label", "Recovered ChatGPT response");
+      // Render saved text as text, never HTML: answers may contain arbitrary
+      // code or markup. Keep paragraphs and code indentation readable.
+      answer.style.cssText = "white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.6;margin-block:1rem;user-select:text";
+      element.append(answer);
+    }
+    answer.dataset.messageId = message.id;
+    answer.textContent = text;
+    if (scroll) scroll.scrollTop = previousTop;
+  }
+
+  function repair(elements, saved) {
+    for (const element of elements) {
+      if (!element.isConnected || !missingAnswer(entryFor(element))) continue;
+      const answerId = answerForTurn(saved, element.getAttribute("data-turn-key"));
+      const message = answerId && Object.values(saved.mapping)
+        .find(node => (node.message?.id || node.id) === answerId)?.message;
+      if (message) renderAnswer(element, { ...message, id: answerId });
+    }
   }
 
   async function check() {
     const id = conversationId();
-    if (!id || pending || Date.now() < retryAfter || !idle()) return;
-    try {
-      // One refresh per conversation per tab session, including failed repairs.
-      if (sessionStorage.getItem(STORAGE_PREFIX + id)) return;
-      const elements = [...document.querySelectorAll(TURN_SELECTOR)]
-        .filter(element => missingAnswer(entryFor(element)));
-      const userId = elements[0]?.getAttribute("data-turn-key") || "";
-      if (!userId) { candidate = ""; return; }
-      const signature = `${id}:${userId}`;
-      if ((attempts.get(signature) || 0) >= 3) return;
-      if (candidate !== signature) {
-        candidate = signature;
-        candidateSince = Date.now();
-        return;
-      }
-      if (Date.now() - candidateSince < SETTLE_MS) return;
-      pending = true;
-      attempts.set(signature, (attempts.get(signature) || 0) + 1);
-      retryAfter = Date.now() + 60_000;
-      const saved = await loadSavedConversation(id);
-      // An earlier turn may never have saved a final answer. It must not block
-      // recovery of a later turn whose final answer is available.
-      const element = elements.find(element => answerForTurn(saved, element.getAttribute("data-turn-key")));
-      // Recheck after both network reads: a route change, draft, new response,
-      // or late native answer must cancel recovery rather than interrupt it.
-      if (!element || conversationId() !== id || !idle() || !element.isConnected
-          || !missingAnswer(entryFor(element))) return;
-      sessionStorage.setItem(STORAGE_PREFIX + id, JSON.stringify({ viewport: viewport(), restore: true }));
-      location.reload();
-    } catch { /* Storage, authentication and network failures leave the chat alone. */ }
-    finally { pending = false; }
-  }
-
-  function restoreViewport() {
-    const id = conversationId();
     if (!id) return;
+    const turns = [...document.querySelectorAll(TURN_SELECTOR)];
+    // Once the native renderer catches up, its answer takes over.
+    for (const element of turns) {
+      if (!missingAnswer(entryFor(element))) element.querySelector("[data-ghrc-recovered-answer]")?.remove();
+    }
+    const elements = turns.filter(element => missingAnswer(entryFor(element)));
+    if (!elements.length) return;
+    if (savedId !== id) {
+      savedId = id;
+      savedConversation = null;
+      retryAfter = 0;
+    }
+    if (savedConversation) {
+      repair(elements, savedConversation);
+      if (elements.every(element => answerForTurn(savedConversation, element.getAttribute("data-turn-key")))) return;
+    }
+    if (pending || Date.now() < retryAfter) return;
+    pending = true;
+    retryAfter = Date.now() + REFRESH_MS;
     try {
-      const key = STORAGE_PREFIX + id;
-      const record = JSON.parse(sessionStorage.getItem(key) || "null");
-      if (!record?.restore || !record.viewport) return;
-      record.restore = false;
-      sessionStorage.setItem(key, JSON.stringify(record));
-      let attempts = 0;
-      const timer = setInterval(() => {
-        if (++attempts > 25 || conversationId() !== id) { clearInterval(timer); return; }
-        const scroll = scroller();
-        const anchor = [...document.querySelectorAll(TURN_SELECTOR)]
-          .find(element => element.getAttribute("data-turn-key") === record.viewport.turn);
-        if (!scroll || !anchor) return;
-        scroll.scrollTop += anchor.getBoundingClientRect().top - scroll.getBoundingClientRect().top - record.viewport.offset;
-        clearInterval(timer);
-      }, 200);
-    } catch { /* A lost viewport must never prevent loading the conversation. */ }
+      const saved = await loadSavedConversation(id);
+      if (conversationId() !== id) return;
+      if (!saved?.mapping) { retryAfter = Date.now() + 60_000; return; }
+      savedConversation = saved;
+      // Repair only the completed missing turns. Drafts, the queue, and the
+      // currently streaming turn are never changed or interrupted.
+      repair(elements, saved);
+    } catch {
+      retryAfter = Date.now() + 60_000;
+    } finally { pending = false; }
   }
 
-  // A small idle poll also notices React state changes with no DOM mutation.
-  document.addEventListener("input", () => { lastInput = Date.now(); }, true);
-  document.addEventListener("keydown", () => { lastInput = Date.now(); }, true);
-  document.addEventListener("pointerdown", () => { lastInput = Date.now(); }, true);
-  document.addEventListener("wheel", () => { lastInput = Date.now(); }, { capture: true, passive: true });
-  document.addEventListener("compositionstart", () => { composing = true; }, true);
-  document.addEventListener("compositionend", () => { composing = false; lastInput = Date.now(); }, true);
-  window.addEventListener("ghrc:route-change", () => { candidate = ""; });
-  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", restoreViewport, { once: true });
-  else restoreViewport();
-  setInterval(() => { void check(); }, 2_000);
+  window.addEventListener("ghrc:route-change", () => {
+    savedId = "";
+    savedConversation = null;
+    retryAfter = 0;
+  });
+  // No navigation or reload is needed; recover while other work continues.
+  setInterval(() => { void check(); }, POLL_MS);
 })();

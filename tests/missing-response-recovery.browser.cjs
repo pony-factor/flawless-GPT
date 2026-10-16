@@ -10,7 +10,7 @@ before(async () => {
 });
 after(async () => { await browser?.close(); });
 
-async function fixture({ draft = '', active = false, queued = false, fail = false, delayed = false, remainBroken = false, reasoningSteps = 0, earlierMissing = false } = {}) {
+async function fixture({ draft = '', active = false, queued = false, fail = false, delayed = false, remainBroken = false, reasoningSteps = 0, earlierMissing = false, savedText = 'Saved answer', noMessageId = false } = {}) {
   const p = await browser.newPage();
   let loads = 0;
   let reads = 0;
@@ -32,8 +32,8 @@ async function fixture({ draft = '', active = false, queued = false, fail = fals
         current_node: 'a', mapping: {
           earlier: { id: 'earlier', parent: null, message: { author: { role: 'user' } } },
           u: { id: 'u', parent: earlierMissing ? 'earlier' : null, message: { author: { role: 'user' } } },
-          a: { id: 'a', parent: 'u', message: { id: 'a', author: { role: 'assistant' }, channel: 'final',
-            status: 'finished_successfully', content: { content_type: 'text', parts: ['Saved answer'] } } },
+          a: { id: 'a', parent: 'u', message: { id: noMessageId ? undefined : 'a', author: { role: 'assistant' }, channel: 'final',
+            status: 'finished_successfully', content: { content_type: 'text', parts: [savedText] } } },
         },
       } });
     }
@@ -64,20 +64,20 @@ async function fixture({ draft = '', active = false, queued = false, fail = fals
 }
 
 async function settle(p) {
-  await p.clock.runFor(20_000);
+  await p.clock.runFor(2_000);
   // Allow mocked HTTP requests and any resulting navigation to finish.
   await p.waitForTimeout(150);
 }
 
-test('recovers a saved missing answer once and restores the viewport', async () => {
+test('restores a saved answer in place and preserves the viewport', async () => {
   const f = await fixture();
   await settle(f.p);
-  await f.p.waitForFunction(() => document.getElementById('answer')?.textContent === 'Saved answer');
+  await f.p.waitForFunction(() => document.querySelector('[data-ghrc-recovered-answer]')?.textContent === 'Saved answer');
   await f.p.clock.runFor(1_000);
-  assert.equal(f.loads(), 2);
+  assert.equal(f.loads(), 1);
   assert.equal(await f.p.locator('[data-app-action-timeline-scroll]').evaluate(e => e.scrollTop), 180);
   await settle(f.p);
-  assert.equal(f.loads(), 2);
+  assert.equal(f.loads(), 1);
   assert.deepEqual(f.errors, []);
   await f.p.close();
 });
@@ -85,25 +85,26 @@ test('recovers a saved missing answer once and restores the viewport', async () 
 test('recovers completed reasoning despite an earlier turn with no saved answer', async () => {
   const f = await fixture({ reasoningSteps: 4, earlierMissing: true });
   await settle(f.p);
-  await f.p.waitForFunction(() => document.getElementById('answer')?.textContent === 'Saved answer');
-  assert.equal(f.loads(), 2);
+  await f.p.waitForFunction(() => document.querySelector('[data-ghrc-recovered-answer]')?.textContent === 'Saved answer');
+  assert.equal(f.loads(), 1);
   assert.equal(f.reads(), 1);
   assert.deepEqual(f.errors, []);
   await f.p.close();
 });
 
-test('drafts, active responses and queued prompts prevent both reads and reloads', async () => {
+test('drafts, active responses and queued prompts allow recovery without reloading', async () => {
   for (const options of [{ draft: 'Keep my draft' }, { active: true }, { queued: true }]) {
     const f = await fixture(options);
     await settle(f.p);
-    assert.equal(f.reads(), 0);
+    assert.equal(f.reads(), 1);
+    assert.equal(await f.p.locator('[data-ghrc-recovered-answer]').textContent(), 'Saved answer');
     assert.equal(f.loads(), 1);
     assert.equal(await f.p.locator('textarea').inputValue(), options.draft || '');
     await f.p.close();
   }
 });
 
-test('a draft typed during the saved-answer request cancels recovery', async () => {
+test('a draft typed during the saved-answer request survives recovery', async () => {
   const f = await fixture({ delayed: true });
   await settle(f.p);
   assert.equal(f.reads(), 1);
@@ -112,6 +113,7 @@ test('a draft typed during the saved-answer request cancels recovery', async () 
   await f.p.waitForTimeout(150);
   assert.equal(f.loads(), 1);
   assert.equal(await f.p.locator('textarea').inputValue(), 'New draft');
+  assert.equal(await f.p.locator('[data-ghrc-recovered-answer]').textContent(), 'Saved answer');
   await f.p.close();
 });
 
@@ -125,13 +127,13 @@ test('rate limits do not reload or repeatedly fetch', async () => {
   await f.p.close();
 });
 
-test('a failed repair cannot become a reload loop', async () => {
+test('a removed recovery is restored without navigation or another request', async () => {
   const f = await fixture({ remainBroken: true });
   await settle(f.p);
-  await f.p.waitForFunction(() => sessionStorage.getItem('ghrc-missing-response-recovery:test'));
-  await settle(f.p);
-  assert.equal(f.loads(), 2);
-  assert.equal(f.reads(), 1);
+  await f.p.locator('[data-ghrc-recovered-answer]').evaluate(e => e.remove());
+  await f.p.clock.runFor(2_000);
+  assert.equal(await f.p.locator('[data-ghrc-recovered-answer]').textContent(), 'Saved answer');
+  assert.equal(f.loads(), 1);
   assert.deepEqual(f.errors, []);
   await f.p.close();
 });
@@ -149,5 +151,41 @@ test('a late native answer cancels recovery after the network read', async () =>
   await f.p.waitForTimeout(150);
   assert.equal(f.loads(), 1);
   assert.equal(await f.p.locator('#answer').textContent(), 'Native answer');
+  await f.p.close();
+});
+
+test('a native answer replaces recovered text without duplication', async () => {
+  const f = await fixture();
+  await settle(f.p);
+  await f.p.evaluate(() => {
+    document.querySelector('[data-turn-key]').__reactFiber$fixture.memoizedProps.entry.turn.items.push({type:'assistant-message'});
+    document.getElementById('answer').textContent = 'Native answer';
+  });
+  await f.p.clock.runFor(2_000);
+  assert.equal(await f.p.locator('[data-ghrc-recovered-answer]').count(), 0);
+  assert.equal(await f.p.locator('#answer').textContent(), 'Native answer');
+  await f.p.close();
+});
+
+test('restores full saved text safely when only the mapping node has an ID', async () => {
+  const text = '# Heading\n\n<script>throw new Error("unsafe")</script>\n\n    indented code';
+  const f = await fixture({ savedText: text, noMessageId: true, active: true, queued: true, draft: 'Keep this' });
+  await settle(f.p);
+  assert.equal(await f.p.locator('[data-ghrc-recovered-answer]').textContent(), text);
+  assert.equal(await f.p.locator('[data-ghrc-recovered-answer] script').count(), 0);
+  await f.p.clock.runFor(60_000);
+  assert.equal(f.reads(), 1);
+  assert.equal(f.loads(), 1);
+  assert.deepEqual(f.errors, []);
+  await f.p.close();
+});
+
+test('navigation during a saved-answer read cancels insertion', async () => {
+  const f = await fixture({ delayed: true });
+  await settle(f.p);
+  await f.p.evaluate(() => history.pushState({}, '', '/c/other'));
+  f.release();
+  await f.p.waitForTimeout(150);
+  assert.equal(await f.p.locator('[data-ghrc-recovered-answer]').count(), 0);
   await f.p.close();
 });
