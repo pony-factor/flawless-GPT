@@ -590,6 +590,67 @@ test('streaming mutations do not rescan the existing conversation container', as
   await page.close();
 });
 
+test('opening a tracked link beside chat preserves unrelated query parameters and fragments', async () => {
+  const page = await fixture({ openExternalLinksInSplitView: true }, null, true);
+  const action = page.locator('.ghrc-link-sidebar-button');
+  await action.waitFor();
+  await page.locator('#source').evaluate(link => {
+    link.href = 'https://example.org/source?utm_source=chatgpt.com&keep=1&UTM_Campaign=sidebar#section';
+  });
+  await page.waitForFunction(() => document.querySelector('.ghrc-link-sidebar-button')?.dataset.href
+    === 'https://example.org/source?keep=1#section');
+  // Even a cached unclean action URL must not bypass the navigation-time filter.
+  await action.evaluate(button => { button.dataset.href = 'https://example.org/source?utm_source=chatgpt.com&keep=1#section'; });
+  await action.click();
+  assert.equal((await page.evaluate(() => previewRequests)).at(-1).url, 'https://example.org/source?keep=1#section');
+  await page.close();
+});
+
+test('citation sidebar links strip UTM tags but preserve source metadata and setting changes', async () => {
+  const page = await fixture({ openExternalLinksInSplitView: true }, null, true);
+  const tracked = 'https://example.org/citation?utm_source=chatgpt.com&keep=1&utm_medium=sidebar#section';
+  const clean = 'https://example.org/citation?keep=1#section';
+  await page.evaluate(href => {
+    const chip = document.createElement('button');
+    chip.id = 'tracked-citation';
+    chip.setAttribute('data-d-component', 'popover-trigger');
+    chip.setAttribute('aria-haspopup', 'dialog');
+    chip.textContent = 'Citation';
+    chip.__reactFiber$fixture = { memoizedProps: { __dilHostElement: { props: {
+      children: [{ props: { onVisibleKey: href } }],
+    } } } };
+    document.querySelector('main').append(chip);
+  }, tracked);
+  const action = page.locator('#tracked-citation + .ghrc-inline-citation-actions button');
+  await action.waitFor();
+  assert.equal(await action.getAttribute('data-href'), clean);
+  assert.equal(await page.locator('#tracked-citation').getAttribute('data-ghrc-citation-url'), tracked);
+  await action.click();
+  assert.equal((await page.evaluate(() => previewRequests)).at(-1).url, clean);
+
+  await page.evaluate(() => settingsListeners.forEach(listener =>
+    listener({ stripUtmTracking: { newValue: false } }, 'local')));
+  assert.equal(await action.getAttribute('data-href'), tracked);
+  await action.click();
+  assert.equal((await page.evaluate(() => previewRequests)).at(-1).url, tracked);
+
+  await page.evaluate(() => settingsListeners.forEach(listener =>
+    listener({ stripUtmTracking: { newValue: true } }, 'local')));
+  assert.equal(await action.getAttribute('data-href'), clean);
+  await action.click();
+  assert.equal((await page.evaluate(() => previewRequests)).at(-1).url, clean);
+  await page.close();
+});
+
+test('fallback sidebar preview copies the cleaned destination', async () => {
+  const page = await fixture({ openExternalLinksInSplitView: true });
+  await page.locator('.ghrc-link-sidebar-button').click();
+  await page.frameLocator('#ghrc-link-preview iframe').frameLocator('iframe').locator('h1').waitFor();
+  await page.getByRole('button', { name: 'Copy link' }).click();
+  assert.deepEqual(await page.evaluate(() => copiedLinks), ['https://example.org/source?keep=1#section']);
+  await page.close();
+});
+
 test('batched mutation handling still sanitizes newly added links', async () => {
   const page = await fixture();
   await page.evaluate(() => {
