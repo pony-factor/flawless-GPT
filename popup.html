@@ -223,9 +223,43 @@
             <label class="preference">
               <input id="show-deep-research-tracker" type="checkbox" checked />
               <span>
-                <strong>Show Deep Research allowance</strong>
-                <small>Shows remaining reports and the reset countdown below repositories and above the composer when the Deep Research plugin is selected.</small>
+                <strong>Enable Deep Research allowance trackers</strong>
+                <small>Master switch for the homepage and active research composer trackers.</small>
               </span>
+            </label>
+            <h3>Homepage</h3>
+            <label class="preference">
+              <input id="show-deep-research-homepage" type="checkbox" checked />
+              <span><strong>Show tracker on homepage</strong><small>Place the tracker beneath your repositories.</small></span>
+            </label>
+            <label class="preference">
+              <input id="show-deep-research-homepage-count" type="checkbox" checked />
+              <span><strong>Show reports remaining</strong><small>Displays the allowance count, such as “13 left.”</small></span>
+            </label>
+            <label class="preference">
+              <input id="show-deep-research-homepage-reset" type="checkbox" checked />
+              <span><strong>Show reset countdown</strong><small>Displays time until reset, such as “resets 5d.” Disable this to show only reports remaining.</small></span>
+            </label>
+            <label for="deep-research-homepage-visibility">Homepage visibility</label>
+            <select id="deep-research-homepage-visibility">
+              <option value="near-reset">Only near allowance reset</option>
+              <option value="always">Always show on homepage</option>
+            </select>
+            <label for="deep-research-homepage-window-days">Show within this many days of reset</label>
+            <input id="deep-research-homepage-window-days" type="number" min="1" max="365" step="1" value="5" />
+            <p class="help">The five-day default matches the previous behavior. Choose “Always show” to keep the report count visible throughout the cycle.</p>
+            <h3>Research composer</h3>
+            <label class="preference">
+              <input id="show-deep-research-composer" type="checkbox" checked />
+              <span><strong>Show tracker in research composer</strong><small>Only appears while Deep Research is selected.</small></span>
+            </label>
+            <label class="preference">
+              <input id="show-deep-research-composer-count" type="checkbox" checked />
+              <span><strong>Show reports remaining</strong></span>
+            </label>
+            <label class="preference">
+              <input id="show-deep-research-composer-reset" type="checkbox" checked />
+              <span><strong>Show reset countdown</strong></span>
             </label>
             <label class="preference">
               <input id="research-publisher-enabled" type="checkbox" />

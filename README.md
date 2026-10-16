@@ -124,6 +124,25 @@ Chat history entries show compact creation ages (such as `2d`, `2mo`, or `2y`).
 Conversations less than a day old show a small 🆕 icon rather than `0d`.
 Hovering the age or icon still reveals the absolute creation date.
 
+### Deep Research allowance tracker
+
+Under **Research** in either the compact extension menu or Full settings, customize
+Deep Research allowance tracking separately for the homepage and the active research
+composer. The master **Enable Deep Research allowance trackers** switch continues
+to disable both locations when turned off.
+
+The homepage has independent settings for its tracker, **Show reports remaining**,
+and **Show reset countdown**. By default the homepage tracker appears only within
+**5 days** of the next reset, as before. Change **Homepage visibility** to
+**Always show on homepage** to see the report count throughout the cycle, or
+adjust the reset window from 1 to 365 days. To show only the report count,
+enable homepage tracking and reports remaining, then disable **Show reset
+countdown**. The composer has independent visibility, count, and countdown
+settings. Changes save automatically and update existing ChatGPT tabs.
+
+Counts come from ChatGPT's native Deep Research allowance; stale observations
+are labeled as last checked rather than being presented as fresh balances.
+
 ### Chat bar colors
 
 Under **ChatGPT → Chat bar colors**, choose independent opt-in colors for the composer background, border, focus ring, typed text, caret, placeholder, selection, toolbar, send/stop buttons, and attachments. Unchecked swatches use ChatGPT's own theme, including dark-mode changes. Colors are stored locally under `composerColors`, update live in open chats, and can all be reset with **Restore ChatGPT colors**.
