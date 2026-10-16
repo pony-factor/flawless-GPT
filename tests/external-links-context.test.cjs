@@ -20,7 +20,10 @@ function fixture(failure) {
     removed: () => { removed = true; },
     chrome: {
       storage: { local: { set: value => apiCall(writes, value) } },
-      runtime: { sendMessage: value => apiCall(messages, value) },
+      runtime: {
+        getURL: file => `chrome-extension://test/${file}`,
+        sendMessage: value => apiCall(messages, value),
+      },
     },
     document: {
       documentElement: { removeAttribute() {} },

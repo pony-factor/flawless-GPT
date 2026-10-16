@@ -357,6 +357,19 @@ test('embedded citation buttons open the actual source beside chat without invok
   await page.close();
 });
 
+test('sidebar fallback still loads after extension APIs are invalidated by a reload', async () => {
+  const page = await fixture({ openExternalLinksInSplitView: true });
+  await page.locator('.ghrc-link-sidebar-button').waitFor();
+  await page.evaluate(() => {
+    chrome.runtime.getURL = () => { throw new Error('Extension context invalidated.'); };
+    chrome.runtime.sendMessage = () => { throw new Error('Extension context invalidated.'); };
+  });
+  await page.locator('.ghrc-link-sidebar-button').click();
+  await page.frameLocator('#ghrc-link-preview iframe').frameLocator('iframe').locator('h1').waitFor();
+  assert.equal(await page.frameLocator('#ghrc-link-preview iframe').frameLocator('iframe').locator('h1').textContent(), 'Source content');
+  await page.close();
+});
+
 test('preview waits for its navigation watch without mounting a same-origin blank frame', async () => {
   const page = await fixture({ openExternalLinksInSplitView: true });
   const warnings = [];

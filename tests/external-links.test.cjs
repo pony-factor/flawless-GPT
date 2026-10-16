@@ -23,6 +23,10 @@ function fixture({ enabled = true, newTabs = false } = {}) {
   const navigations = [];
   const openedTabs = [];
   const context = {
+    chrome: { runtime: {
+      getURL: file => `chrome-extension://test/${file}`,
+      onMessage: { addListener() {} },
+    } },
     Element,
     HTMLAnchorElement,
     URL,
@@ -120,6 +124,7 @@ function historyModalFixture() {
     removeAttribute() {},
   };
   const context = {
+    chrome: { runtime: { getURL: file => `chrome-extension://test/${file}` } },
     document: {
       documentElement: pageElement,
       body: pageElement,

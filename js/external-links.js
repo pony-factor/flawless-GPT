@@ -20,6 +20,9 @@
   let previewLink = null;
   let nativeSplitRequest = 0;
   let previewWatch = null;
+  // Open tabs retain their content scripts after an extension reload. Resolve
+  // this stable URL now, while getURL still has a valid extension context.
+  const previewHostURL = chrome.runtime.getURL("link-preview.html");
   let previewWidthPx = null;
   let githubPreviewGeneration = 0;
   const linkActions = new WeakMap();
@@ -400,7 +403,9 @@
       frame.referrerPolicy = "no-referrer";
       const watch = { id: `${Date.now()}:${nativeSplitRequest}`, href, link, panel };
       previewWatch = watch;
-      void (async () => {
+      // Mount the panel before checking isConnected, including when the API
+      // throws synchronously after an extension reload.
+      void Promise.resolve().then(async () => {
         try {
           await chrome.runtime.sendMessage({ type: "watch-link-preview", url: href, previewId: watch.id });
         } catch {
@@ -410,13 +415,17 @@
           // Host the remote frame in an extension page so ChatGPT's
           // frame-src policy does not reject ordinary sites and PDF viewers.
           try {
-            frame.src = `${chrome.runtime.getURL("link-preview.html")}#${encodeURIComponent(href)}`;
+            frame.src = `${previewHostURL}#${encodeURIComponent(href)}`;
             panel.append(frame);
           } catch {
-            // The extension may have reloaded while the navigation watch settled.
+            const content = document.createElement("div");
+            content.className = "ghrc-preview-content";
+            content.setAttribute("role", "status");
+            content.textContent = "Reload this chat to restore website previews.";
+            panel.append(content);
           }
         }
-      })();
+      });
       frame.addEventListener("error", () => {
         if (previewWatch === watch) handleBlockedPreview();
       });
