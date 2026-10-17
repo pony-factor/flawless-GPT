@@ -17,15 +17,16 @@ before(async () => {
 });
 after(async () => { await browser?.close(); });
 
-async function fixture({ input = true, multiple = true } = {}) {
+async function fixture({ input = true, multiple = true, acknowledge = true } = {}) {
   const page = await browser.newPage();
   await page.setContent(
     '<form id="composer"><textarea id="prompt-textarea">Existing draft</textarea>' +
     (input ? '<input type="file" aria-label="Attach files" ' + (multiple ? "multiple" : "") + '>' : "") +
     '</form><p id="browser-default"></p>'
   );
-  await page.evaluate(() => {
+  await page.evaluate(({ acknowledge }) => {
     window.uploaded = [];
+    window.nativeDropEvents = [];
     window.__ghrcExtensionContext = {
       active: () => true,
       onStop: cleanup => { window.stopFileDrop = cleanup; },
@@ -33,11 +34,25 @@ async function fixture({ input = true, multiple = true } = {}) {
     };
     document.querySelector('input[type="file"]')?.addEventListener("change", event => {
       window.uploaded.push(...[...event.target.files].map(file => file.name));
+      if (!acknowledge) return;
+      const surface = document.querySelector("[data-composer-attachments]")
+        || document.getElementById("composer").appendChild(document.createElement("div"));
+      surface.setAttribute("data-composer-attachments", "");
+      for (const file of event.target.files) {
+        const button = document.createElement("button");
+        button.setAttribute("aria-label", "Remove file");
+        button.textContent = file.name;
+        surface.append(button);
+      }
     });
     document.getElementById("prompt-textarea").addEventListener("drop", event => {
-      if (!event.defaultPrevented) document.getElementById("browser-default").textContent = "link inserted";
+      window.nativeDropEvents.push(event.defaultPrevented);
+      // Model browser default behavior after propagation, not inside the target handler.
+      queueMicrotask(() => {
+        if (!event.defaultPrevented) document.getElementById("browser-default").textContent = "link inserted";
+      });
     });
-  });
+  }, { acknowledge });
   await page.addStyleTag({ content: style });
   await page.addScriptTag({ content: source });
   return page;
@@ -61,7 +76,8 @@ test("themed overlay appears and native change attaches multiple files without c
       document.documentElement.style.setProperty("--ghrc-composer-surface", "#142536");
     });
     const enter = await drag(page, "dragenter");
-    assert.equal(enter.prevented, true);
+    // Flawless no longer swallows native dragenter before knowing the drop can attach.
+    assert.equal(enter.prevented, false);
     assert.equal(await page.locator("#ghrc-file-drop-overlay").isVisible(), true);
     assert.equal(
       await page.locator(".ghrc-file-drop-card").evaluate(el => getComputedStyle(el).borderTopColor),
@@ -70,6 +86,8 @@ test("themed overlay appears and native change attaches multiple files without c
     const result = await drag(page, "drop", ["one.txt", "two.txt"]);
     assert.equal(result.prevented, true);
     assert.deepEqual(await page.evaluate(() => window.uploaded), ["one.txt", "two.txt"]);
+    assert.equal(await page.locator('[data-composer-attachments] button').count(), 2);
+    assert.deepEqual(await page.evaluate(() => window.nativeDropEvents), []);
     assert.equal(await page.locator("#prompt-textarea").inputValue(), "Existing draft");
     assert.equal(await page.locator("#browser-default").textContent(), "");
     assert.equal(await page.locator("#ghrc-file-drop-overlay").isVisible(), false);
@@ -156,24 +174,97 @@ test("text/link drags are left to the page", async () => {
   } finally { await page.close(); }
 });
 
-test("missing upload control blocks file link and explains + fallback", async () => {
+test("missing upload input yields to ChatGPT's native handler without browser navigation", async () => {
   const page = await fixture({ input: false });
   try {
+    await page.evaluate(() => {
+      document.getElementById("prompt-textarea").addEventListener("drop", event => {
+        const surface = document.createElement("div");
+        surface.setAttribute("data-composer-attachments", "");
+        for (const file of event.dataTransfer.files) {
+          const button = document.createElement("button");
+          button.setAttribute("aria-label", "Remove file");
+          button.textContent = file.name;
+          surface.append(button);
+        }
+        document.getElementById("composer").append(surface);
+      });
+    });
     const drop = await drag(page, "drop");
     assert.equal(drop.prevented, true);
+    assert.deepEqual(await page.evaluate(() => window.nativeDropEvents), [false]);
+    assert.equal(await page.locator('[data-composer-attachments] button').count(), 1);
+    assert.equal(await page.locator("#browser-default").textContent(), "");
+    assert.equal(await page.locator("#prompt-textarea").inputValue(), "Existing draft");
+  } finally { await page.close(); }
+});
+
+test("input disappearing after the overlay still allows a native drop", async () => {
+  const page = await fixture();
+  try {
+    await drag(page, "dragenter");
     assert.equal(await page.locator("#ghrc-file-drop-overlay").isVisible(), true);
-    assert.match(await page.locator(".ghrc-file-drop-detail").textContent(), /\+ button/);
+    await page.evaluate(() => {
+      document.querySelector('input[type="file"]').remove();
+      document.getElementById("prompt-textarea").addEventListener("drop", event => {
+        const surface = document.createElement("div");
+        surface.dataset.composerAttachments = "";
+        const button = document.createElement("button");
+        button.setAttribute("aria-label", "Remove file");
+        button.textContent = event.dataTransfer.files[0].name;
+        surface.append(button);
+        document.getElementById("composer").append(surface);
+      });
+    });
+    const drop = await drag(page, "drop");
+    assert.equal(drop.prevented, true);
+    assert.deepEqual(await page.evaluate(() => window.nativeDropEvents), [false]);
+    assert.equal(await page.locator('[data-composer-attachments] button').count(), 1);
     assert.equal(await page.locator("#browser-default").textContent(), "");
   } finally { await page.close(); }
 });
 
-test("single-file control refuses multi-file drop rather than losing files", async () => {
+test("missing attachment acknowledgement shows a warning instead of claiming success", async () => {
+  const page = await fixture({ acknowledge: false });
+  try {
+    const drop = await drag(page, "drop");
+    assert.equal(drop.prevented, true);
+    assert.deepEqual(await page.evaluate(() => window.uploaded), ["notes.txt"]);
+    // Advance only the perceived deadline; retain real short timer callbacks.
+    await page.evaluate(() => {
+      const now = Date.now();
+      Date.now = () => now + 13_000;
+    });
+    await page.locator('#ghrc-file-drop-overlay[data-ghrc-drop-error]').waitFor();
+    assert.match(await page.locator(".ghrc-file-drop-title").textContent(), /not confirmed/i);
+    assert.match(await page.locator(".ghrc-file-drop-detail").textContent(), /chip/);
+  } finally { await page.close(); }
+});
+
+test("native drop without acknowledgement also warns rather than silently failing", async () => {
+  const page = await fixture({ input: false });
+  try {
+    const drop = await drag(page, "drop");
+    assert.equal(drop.prevented, true);
+    assert.deepEqual(await page.evaluate(() => window.nativeDropEvents), [false]);
+    await page.evaluate(() => {
+      const now = Date.now();
+      Date.now = () => now + 13_000;
+    });
+    await page.locator('#ghrc-file-drop-overlay[data-ghrc-drop-error]').waitFor();
+    assert.match(await page.locator(".ghrc-file-drop-title").textContent(), /not confirmed/i);
+    assert.equal(await page.locator("#browser-default").textContent(), "");
+  } finally { await page.close(); }
+});
+
+test("single-file input yields multi-file drops to native handling without losing files", async () => {
   const page = await fixture({ multiple: false });
   try {
     const drop = await drag(page, "drop", ["a.txt", "b.txt"]);
     assert.equal(drop.prevented, true);
     assert.deepEqual(await page.evaluate(() => window.uploaded), []);
-    assert.match(await page.locator(".ghrc-file-drop-detail").textContent(), /one file/);
+    assert.deepEqual(await page.evaluate(() => window.nativeDropEvents), [false]);
+    assert.equal(await page.locator("#browser-default").textContent(), "");
   } finally { await page.close(); }
 });
 
