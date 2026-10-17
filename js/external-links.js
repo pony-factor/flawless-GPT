@@ -178,6 +178,7 @@
   }
 
   function closeLinkPreview(restoreFocus = true) {
+    const hadPreview = Boolean(previewPanel);
     nativeSplitRequest += 1;
     githubPreviewGeneration += 1;
     if (previewWatch) {
@@ -186,6 +187,8 @@
     }
     previewPanel?.remove();
     previewPanel = null;
+    // Only touch the host document when a preview actually existed.
+    if (hadPreview) document.documentElement.style.removeProperty("--ghrc-preview-width");
     document.documentElement.removeAttribute("data-ghrc-link-preview");
     if (restoreFocus && previewLink?.isConnected) {
       try {
@@ -220,6 +223,9 @@
   }
 
   function applyPreviewWidth() {
+    // Changing a root-level custom property forces ChatGPT to recalculate
+    // styles even when our sidebar is closed. Defer until there is a panel.
+    if (!previewPanel) return;
     if (!Number.isFinite(previewWidthPx)) {
       document.documentElement.style.removeProperty("--ghrc-preview-width");
       return;
