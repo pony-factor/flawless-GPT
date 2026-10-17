@@ -76,6 +76,71 @@ test("themed overlay appears and native change attaches multiple files without c
   } finally { await page.close(); }
 });
 
+test("overlay follows ChatGPT's live accent and surfaces, with independent composer overrides", async () => {
+  const page = await fixture();
+  try {
+    await page.evaluate(() => {
+      const root = document.documentElement;
+      root.style.setProperty("--main-surface-primary", "#f3edf6");
+      root.style.setProperty("--text-primary", "#243142");
+      root.style.setProperty("--theme-submit-btn-bg", "#b14e88");
+    });
+    await drag(page, "dragenter");
+    const palette = () => page.locator(".ghrc-file-drop-card").evaluate(card => {
+      const icon = card.querySelector(".ghrc-file-drop-icon");
+      return {
+        background: getComputedStyle(card).backgroundColor,
+        text: getComputedStyle(card).color,
+        border: getComputedStyle(card).borderTopColor,
+        icon: getComputedStyle(icon).color,
+      };
+    });
+    assert.deepEqual(await palette(), {
+      background: "rgb(243, 237, 246)",
+      text: "rgb(36, 49, 66)",
+      border: "rgb(177, 78, 136)",
+      icon: "rgb(177, 78, 136)",
+    });
+    // Switching ChatGPT themes while dragging should update the existing card.
+    await page.evaluate(() => {
+      const root = document.documentElement;
+      root.classList.add("dark");
+      root.style.setProperty("--main-surface-primary", "#171b24");
+      root.style.setProperty("--text-primary", "#e4e6ef");
+      root.style.setProperty("--theme-submit-btn-bg", "#45a981");
+    });
+    assert.deepEqual(await palette(), {
+      background: "rgb(23, 27, 36)",
+      text: "rgb(228, 230, 239)",
+      border: "rgb(69, 169, 129)",
+      icon: "rgb(69, 169, 129)",
+    });
+    // Explicit composer colors override only the corresponding palette slots.
+    await page.evaluate(() => {
+      const root = document.documentElement;
+      root.style.setProperty("--ghrc-composer-surface", "#302337");
+      root.style.setProperty("--ghrc-composer-text", "#f5deff");
+      root.style.setProperty("--ghrc-composer-surface-border", "#ee9a42");
+    });
+    assert.deepEqual(await palette(), {
+      background: "rgb(48, 35, 55)",
+      text: "rgb(245, 222, 255)",
+      border: "rgb(238, 154, 66)",
+      icon: "rgb(238, 154, 66)",
+    });
+    await page.evaluate(() => document.documentElement.style.setProperty("--ghrc-composer-focus-ring", "#8765dd"));
+    assert.equal((await palette()).border, "rgb(135, 101, 221)");
+    await page.evaluate(() => {
+      const root = document.documentElement;
+      for (const key of ["surface", "text", "surface-border", "focus-ring"]) {
+        root.style.removeProperty(`--ghrc-composer-${key}`);
+      }
+    });
+    assert.equal((await palette()).border, "rgb(69, 169, 129)");
+    assert.equal((await palette()).background, "rgb(23, 27, 36)");
+  } finally { await page.close(); }
+});
+
 test("text/link drags are left to the page", async () => {
   const page = await fixture();
   try {
