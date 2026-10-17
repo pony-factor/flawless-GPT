@@ -87,6 +87,28 @@
       || transfer.files?.length > 0);
   }
 
+  function finishNativeFileDrop(event) {
+    // Flawless consumes the real file drop after handing the files to ChatGPT's
+    // input. ChatGPT saw the initial drag, but its own drop listeners never see
+    // that terminal event, leaving its click-through "Add anything" veil stuck.
+    // Give the page a file-free terminal drop to release its drag UI without
+    // asking it to upload the same files a second time.
+    const target = event.target;
+    if (!target?.dispatchEvent) return;
+    try {
+      const transfer = new DataTransfer();
+      target.dispatchEvent(new DragEvent("drop", {
+        bubbles: true, cancelable: true, dataTransfer: transfer,
+      }));
+      // Also cover native drag UIs that listen for the end of a drag instead.
+      target.dispatchEvent(new DragEvent("dragend", {
+        bubbles: true, dataTransfer: transfer,
+      }));
+    } catch (error) {
+      context.handleError(error);
+    }
+  }
+
   function ensureOverlay() {
     if (overlay?.isConnected) return overlay;
     if (!document.body) return null;
@@ -206,6 +228,8 @@
     } catch (error) {
       context.handleError(error);
       showError("Could not attach files. Use the + button instead.");
+    } finally {
+      finishNativeFileDrop(event);
     }
   }
 
