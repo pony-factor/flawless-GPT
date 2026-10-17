@@ -76,7 +76,8 @@ test("themed overlay appears and native change attaches multiple files without c
       document.documentElement.style.setProperty("--ghrc-composer-surface", "#142536");
     });
     const enter = await drag(page, "dragenter");
-    assert.equal(enter.prevented, true);
+    // Flawless no longer swallows native dragenter before knowing the drop can attach.
+    assert.equal(enter.prevented, false);
     assert.equal(await page.locator("#ghrc-file-drop-overlay").isVisible(), true);
     assert.equal(
       await page.locator(".ghrc-file-drop-card").evaluate(el => getComputedStyle(el).borderTopColor),
