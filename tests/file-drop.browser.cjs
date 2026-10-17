@@ -46,6 +46,9 @@ async function fixture({ input = true, multiple = true, acknowledge = true } = {
       }
     });
     document.getElementById("prompt-textarea").addEventListener("drop", event => {
+      // An intercepted drop may be followed by a file-free UI cleanup event.
+      // Only real file drops should count as native attachment attempts.
+      if (!event.dataTransfer?.files?.length) return;
       window.nativeDropEvents.push(event.defaultPrevented);
       // Model browser default behavior after propagation, not inside the target handler.
       queueMicrotask(() => {
@@ -61,7 +64,9 @@ async function fixture({ input = true, multiple = true, acknowledge = true } = {
 async function drag(page, type, names = ["notes.txt"]) {
   return page.evaluate(({ type, names }) => {
     const transfer = new DataTransfer();
-    for (const name of names) transfer.items.add(new File(["notes"], name, { type: "text/plain" }));
+    for (const name of names) transfer.items.add(new File(["notes"], name, {
+      type: name.endsWith(".png") ? "image/png" : "text/plain",
+    }));
     const event = new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer: transfer });
     document.querySelector("#prompt-textarea").dispatchEvent(event);
     return { prevented: event.defaultPrevented, effect: transfer.dropEffect };
@@ -91,6 +96,40 @@ test("themed overlay appears and native change attaches multiple files without c
     assert.equal(await page.locator("#prompt-textarea").inputValue(), "Existing draft");
     assert.equal(await page.locator("#browser-default").textContent(), "");
     assert.equal(await page.locator("#ghrc-file-drop-overlay").isVisible(), false);
+  } finally { await page.close(); }
+});
+
+test("intercepted image drops release ChatGPT's click-through native drag overlay", async () => {
+  const page = await fixture();
+  try {
+    await page.evaluate(() => {
+      const veil = document.createElement("div");
+      veil.id = "native-drop-veil";
+      veil.textContent = "Add anything";
+      veil.hidden = true;
+      veil.style.cssText = "position:fixed;inset:0;pointer-events:none;background:rgba(0,0,0,.25)";
+      document.body.append(veil);
+      window.nativeCleanupDrops = [];
+      // Model ChatGPT's own drag UI: a native document-level handler sees
+      // dragenter, but a Flawless-consumed file drop never reaches it.
+      document.addEventListener("dragenter", event => {
+        if (Array.from(event.dataTransfer?.types || []).includes("Files")) veil.hidden = false;
+      });
+      document.addEventListener("drop", event => {
+        window.nativeCleanupDrops.push(event.dataTransfer?.files?.length ?? -1);
+        veil.hidden = true;
+      });
+    });
+    await drag(page, "dragenter", ["photo.png"]);
+    assert.equal(await page.locator("#native-drop-veil").isVisible(), true);
+    const dropped = await drag(page, "drop", ["photo.png"]);
+    assert.equal(dropped.prevented, true);
+    assert.deepEqual(await page.evaluate(() => window.uploaded), ["photo.png"]);
+    assert.equal(await page.locator('[data-composer-attachments] button').count(), 1);
+    assert.equal(await page.locator("#native-drop-veil").isVisible(), false);
+    assert.deepEqual(await page.evaluate(() => window.nativeCleanupDrops), [0]);
+    assert.deepEqual(await page.evaluate(() => window.nativeDropEvents), []);
+    assert.equal(await page.locator("#browser-default").textContent(), "");
   } finally { await page.close(); }
 });
 
