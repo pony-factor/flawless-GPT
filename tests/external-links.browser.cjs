@@ -154,6 +154,59 @@ test('sidebar icons follow trailing punctuation without changing the sentence or
   await page.close();
 });
 
+test('late hydration moves whitespace-separated punctuation before the sidebar icon', async () => {
+  const page = await fixture({ openExternalLinksInSplitView: true });
+  await page.locator('.ghrc-link-with-actions').waitFor();
+  await page.evaluate(() => {
+    const group = document.getElementById('source').parentElement;
+    const trigger = document.createElement('span');
+    trigger.setAttribute('data-d-component', 'popover-trigger');
+    group.before(trigger);
+    trigger.append(group);
+    trigger.after(document.createTextNode(' '), document.createTextNode('. After hydration.'));
+  });
+  await page.locator('.ghrc-link-trailing-punctuation').waitFor();
+  assert.equal(await page.locator('main p:first-child').textContent(), 'Source reference. After hydration.');
+  assert.equal(await page.locator('.ghrc-link-trailing-punctuation').textContent(), '.');
+  const order = await page.locator('.ghrc-link-with-actions').evaluate(group =>
+    [...group.children].map(node => node.className || node.tagName.toLowerCase()));
+  assert.deepEqual(order, ['a', 'ghrc-link-trailing-punctuation', 'ghrc-link-actions']);
+  await page.evaluate(() => settingsListeners.forEach(listener =>
+    listener({ openExternalLinksInSplitView: { newValue: false } }, 'local')));
+  assert.equal(await page.locator('main p:first-child').textContent(), 'Source reference . After hydration.');
+  await page.close();
+});
+
+test('hydration replacing punctuation repositions it without duplication or a refresh', async () => {
+  const page = await fixture({ openExternalLinksInSplitView: true });
+  await page.locator('.ghrc-link-with-actions').waitFor();
+  await page.evaluate(() => {
+    document.getElementById('source').parentElement.after(document.createTextNode('. Original.'));
+  });
+  await page.locator('.ghrc-link-trailing-punctuation').waitFor();
+  await page.evaluate(() => {
+    const group = document.getElementById('source').parentElement;
+    // The first insertion has already been relocated. Simulate React replacing
+    // the remainder with fresh native punctuation during hydration.
+    group.nextSibling.replaceWith(document.createTextNode('. Rehydrated.'));
+  });
+  await page.waitForFunction(() => document.querySelector('main p:first-child').textContent
+    === 'Source reference. Rehydrated.');
+  assert.equal(await page.locator('.ghrc-link-trailing-punctuation').count(), 1);
+  assert.equal(await page.locator('.ghrc-link-trailing-punctuation').textContent(), '.');
+  await page.evaluate(() => {
+    const group = document.getElementById('source').parentElement;
+    group.nextSibling.data = '. Updated again.';
+  });
+  await page.waitForFunction(() => document.querySelector('main p:first-child').textContent
+    === 'Source reference. Updated again.');
+  assert.equal(await page.locator('.ghrc-link-trailing-punctuation').count(), 1);
+  await page.evaluate(() => settingsListeners.forEach(listener =>
+    listener({ openExternalLinksInSplitView: { newValue: false } }, 'local')));
+  assert.equal(await page.locator('main p:first-child').textContent(), 'Source reference. Updated again.');
+  await page.close();
+});
+
 test('long links wrap beside their button without overflowing a narrow chat', async () => {
   const page = await fixture({ openExternalLinksInSplitView: true });
   await page.locator('.ghrc-link-with-actions').waitFor();

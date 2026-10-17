@@ -678,35 +678,67 @@
     }
   }
 
-  function restoreLinkPunctuation(link) {
+  function restoreLinkPunctuation(link, restoreText = true) {
     const punctuation = linkPunctuation.get(link);
     if (!punctuation) return;
-    if (punctuation.textNode.isConnected) {
-      punctuation.textNode.data = punctuation.text + punctuation.textNode.data;
-      punctuation.span.remove();
+    // React may have replaced the original text node during hydration. Never
+    // reinsert punctuation into detached nodes or duplicate newly rendered text.
+    if (restoreText && punctuation.span.isConnected
+        && punctuation.parts.every(({ node, parent }) => node.isConnected && node.parentNode === parent)) {
+      for (const { node, text } of punctuation.parts) node.data = text + node.data;
     }
+    punctuation.span.remove();
     link.parentElement?.classList.remove('ghrc-link-has-punctuation');
     linkPunctuation.delete(link);
   }
 
-  function placeLinkActionsAfterPunctuation(link, actions) {
-    const group = link.parentElement;
-    if (!group?.classList.contains('ghrc-link-with-actions') || linkPunctuation.has(link)) return;
+  function findLinkPunctuation(group) {
     let tail = group;
-    // ChatGPT may wrap the anchor in an inline popover before the sentence's
-    // punctuation. Keep the native wrapper and its handlers intact.
-    for (let depth = 0; !tail.nextSibling && tail.parentElement?.matches('span') && depth < 5; depth++) {
+    // A citation's popover can wrap the link, and React may hydrate its
+    // whitespace and sentence punctuation into separate text nodes.
+    for (let depth = 0; depth <= 5; depth += 1) {
+      const parts = [];
+      let blocked = false;
+      for (let node = tail.nextSibling, count = 0; node && count < 8; node = node.nextSibling, count += 1) {
+        if (node.nodeType !== Node.TEXT_NODE) {
+          blocked = true;
+          break;
+        }
+        const match = /^(\s*)([.,;:!?…\)\]\}"'»”’]+)/u.exec(node.data);
+        if (match) {
+          parts.push({ node, parent: node.parentNode, text: match[0] });
+          return { tail, parts, text: match[2] };
+        }
+        if (!/^\s*$/u.test(node.data)) {
+          blocked = true;
+          break;
+        }
+        parts.push({ node, parent: node.parentNode, text: node.data });
+      }
+      if (blocked || !tail.parentElement?.matches('span')) break;
       tail = tail.parentElement;
     }
-    const textNode = tail.nextSibling;
-    if (textNode?.nodeType !== 3) return;
-    const text = /^[.,;:!?…\)\]\}"'»”’]+/u.exec(textNode.data)?.[0];
-    if (!text) return;
+    return null;
+  }
+
+  function placeLinkActionsAfterPunctuation(link, actions) {
+    const group = link.parentElement;
+    if (!group?.classList.contains('ghrc-link-with-actions')) return;
+    const match = findLinkPunctuation(group);
+    const current = linkPunctuation.get(link);
+    if (current) {
+      if (!match && current.span.parentElement === group && current.span.nextSibling === actions
+          && current.tail.isConnected && current.tail.nextSibling === current.parts[0].node
+          && current.parts.every(({ node, parent }) => node.isConnected && node.parentNode === parent)) return;
+      // Prefer the newly hydrated text over a stale relocation.
+      restoreLinkPunctuation(link, !match);
+    }
+    if (!match) return;
     const span = document.createElement('span');
     span.className = 'ghrc-link-trailing-punctuation';
-    span.textContent = text;
-    linkPunctuation.set(link, { span, textNode, text });
-    textNode.data = textNode.data.slice(text.length);
+    span.textContent = match.text;
+    for (const { node, text } of match.parts) node.data = node.data.slice(text.length);
+    linkPunctuation.set(link, { ...match, span });
     actions.before(span);
     group.classList.add('ghrc-link-has-punctuation');
   }
@@ -878,7 +910,16 @@
           queueMutationNode(mutation.target);
           continue;
         }
-        for (const node of mutation.addedNodes) queueMutationNode(node);
+        for (const node of mutation.addedNodes) {
+          if (node.nodeType === Node.TEXT_NODE) {
+            // Hydration can add the punctuation *after* a previously enhanced
+            // link. A text node is not an Element, so the normal queue skips it.
+            // Revisit only the adjacent link instead of rescanning the chat.
+            const previous = node.previousElementSibling;
+            if (previous?.matches('a[href], .ghrc-link-with-actions')
+                || previous?.querySelector('a[href]')) queueMutationNode(previous);
+          } else queueMutationNode(node);
+        }
       }
     }).observe(document.documentElement, {
       childList: true,
