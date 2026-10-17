@@ -6,9 +6,12 @@
 
   const OVERLAY_ID = "ghrc-file-drop-overlay";
   const ROUTE_EVENT = "ghrc:route-change";
+  const CONFIRM_TIMEOUT_MS = 12_000;
   let depth = 0;
   let feedbackTimer = null;
   let overlay = null;
+  let confirmationTimer = null;
+  let confirmationToken = 0;
 
   function composerInput() {
     const fromQueue = globalThis.__ghrcMessageQueue?.findComposerInput?.();
@@ -32,6 +35,50 @@
     if (named.length === 1) return named[0];
     const all = [...document.querySelectorAll('input[type="file"]')];
     return all.length === 1 ? all[0] : null;
+  }
+
+  function attachmentCount(composer) {
+    const scope = composer.closest("form")
+      || composer.closest('[data-type="unified-composer"]')
+      || composer.closest(".composer-parent");
+    if (!scope) return 0;
+    const surface = scope.querySelector(
+      '[data-composer-attachments], [data-testid="composer-attachments"]'
+    );
+    const removeButtons = [...scope.querySelectorAll('button[aria-label*="Remove" i]')]
+      .filter(button => surface?.contains(button)
+        || /file|attachment|image|upload/i.test(button.getAttribute("aria-label") || ""));
+    if (removeButtons.length) return removeButtons.length;
+    const cards = scope.querySelectorAll('[data-filename], [data-file-name], .group\\/composer-attachment');
+    return cards.length || surface?.children.length || 0;
+  }
+
+  function cancelConfirmation() {
+    ++confirmationToken;
+    if (confirmationTimer !== null) clearTimeout(confirmationTimer);
+    confirmationTimer = null;
+  }
+
+  function confirmAttachment(composer, fileCount, previousCount) {
+    const token = ++confirmationToken;
+    const deadline = Date.now() + CONFIRM_TIMEOUT_MS;
+    function check() {
+      if (token !== confirmationToken || !context.active() || !composer.isConnected) return;
+      if (attachmentCount(composer) >= previousCount + fileCount) {
+        confirmationTimer = null;
+        return;
+      }
+      if (Date.now() >= deadline) {
+        confirmationTimer = null;
+        showError(
+          "No new attachment chip was confirmed. Check before sending, or use the + button.",
+          "Attachment not confirmed"
+        );
+        return;
+      }
+      confirmationTimer = setTimeout(check, 250);
+    }
+    confirmationTimer = setTimeout(check, 250);
   }
 
   function isFileDrag(event) {
@@ -85,12 +132,12 @@
     node.hidden = false;
   }
 
-  function showError(message) {
+  function showError(message, title = "File not attached") {
     const node = ensureOverlay();
     if (!node) return;
     clearTimer();
     node.setAttribute("data-ghrc-drop-error", "");
-    node.querySelector(".ghrc-file-drop-title").textContent = "File not attached";
+    node.querySelector(".ghrc-file-drop-title").textContent = title;
     node.querySelector(".ghrc-file-drop-detail").textContent = message;
     node.hidden = false;
     feedbackTimer = setTimeout(reset, 3500);
@@ -98,16 +145,18 @@
 
   function onDragEnter(event) {
     if (!context.active() || !isFileDrag(event) || !composerInput()) return;
-    event.preventDefault();
-    event.stopImmediatePropagation();
+    // Keep the native drag lifecycle intact in case the upload input vanishes
+    // before drop. The overlay is visual only until we can commit the handoff.
     depth++;
     showDragCard();
   }
 
   function onDragOver(event) {
-    if (!context.active() || !isFileDrag(event) || !composerInput()) return;
-    event.preventDefault();
-    event.stopImmediatePropagation();
+    if (!context.active() || !isFileDrag(event)) return;
+    const composer = composerInput();
+    if (!composer) return;
+    // Allow the page's native drag handlers to prepare their own fallback.
+    if (uploadInput(composer)) event.preventDefault();
     if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
     if (!depth) depth = 1; // A drag can enter before the content script mounts.
     if (!overlay || overlay.hidden) showDragCard();
@@ -115,7 +164,6 @@
 
   function onDragLeave(event) {
     if (!depth || !isFileDrag(event)) return;
-    event.stopImmediatePropagation();
     depth = Math.max(0, depth - 1);
     if (!depth) reset();
   }
@@ -125,37 +173,46 @@
     const composer = composerInput();
     if (!composer) { reset(); return; }
 
-    // Block the browser's default file:// link/navigation and the page's
-    // separate drop handlers, even if the upload input has disappeared.
-    event.preventDefault();
-    event.stopImmediatePropagation();
     const files = [...(event.dataTransfer?.files || [])];
+    const previousCount = attachmentCount(composer);
+    const input = uploadInput(composer);
     reset();
+    cancelConfirmation();
     if (!files.length) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
       showError("Could not read the dropped files. Use the + button instead.");
       return;
     }
-    const input = uploadInput(composer);
-    if (!input) {
-      showError("Attachment control unavailable. Use the + button instead.");
-      return;
-    }
-    if (files.length > 1 && !input.multiple) {
-      showError("This composer only accepts one file at a time. Use the + button.");
+
+    if (!input || input.disabled || (files.length > 1 && !input.multiple)) {
+      // No safe input handoff. Do not swallow the event: ChatGPT's native
+      // drop target may be able to attach these files even without an input.
+      // The bubble listener blocks only the browser's default navigation.
+      confirmAttachment(composer, files.length, previousCount);
       return;
     }
 
+    event.preventDefault();
+    event.stopImmediatePropagation();
     try {
       const transfer = new DataTransfer();
       for (const file of files) transfer.items.add(file);
-      // Keep React/ChatGPT in charge of validating, uploading, showing
-      // attachment chips and any errors; don't mutate draft editor text.
+      // Let ChatGPT validate/upload and render attachment chips; the change
+      // event itself is not evidence that an attachment was accepted.
       input.files = transfer.files;
       input.dispatchEvent(new Event("change", { bubbles: true }));
+      confirmAttachment(composer, files.length, previousCount);
     } catch (error) {
       context.handleError(error);
       showError("Could not attach files. Use the + button instead.");
     }
+  }
+
+  function preventUnhandledFileDrop(event) {
+    // Runs after ChatGPT's target handlers, preserving native attachment
+    // processing while preventing browser file:// navigation/text insertion.
+    if (context.active() && isFileDrag(event) && composerInput()) event.preventDefault();
   }
 
   function onEscape(event) {
@@ -167,18 +224,20 @@
     [document, "dragover", onDragOver],
     [document, "dragleave", onDragLeave],
     [document, "drop", onDrop],
+    [document, "drop", preventUnhandledFileDrop, false],
     [document, "dragend", reset],
     [document, "keydown", onEscape],
     [window, "blur", reset],
-    [window, ROUTE_EVENT, reset],
+    [window, ROUTE_EVENT, () => { reset(); cancelConfirmation(); }],
   ];
-  for (const [target, type, handler] of listeners) {
-    target.addEventListener(type, handler, true);
+  for (const [target, type, handler, capture = true] of listeners) {
+    target.addEventListener(type, handler, capture);
   }
   context.onStop(() => {
-    for (const [target, type, handler] of listeners) {
-      target.removeEventListener(type, handler, true);
+    for (const [target, type, handler, capture = true] of listeners) {
+      target.removeEventListener(type, handler, capture);
     }
+    cancelConfirmation();
     reset();
     overlay?.remove();
     overlay = null;
