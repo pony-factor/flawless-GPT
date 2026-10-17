@@ -106,7 +106,7 @@ test('hidden arrow wrappers leave no gap before trailing punctuation', async () 
   await page.evaluate(() => {
     const link = document.getElementById('source');
     link.innerHTML = 'Source reference<span id="native-arrow-wrapper" style="display:inline-block;width:14px;margin-left:4px"><svg width="14" height="14"><path d="M3 11L11 3"/></svg></span>';
-    link.parentElement.after(document.createTextNode(', next phrase.'));
+    link.nextElementSibling.after(document.createTextNode(', next phrase.'));
   });
   await page.locator('.ghrc-link-trailing-punctuation').waitFor();
   const gap = await page.evaluate(() => {
@@ -126,11 +126,11 @@ test('sidebar icons follow trailing punctuation without changing the sentence or
   const page = await fixture({ openExternalLinksInSplitView: true }, null, true);
   await page.locator('.ghrc-link-with-actions').waitFor();
   await page.evaluate(() => {
-    const group = document.getElementById('source').parentElement;
+    const group = document.getElementById('source').nextElementSibling;
     const trigger = document.createElement('span');
     trigger.setAttribute('data-d-component', 'popover-trigger');
     group.before(trigger);
-    trigger.append(group);
+    trigger.append(group.previousElementSibling, group);
     trigger.after(document.createTextNode('). Next sentence.'));
   });
   await page.locator('.ghrc-link-trailing-punctuation').waitFor();
@@ -158,11 +158,11 @@ test('late hydration moves whitespace-separated punctuation before the sidebar i
   const page = await fixture({ openExternalLinksInSplitView: true });
   await page.locator('.ghrc-link-with-actions').waitFor();
   await page.evaluate(() => {
-    const group = document.getElementById('source').parentElement;
+    const group = document.getElementById('source').nextElementSibling;
     const trigger = document.createElement('span');
     trigger.setAttribute('data-d-component', 'popover-trigger');
     group.before(trigger);
-    trigger.append(group);
+    trigger.append(group.previousElementSibling, group);
     trigger.after(document.createTextNode(' '), document.createTextNode('. After hydration.'));
   });
   await page.locator('.ghrc-link-trailing-punctuation').waitFor();
@@ -170,7 +170,7 @@ test('late hydration moves whitespace-separated punctuation before the sidebar i
   assert.equal(await page.locator('.ghrc-link-trailing-punctuation').textContent(), '.');
   const order = await page.locator('.ghrc-link-with-actions').evaluate(group =>
     [...group.children].map(node => node.className || node.tagName.toLowerCase()));
-  assert.deepEqual(order, ['a', 'ghrc-link-trailing-punctuation', 'ghrc-link-actions']);
+  assert.deepEqual(order, ['ghrc-link-trailing-punctuation', 'ghrc-link-actions']);
   await page.evaluate(() => settingsListeners.forEach(listener =>
     listener({ openExternalLinksInSplitView: { newValue: false } }, 'local')));
   assert.equal(await page.locator('main p:first-child').textContent(), 'Source reference . After hydration.');
@@ -181,11 +181,11 @@ test('hydration replacing punctuation repositions it without duplication or a re
   const page = await fixture({ openExternalLinksInSplitView: true });
   await page.locator('.ghrc-link-with-actions').waitFor();
   await page.evaluate(() => {
-    document.getElementById('source').parentElement.after(document.createTextNode('. Original.'));
+    document.getElementById('source').nextElementSibling.after(document.createTextNode('. Original.'));
   });
   await page.locator('.ghrc-link-trailing-punctuation').waitFor();
   await page.evaluate(() => {
-    const group = document.getElementById('source').parentElement;
+    const group = document.getElementById('source').nextElementSibling;
     // The first insertion has already been relocated. Simulate React replacing
     // the remainder with fresh native punctuation during hydration.
     group.nextSibling.replaceWith(document.createTextNode('. Rehydrated.'));
@@ -195,7 +195,7 @@ test('hydration replacing punctuation repositions it without duplication or a re
   assert.equal(await page.locator('.ghrc-link-trailing-punctuation').count(), 1);
   assert.equal(await page.locator('.ghrc-link-trailing-punctuation').textContent(), '.');
   await page.evaluate(() => {
-    const group = document.getElementById('source').parentElement;
+    const group = document.getElementById('source').nextElementSibling;
     group.nextSibling.data = '. Updated again.';
   });
   await page.waitForFunction(() => document.querySelector('main p:first-child').textContent
@@ -218,7 +218,7 @@ test('long links wrap beside their button without overflowing a narrow chat', as
     await page.setViewportSize({ width, height: 800 });
     const boxes = await page.evaluate(() => {
       const link = document.querySelector('#source');
-      const group = link.parentElement;
+      const group = link.nextElementSibling;
       const action = group.querySelector('.ghrc-link-actions');
       const text = document.createRange();
       text.selectNodeContents(link);
@@ -248,7 +248,7 @@ test('wrapped documentation links reserve their height above the next list item'
     list.innerHTML = '<li>Stacked Pull Requests: <span style="display:inline-flex;height:26px;max-height:26px;white-space:nowrap"><a id="stacked" href="https://docs.github.com/en/pull-requests/reference/stacked-pull-requests-apis-and-webhooks">https://docs.github.com/en/pull-requests/reference/stacked-pull-requests-apis-and-webhooks</a></span></li><li id="next-item">GitHub Branches: https://docs.github.com/en/rest/branches</li>';
     document.querySelector('main').replaceChildren(list);
   });
-  await page.locator('#stacked + .ghrc-link-actions').waitFor();
+  await page.locator('#stacked + .ghrc-link-with-actions .ghrc-link-actions').waitFor();
   for (const width of [240, 320, 520, 768]) {
     await page.setViewportSize({ width, height: 800 });
     const boxes = await page.evaluate(() => {
@@ -323,12 +323,12 @@ test('ordinary link popovers keep a single sidebar icon', async () => {
   const page = await fixture({ openExternalLinksInSplitView: true });
   await page.locator('.ghrc-link-with-actions').waitFor();
   await page.evaluate(() => {
-    const group = document.getElementById('source').parentElement;
+    const group = document.getElementById('source').nextElementSibling;
     const trigger = document.createElement('span');
     trigger.setAttribute('data-d-component', 'popover-trigger');
     trigger.__reactFiber$fixture = { memoizedProps: { __dilHostElement: { props: { onVisibleKey: 'https://example.org/source' } } } };
     group.before(trigger);
-    trigger.append(group);
+    trigger.append(group.previousElementSibling, group);
   });
   await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
   assert.equal(await page.locator('.ghrc-link-sidebar-button').count(), 1);
@@ -800,3 +800,25 @@ for (const side of ['right', 'left']) {
     await page.close();
   });
 }
+
+test('native Markdown updates can remove decorated links from their original parent', async () => {
+  const page = await fixture({ openExternalLinksInSplitView: true });
+  await page.locator('.ghrc-link-with-actions').waitFor();
+  const result = await page.evaluate(() => {
+    const parent = document.querySelector('main p');
+    const link = document.getElementById('source');
+    const nativeParentPreserved = link.parentNode === parent;
+    parent.removeChild(link);
+    const replacement = document.createElement('a');
+    replacement.id = 'replacement';
+    replacement.href = 'https://example.org/updated';
+    replacement.textContent = 'Updated Markdown link';
+    parent.append(replacement);
+    return nativeParentPreserved;
+  });
+  assert.equal(result, true);
+  await page.locator('#replacement + .ghrc-link-with-actions').waitFor();
+  await page.waitForFunction(() => document.querySelectorAll('.ghrc-link-with-actions').length === 1);
+  assert.equal(await page.locator('.ghrc-link-sidebar-button').getAttribute('data-href'), 'https://example.org/updated');
+  await page.close();
+});

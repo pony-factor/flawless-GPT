@@ -671,10 +671,10 @@
 
   function removeLinkActions(link, actions) {
     restoreLinkPunctuation(link);
+    const group = actions?.parentElement;
     actions?.remove();
-    const group = link.parentElement;
     if (group?.classList.contains("ghrc-link-with-actions")) {
-      group.replaceWith(...group.childNodes);
+      group.remove();
     }
   }
 
@@ -688,7 +688,7 @@
       for (const { node, text } of punctuation.parts) node.data = text + node.data;
     }
     punctuation.span.remove();
-    link.parentElement?.classList.remove('ghrc-link-has-punctuation');
+    linkActions.get(link)?.parentElement?.classList.remove('ghrc-link-has-punctuation');
     linkPunctuation.delete(link);
   }
 
@@ -700,6 +700,7 @@
       const parts = [];
       let blocked = false;
       for (let node = tail.nextSibling, count = 0; node && count < 8; node = node.nextSibling, count += 1) {
+        if (node.nodeType === Node.ELEMENT_NODE && node.classList.contains('ghrc-link-with-actions')) continue;
         if (node.nodeType !== Node.TEXT_NODE) {
           blocked = true;
           break;
@@ -722,13 +723,13 @@
   }
 
   function placeLinkActionsAfterPunctuation(link, actions) {
-    const group = link.parentElement;
+    const group = actions.parentElement;
     if (!group?.classList.contains('ghrc-link-with-actions')) return;
-    const match = findLinkPunctuation(group);
+    const match = findLinkPunctuation(link);
     const current = linkPunctuation.get(link);
     if (current) {
       if (!match && current.span.parentElement === group && current.span.nextSibling === actions
-          && current.tail.isConnected && current.tail.nextSibling === current.parts[0].node
+          && current.tail.isConnected && (current.tail.nextSibling === group ? group.nextSibling : current.tail.nextSibling) === current.parts[0].node
           && current.parts.every(({ node, parent }) => node.isConnected && node.parentNode === parent)) return;
       // Prefer the newly hydrated text over a stale relocation.
       restoreLinkPunctuation(link, !match);
@@ -773,17 +774,14 @@
       placeLinkActionsAfterPunctuation(link, existing);
       return;
     }
-    // Keep a text link and its action together as the chat narrows. Preserve
-    // the original anchor (including ChatGPT's handlers and external icon).
-    if (!link.querySelector("img, picture, video, canvas")
-        && !link.parentElement?.classList.contains("ghrc-link-with-actions")) {
-      const group = document.createElement("span");
-      group.className = "ghrc-link-with-actions";
-      link.before(group);
-      group.append(link);
-    }
+    // Keep React-owned anchors under their original parent. Reparenting a
+    // native link makes React's next removeChild fail inside the Markdown
+    // error boundary during hydration or response updates.
     const actions = createLinkActions(link, url);
-    link.after(actions);
+    const group = document.createElement("span");
+    group.className = "ghrc-link-with-actions";
+    group.append(actions);
+    link.after(group);
     placeLinkActionsAfterPunctuation(link, actions);
   }
 
@@ -828,15 +826,19 @@
 
   function refreshLinkActions() {
     document.querySelectorAll(".ghrc-link-actions").forEach((actions) => {
-      if (!actionSources.get(actions)?.isConnected) actions.remove();
+      if (!actionSources.get(actions)?.isConnected) {
+        const group = actions.parentElement;
+        if (group?.classList.contains("ghrc-link-with-actions")) group.remove();
+        else actions.remove();
+      }
     });
     if (!splitViewEnabled) {
-      document.querySelectorAll(".ghrc-link-actions").forEach(actions => actions.remove());
       document.querySelectorAll(".ghrc-link-with-actions").forEach(group => {
-        const link = group.querySelector('a[href]');
+        const link = group.previousElementSibling;
         if (link) restoreLinkPunctuation(link);
-        group.replaceWith(...group.childNodes);
+        group.remove();
       });
+      document.querySelectorAll(".ghrc-link-actions").forEach(actions => actions.remove());
       document.querySelectorAll('.ghrc-citation-source').forEach(button => button.classList.remove('ghrc-citation-source'));
       return;
     }
