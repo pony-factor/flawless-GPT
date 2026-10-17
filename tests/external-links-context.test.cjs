@@ -9,6 +9,8 @@ function fixture(failure) {
   const writes = [];
   const messages = [];
   const listeners = {};
+  const rootStyles = new Map();
+  const rootStyleWrites = [];
   let removed = false;
   const apiCall = (calls, value) => {
     calls.push(value);
@@ -26,7 +28,19 @@ function fixture(failure) {
       },
     },
     document: {
-      documentElement: { removeAttribute() {} },
+      documentElement: {
+        removeAttribute() {},
+        style: {
+          setProperty(name, value) {
+            rootStyleWrites.push(["set", name, value]);
+            rootStyles.set(name, value);
+          },
+          removeProperty(name) {
+            rootStyleWrites.push(["remove", name]);
+            rootStyles.delete(name);
+          },
+        },
+      },
       createElement: () => ({
         setAttribute() {},
         addEventListener: (name, callback) => { listeners[name] = callback; },
@@ -43,9 +57,9 @@ function fixture(failure) {
     previewWidthPx = 612.4;
     previewPanel = { remove() { removed(); }, getBoundingClientRect() { return { width: 612 }; } };
     previewWatch = { id: 'preview-1' };
-    globalThis.api = { savePreviewWidth, unwatchLinkPreview, createPreviewResizer, closeLinkPreview };
+    globalThis.api = { savePreviewWidth, unwatchLinkPreview, createPreviewResizer, closeLinkPreview, applyPreviewWidth };
   })();`, context);
-  return { api: context.api, writes, messages, listeners, removed: () => removed };
+  return { api: context.api, writes, messages, listeners, rootStyles, rootStyleWrites, removed: () => removed };
 }
 
 for (const failure of ['throw', 'reject', null]) {
@@ -69,3 +83,18 @@ for (const failure of ['throw', 'reject', null]) {
     assert.equal(f.messages[0].previewId, 'preview-1');
   });
 }
+
+test('preview width is only written to ChatGPT when a preview is open', () => {
+  const f = fixture(null);
+  f.api.applyPreviewWidth();
+  assert.equal(f.rootStyles.get('--ghrc-preview-width'), '612px');
+  assert.deepEqual(f.rootStyleWrites, [['set', '--ghrc-preview-width', '612px']]);
+
+  f.api.closeLinkPreview(false);
+  assert.equal(f.rootStyles.has('--ghrc-preview-width'), false);
+  assert.deepEqual(f.rootStyleWrites.at(-1), ['remove', '--ghrc-preview-width']);
+
+  const writesAfterClose = f.rootStyleWrites.length;
+  f.api.applyPreviewWidth();
+  assert.equal(f.rootStyleWrites.length, writesAfterClose);
+});
