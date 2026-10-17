@@ -10,14 +10,21 @@
   const RECOVERY_KEY = 'researchLaunchRecovery';
   const activeImports = new Set();
   let recoveryWrites = Promise.resolve();
+  const temporaryConversation = url => {
+    try {
+      const value = new URL(url);
+      return value.origin === 'https://chatgpt.com' && /^\/c\/local-chatgpt(?::|%3a)/i.test(value.pathname);
+    } catch { return false; }
+  };
   const conversation = url => {
-    try { const value = new URL(url); return value.origin === 'https://chatgpt.com' && value.pathname.startsWith('/c/') ? value.origin + value.pathname : null; }
+    try { const value = new URL(url); return value.origin === 'https://chatgpt.com' && value.pathname.startsWith('/c/') && !temporaryConversation(url) ? value.origin + value.pathname : null; }
     catch { return null; }
   };
   async function updateRecovery(tabId, job) {
     const result = recoveryWrites.then(async () => {
       const saved = (await chrome.storage.local.get(RECOVERY_KEY))[RECOVERY_KEY] || {};
-      if (job?.conversationUrl) saved[tabId] = { ...job, prompt: undefined };
+      if (job && (job.conversationUrl || ['sending', 'submitted'].includes(job.state)))
+        saved[tabId] = { ...job, prompt: undefined };
       else delete saved[tabId];
       await chrome.storage.local.set({ [RECOVERY_KEY]: saved });
     });
@@ -25,24 +32,45 @@
     return result;
   }
   async function recover(tabId) {
-    const saved = (await chrome.storage.local.get(RECOVERY_KEY))[RECOVERY_KEY]?.[tabId];
+    let saved = (await chrome.storage.local.get(RECOVERY_KEY))[RECOVERY_KEY]?.[tabId];
     if (!saved) return null;
-    try {
-      const tab = await chrome.tabs.get(tabId);
-      // tabs.get omits ChatGPT URLs without a separate host grant; webNavigation
-      // already has the permission needed to verify the top-level conversation.
-      const frame = await chrome.webNavigation.getFrame({ tabId, frameId: 0 });
-      if (tab.windowId === saved.windowId && conversation(frame?.url) === saved.conversationUrl) return saved;
-    } catch { /* Closed tabs cannot resume an old run. */ }
+    // Older versions pinned runs to ChatGPT's optimistic, temporary chat ID.
+    if (temporaryConversation(saved.conversationUrl)) saved = { ...saved, conversationUrl: undefined };
+    let tab;
+    try { tab = await chrome.tabs.get(tabId); }
+    catch {
+      await updateRecovery(tabId, null);
+      return null;
+    }
+    if (tab.windowId === saved.windowId) {
+      // Navigation can briefly remove the main frame. Keep the destination so
+      // the next report poll can recover instead of permanently losing the job.
+      let frame;
+      try { frame = await chrome.webNavigation.getFrame({ tabId, frameId: 0 }); }
+      catch { throw new Error('Research page is reconnecting. Retrying automatic import…'); }
+      if (!frame?.url || frame.url === 'about:blank')
+        throw new Error('Research page is reconnecting. Retrying automatic import…');
+      const url = conversation(frame.url);
+      if (saved.conversationUrl && url === saved.conversationUrl) return saved;
+      // Send can navigate before its acknowledgement. Only this dedicated
+      // popup may recover an unbound submission; never send the prompt again.
+      if (!saved.conversationUrl && ['sending', 'submitted'].includes(saved.state)
+        && (url || temporaryConversation(frame.url) || frame.url === 'https://chatgpt.com/')) {
+        const recovered = { ...saved, conversationUrl: url };
+        await updateRecovery(tabId, recovered);
+        return recovered;
+      }
+    }
     await updateRecovery(tabId, null);
     return null;
   }
   async function get(tabId) {
     const existing = (await chrome.storage.session.get(key(tabId)))[key(tabId)];
     let job = existing || await recover(tabId);
+    if (temporaryConversation(job?.conversationUrl)) job = { ...job, conversationUrl: undefined };
     // A worker interrupted during publishing must retry the idempotent native import.
     if (job?.state === 'importing' && !activeImports.has(job.id)) job = { ...job, state: 'submitted' };
-    if (job && job !== existing) await chrome.storage.session.set({ [key(tabId)]: job });
+    if (job && job !== existing) await put(job);
     return job || null;
   }
   async function put(job) {
@@ -113,7 +141,9 @@
         if (!chatSender(sender) && !reportSender(sender)) throw new Error('Open research in ChatGPT.');
         return serial(async () => {
           let job = await get(sender.tab.id);
-          const url = conversation(sender.tab.url);
+          if (!job) return { ok: true, job: null };
+          const frame = await chrome.webNavigation.getFrame({ tabId: sender.tab.id, frameId: 0 });
+          const url = conversation(frame?.url);
           if (job?.conversationUrl && job.conversationUrl !== url) return { ok: true, job: null };
           if (job && !job.conversationUrl && url && ['submitted', 'importing', 'import-retry'].includes(job.state))
             job = await put({ ...job, conversationUrl: url });
@@ -167,7 +197,8 @@
           await put({ ...job, state: 'sending' });
         } else if (message.type === 'research-launch-submitted') {
           if (job.state !== 'sending') throw new Error('No research submission is pending.');
-          await put({ ...job, state: 'submitted', prompt: undefined, conversationUrl: conversation(sender.tab.url) });
+          await put({ ...job, state: 'submitted', prompt: undefined, conversationUrl: conversation(sender.url)
+            || conversation((await chrome.webNavigation.getFrame({ tabId: sender.tab.id, frameId: 0 }).catch(() => null))?.url) });
         } else if (message.type === 'research-launch-error') {
           if (!['pending', 'preparing', 'sending'].includes(job.state)) return { ok: true };
           await put({ ...job, state: 'error', error: String(message.error || 'Research could not start.').slice(0, 500) });
@@ -184,7 +215,7 @@
       const saved = (await chrome.storage.local.get(RECOVERY_KEY))[RECOVERY_KEY] || {};
       for (const tabId of Object.keys(saved)) {
         const job = await serial(() => get(Number(tabId)));
-        if (job && ['submitted', 'import-retry', 'complete'].includes(job.state)) await chrome.tabs.reload(job.tabId);
+        if (job && ['sending', 'submitted', 'import-retry', 'complete'].includes(job.state)) await chrome.tabs.reload(job.tabId);
       }
     })().catch(error => console.warn('Could not resume research windows:', error.message));
   });

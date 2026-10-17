@@ -31,7 +31,9 @@
     if (!scope || scope.querySelector('[aria-busy="true"], [role="progressbar"]') || download.disabled) return;
     automaticBusy = true;
     try {
-      const { job } = await request({ type: 'research-launch-job' }) || {};
+      const response = await request({ type: 'research-launch-job' });
+      if (!response?.ok) throw new Error(response?.error || 'Could not check automatic import. Retrying…');
+      const { job } = response;
       const status = scope.querySelector('.ghrc-report-status');
       if (job?.state === 'complete' && job.result) {
         if (status) globalThis.__ghrcResearchImportStatus(status, job.result);
@@ -40,6 +42,10 @@
           button.setAttribute('aria-label', 'Report added to repo');
           button.title = `Added to ${job.result.repository} (${job.result.branch})`;
         }
+        return;
+      }
+      if (job?.state === 'import-error') {
+        if (status) status.textContent = job.error || 'Automatic import could not finish. Use Add to repo to retry.';
         return;
       }
       if (!['submitted', 'import-retry'].includes(job?.state)) return;
@@ -62,9 +68,9 @@
         if (status) globalThis.__ghrcResearchImportStatus(status, result);
       }
     } catch (error) {
-      if (error.message === RELOAD_MESSAGE) {
+      if (!error.message.startsWith('The complete report is not ready yet.')) {
         const status = scope.querySelector('.ghrc-report-status');
-        if (status && status.textContent !== RELOAD_MESSAGE) status.textContent = RELOAD_MESSAGE;
+        if (status && status.textContent !== error.message) status.textContent = error.message;
       }
       // Partial reports and replaced sandbox documents are revisited by the next scan.
     } finally { automaticBusy = false; }

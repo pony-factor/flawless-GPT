@@ -17,6 +17,7 @@ function app({ enabled = true, connected = true } = {}) {
   let destination = { repository: 'research', branch: 'main' };
   let failPublish = false;
   let ready = true;
+  let frameUnavailable = false;
   const chrome = {
     storage: {
       local: {
@@ -38,7 +39,7 @@ function app({ enabled = true, connected = true } = {}) {
       },
       remove: async () => {},
     },
-    webNavigation: { getFrame: async ({ tabId }) => ({ url: tabs.get(tabId)?.url }) },
+    webNavigation: { getFrame: async ({ tabId }) => { if (frameUnavailable) throw new Error('Frame navigating'); return { url: tabs.get(tabId)?.url }; } },
     tabs: {
       get: async id => { if (!tabs.has(id)) throw new Error('No tab'); const { url, ...tab } = tabs.get(id); return tab; },
       reload: async id => calls.push(['reload', id]),
@@ -75,7 +76,7 @@ function app({ enabled = true, connected = true } = {}) {
   });
   const start = () => send({ type: 'start-research-launch', prompt: '# Investigate\nExact wording', title: 'Investigation', category: 'Markets', repository: 'research', branch: 'main' });
   return { session, local, tabs, calls, windows, advance: ms => { now += ms; }, update: () => installed(), send, start, source, host, report, restart: load, close: id => removed(id),
-    changeDestination: value => { destination = value; }, failPublish: (value = true) => { failPublish = value; }, setReady: value => { ready = value; } };
+    changeDestination: value => { destination = value; }, failPublish: (value = true) => { failPublish = value; }, setReady: value => { ready = value; }, setFrameUnavailable: value => { frameUnavailable = value; } };
 }
 async function submitted(a) {
   const { job } = await a.start();
@@ -245,4 +246,112 @@ test('repeated failures stop after three attempts and interrupted workers can re
   assert.equal(a.session['researchLaunch:' + job.tabId].state, 'import-error');
   assert.equal((await a.send(publish(job), a.report(job.tabId))).ok, false);
   assert.equal(a.calls.filter(call => call[1]?.action === 'publish').length, 3);
+});
+
+
+test('submission survives navigation before a conversation URL exists without saving the prompt', async () => {
+  const a = app();
+  const { job } = await a.start();
+  const sender = a.host(job.tabId);
+  sender.tab.url = 'https://chatgpt.com/';
+  a.tabs.get(job.tabId).url = sender.tab.url;
+  await a.send({ type: 'claim-research-launch', id: job.id }, sender);
+  await a.send({ type: 'research-launch-sending', id: job.id }, sender);
+  assert.equal(a.local.researchLaunchRecovery[job.tabId]?.state, 'sending');
+  assert.equal(a.local.researchLaunchRecovery[job.tabId].prompt, undefined);
+  delete a.session['researchLaunch:' + job.tabId];
+  a.restart();
+  a.tabs.get(job.tabId).url = 'https://chatgpt.com/c/research';
+  sender.url = 'https://chatgpt.com/c/research';
+  assert.equal((await a.send({ type: 'research-launch-job' }, sender)).job.state, 'sending');
+  assert.equal((await a.send({ type: 'research-launch-submitted', id: job.id }, sender)).ok, true);
+  assert.equal(a.local.researchLaunchRecovery[job.tabId].conversationUrl, sender.url);
+  assert.equal((await a.send(publish(job), a.report(job.tabId))).ok, true);
+});
+
+test('submitted job persists before routing and binds using the live top-level frame', async () => {
+  const a = app();
+  const { job } = await a.start();
+  const sender = a.host(job.tabId);
+  sender.tab.url = 'https://chatgpt.com/';
+  a.tabs.get(job.tabId).url = sender.tab.url;
+  await a.send({ type: 'claim-research-launch', id: job.id }, sender);
+  await a.send({ type: 'research-launch-sending', id: job.id }, sender);
+  await a.send({ type: 'research-launch-submitted', id: job.id }, sender);
+  assert.equal(a.local.researchLaunchRecovery[job.tabId]?.state, 'submitted');
+  delete a.session['researchLaunch:' + job.tabId];
+  a.restart();
+  a.tabs.get(job.tabId).url = 'https://chatgpt.com/c/research';
+  assert.equal((await a.send({ type: 'research-launch-job' }, sender)).job.state, 'submitted');
+  assert.equal(a.local.researchLaunchRecovery[job.tabId].conversationUrl, 'https://chatgpt.com/c/research');
+  assert.equal((await a.send(publish(job), a.report(job.tabId))).ok, true);
+});
+
+test('temporary frame lookup failure preserves recovery for a later retry', async () => {
+  const a = app();
+  const job = await submitted(a);
+  delete a.session['researchLaunch:' + job.tabId];
+  a.restart();
+  a.setFrameUnavailable(true);
+  const interrupted = await a.send({ type: 'research-launch-job' }, a.report(job.tabId));
+  assert.equal(interrupted.ok, false);
+  assert.match(interrupted.error, /reconnecting/);
+  assert.equal(a.local.researchLaunchRecovery[job.tabId].state, 'submitted');
+  a.setFrameUnavailable(false);
+  assert.equal((await a.send({ type: 'research-launch-job' }, a.report(job.tabId))).job.state, 'submitted');
+  assert.equal((await a.send(publish(job), a.report(job.tabId))).ok, true);
+});
+
+
+test('unbound recovery refuses a different window and updates refresh a sending handoff', async () => {
+  const a = app();
+  const { job } = await a.start();
+  const sender = a.host(job.tabId);
+  sender.tab.url = 'https://chatgpt.com/';
+  a.tabs.get(job.tabId).url = sender.tab.url;
+  await a.send({ type: 'claim-research-launch', id: job.id }, sender);
+  await a.send({ type: 'research-launch-sending', id: job.id }, sender);
+  delete a.session['researchLaunch:' + job.tabId];
+  a.restart();
+  a.update();
+  await new Promise(setImmediate);
+  assert.deepEqual(a.calls.filter(call => call[0] === 'reload'), [['reload', job.tabId]]);
+  delete a.session['researchLaunch:' + job.tabId];
+  a.tabs.get(job.tabId).windowId++;
+  assert.equal((await a.send({ type: 'research-launch-job' }, sender)).job, null);
+  assert.equal(a.local.researchLaunchRecovery[job.tabId], undefined);
+});
+
+test('temporary local-chatgpt routes bind to the permanent conversation after submission', async () => {
+  for (const temporary of ['local-chatgpt%3A8d71d401-59f0-4708-943a-b5b4c109b2f4', 'local-chatgpt:8d71d401-59f0-4708-943a-b5b4c109b2f4']) {
+    const a = app();
+    const { job } = await a.start();
+    const sender = a.host(job.tabId);
+    sender.url = sender.tab.url = a.tabs.get(job.tabId).url = 'https://chatgpt.com/c/' + temporary;
+    await a.send({ type: 'claim-research-launch', id: job.id }, sender);
+    await a.send({ type: 'research-launch-sending', id: job.id }, sender);
+    await a.send({ type: 'research-launch-submitted', id: job.id }, sender);
+    assert.equal((await a.send({ type: 'research-launch-job' }, sender)).job.state, 'submitted');
+    a.tabs.get(job.tabId).url = 'https://chatgpt.com/c/research';
+    assert.equal((await a.send({ type: 'research-launch-job' }, a.report(job.tabId))).job?.state, 'submitted');
+    assert.equal(a.local.researchLaunchRecovery[job.tabId].conversationUrl, 'https://chatgpt.com/c/research');
+    assert.equal((await a.send(publish(job), a.report(job.tabId))).ok, true);
+  }
+});
+
+test('legacy jobs pinned to temporary routes recover with and without session storage', async () => {
+  for (const clearSession of [false, true]) {
+    const a = app();
+    const job = await submitted(a);
+    const temporary = 'https://chatgpt.com/c/local-chatgpt%3A8d71d401-59f0-4708-943a-b5b4c109b2f4';
+    a.local.researchLaunchRecovery[job.tabId].conversationUrl = temporary;
+    a.session['researchLaunch:' + job.tabId].conversationUrl = temporary;
+    if (clearSession) delete a.session['researchLaunch:' + job.tabId];
+    a.restart();
+    assert.equal((await a.send({ type: 'research-launch-job' }, a.report(job.tabId))).job?.state, 'submitted');
+    assert.equal(a.local.researchLaunchRecovery[job.tabId].conversationUrl, 'https://chatgpt.com/c/research');
+    assert.equal((await a.send(publish(job), a.report(job.tabId))).ok, true);
+    a.tabs.get(job.tabId).url = 'https://chatgpt.com/c/unrelated';
+    assert.equal((await a.send({ type: 'research-launch-job' }, a.report(job.tabId))).job, null);
+  }
 });
