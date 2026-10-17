@@ -1,9 +1,12 @@
 /* A window-wide file drop target; the upload itself remains ChatGPT-native.
-   Honor custom composer swatches and otherwise inherit the active page theme. */
+   Prefer explicit composer overrides, then ChatGPT's live accent and surfaces.
+   Avoid pinning a purple accent or light-mode colors when the theme changes. */
 #ghrc-file-drop-overlay {
-  --ghrc-drop-accent: var(--ghrc-composer-focus-ring, var(--text-accent, #a97dee));
-  --ghrc-drop-surface: var(--ghrc-composer-surface, var(--main-surface-primary, #fff));
-  --ghrc-drop-text: var(--ghrc-composer-text, var(--text-primary, #202020));
+  --ghrc-drop-accent: var(--ghrc-composer-focus-ring,
+    var(--ghrc-composer-surface-border,
+      var(--theme-submit-btn-bg, var(--text-accent, var(--text-primary, CanvasText)))));
+  --ghrc-drop-surface: var(--ghrc-composer-surface, var(--main-surface-primary, Canvas));
+  --ghrc-drop-text: var(--ghrc-composer-text, var(--text-primary, CanvasText));
   position: fixed;
   inset: 0;
   z-index: 2147483646;
@@ -51,10 +54,6 @@
 #ghrc-file-drop-overlay .ghrc-file-drop-detail { opacity: .76; }
 #ghrc-file-drop-overlay[data-ghrc-drop-error] .ghrc-file-drop-card {
   border-style: solid;
-}
-html.dark #ghrc-file-drop-overlay {
-  --ghrc-drop-surface: var(--ghrc-composer-surface, var(--main-surface-primary, #262626));
-  --ghrc-drop-text: var(--ghrc-composer-text, var(--text-primary, #f7f7f7));
 }
 @media (prefers-reduced-motion: reduce) {
   #ghrc-file-drop-overlay { backdrop-filter: none; }
