@@ -43,14 +43,10 @@
     };
   }
 
-  // Rows of twelve dots keep long durations readable without changing the
-  // original accessible label, tooltip, or disclosure-click target.
+  // The browser wraps between dots only when the conversation width runs out,
+  // rather than inserting a fixed line break every twelve minutes.
   function dotsFor(minuteCount) {
-    const rows = [];
-    for (let start = 0; start < minuteCount; start += 12) {
-      rows.push(Array(Math.min(12, minuteCount - start)).fill("•").join(" "));
-    }
-    return rows.join("\n");
+    return Array(minuteCount).fill("•").join(" ");
   }
 
   function restore(element) {
