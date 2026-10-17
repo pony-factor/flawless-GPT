@@ -20,18 +20,18 @@ html[data-ghrc-link-preview="left"] {
 .ghrc-link-with-actions {
   display: inline-block;
   max-width: 100%;
-  vertical-align: bottom;
+  vertical-align: text-bottom;
 }
 
 /* ChatGPT's link wrapper can reserve only one line even after the URL wraps. */
-main span:has(> .ghrc-link-with-actions) {
+main span:has(> a + .ghrc-link-with-actions) {
   display: inline !important;
   height: auto !important;
   max-height: none !important;
   white-space: normal !important;
 }
 
-.ghrc-link-with-actions > a {
+a:has(+ .ghrc-link-with-actions) {
   display: inline !important;
   white-space: normal !important;
   overflow-wrap: anywhere !important;
@@ -39,14 +39,22 @@ main span:has(> .ghrc-link-with-actions) {
   padding-inline-end: 30px;
 }
 
-.ghrc-link-with-actions > .ghrc-link-actions {
+.ghrc-link-with-actions {
   /* Occupy the link's trailing padding so the button follows its final line. */
   margin-inline: -27px 1px;
 }
 
-.ghrc-link-has-punctuation > a {
+a:has(+ .ghrc-link-has-punctuation) {
   padding-inline-end: 0 !important;
   margin-inline-end: 0 !important;
+}
+
+.ghrc-link-with-actions.ghrc-link-has-punctuation {
+  margin-inline: 0;
+}
+
+.ghrc-link-has-punctuation > .ghrc-link-actions {
+  margin-inline: -27px 1px;
 }
 
 .ghrc-link-trailing-punctuation {
