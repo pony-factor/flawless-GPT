@@ -2306,6 +2306,7 @@ test('Enter during queued delivery queues the overlay text without losing newer 
 
 test('details sidebar completion cannot release a queued prompt during main-conversation generation', async () => {
   const p = await fixture({ active: true });
+  await p.locator('[data-composer-markdown]').fill('After the main reply');
   await p.evaluate(() => {
     document.getElementById('turns').setAttribute('aria-label', 'Conversation');
     const turn = document.querySelector('[data-testid^="conversation-turn-"]:last-child');
@@ -2317,9 +2318,8 @@ test('details sidebar completion cannot release a queued prompt during main-conv
     details.innerHTML = '<div data-message-author-role="assistant"><button aria-label="Copy">Copy details</button></div>';
     document.body.append(details);
   });
-  await p.locator('[data-composer-markdown]').fill('After the main reply');
   await p.locator('[data-composer-markdown]').press('Enter');
-  await p.locator('.ghrc-message-queue-editor').waitFor();
+  await p.locator('.ghrc-message-queue-editor').waitFor({ timeout: 2000 });
   await p.waitForTimeout(2000);
   assert.deepEqual(await p.evaluate(() => sent), []);
   assert.equal(await p.evaluate(() => stops), 0);
