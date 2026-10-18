@@ -16,7 +16,8 @@ before(async () => {
   for (const directory of ["js", "css", "vendor/pdfjs"]) {
     fs.mkdirSync(path.join(extension, directory), { recursive: true });
   }
-  for (const file of ["js/pdf-preview.mjs", "js/dashboard/highlighted-pages-worker.js", "js/settings/highlighted-pages-options.js", "js/dashboard/highlighted-pages.js", "css/highlighted-pages.css", "css/options.css", "css/styles.css"]) {
+  for (const file of ["js/links/pdf-preview.mjs", "js/dashboard/highlighted-pages-worker.js", "js/settings/highlighted-pages-options.js", "js/dashboard/highlighted-pages.js", "css/highlighted-pages.css", "css/options.css", "css/styles.css"]) {
+    fs.mkdirSync(path.dirname(path.join(extension, file)), { recursive: true });
     fs.copyFileSync(path.join(root, file), path.join(extension, file));
   }
   fs.cpSync(path.join(root, "vendor/pdfjs"), path.join(extension, "vendor/pdfjs"), { recursive: true });

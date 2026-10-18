@@ -98,7 +98,7 @@
     const preview = response.preview;
     if (preview.documentType === "pdf") {
       showStatus("Rendering PDF first page…");
-      const { renderPdfPreview } = await import("./pdf-preview.mjs");
+      const { renderPdfPreview } = await import("../links/pdf-preview.mjs");
       preview.imageDataUrl = await renderPdfPreview(preview.url);
     }
     return preview;

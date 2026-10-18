@@ -339,3 +339,26 @@ The setting works in both the browser popup and Full settings, updates the
 shortcut hint immediately, and includes **Reset** to restore Alt+R. A plain
 shortcut key leaves normal typing, deletion, and editing alone while a text
 field is active. Browser-reserved keyboard combinations may be unavailable.
+
+## JavaScript organization
+
+Scripts live in feature folders under `js/`. The manifest and extension HTML
+pages declare their loading order; the background entry point is
+`js/core/background.js`. Keep that order when adding or moving scripts.
+
+| Folder | Responsibility |
+| --- | --- |
+| `core/` | Extension lifecycle, route events, and background entry points |
+| `chat/` | Conversation display, model controls, recovery, and notices |
+| `composer/` | Input styling, focus, clipboard sending, uploads, and message queue |
+| `sidebar/` | Chat history dates, loading, collapse, and tab state |
+| `dashboard/` | Repositories, account columns, avatars, pins, and highlighted pages |
+| `links/` | Citations, previews, split views, image recovery, and URL cleanup |
+| `github/` | GitHub authentication, encrypted token storage, and GitHub page tweaks |
+| `research/` | Research allowances, launching, importing, and publishing |
+| `settings/` | Popup, options pages, feature preferences, and personalization |
+| `launchers/` | Spellcheck, YouTube, and shortcut launchers |
+| `games/` | 2048 game and keyboard handling |
+
+Worker `importScripts()` paths resolve relative to `js/core/background.js`,
+including calls made by imported scripts. Tests refer directly to feature paths.

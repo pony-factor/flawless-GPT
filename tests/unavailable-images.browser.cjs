@@ -92,7 +92,7 @@ test('recover DIL citations and catalog artwork after an original image fails', 
         return { ok: true, url: message.url, html: '<table><tr><td id="End_Zone">End Zone</td><td><img alt="earth" data-relevant="0" data-src="https://pictures.example/icon.png"></td><td><img alt="End Zone ID S8E1" data-relevant="1" data-src="https://pictures.example/pony.png"></td></tr></table>' };
       } } };
     });
-    for (const file of ['image-recovery-main.js', 'unavailable-images.js']) await page.addScriptTag({ content: fs.readFileSync(path.join(__dirname, '../js', file), 'utf8') });
+    for (const file of ['image-recovery-main.js', 'unavailable-images.js']) await page.addScriptTag({ content: fs.readFileSync(path.join(__dirname, '../js/links', file), 'utf8') });
     await page.waitForFunction(() => document.querySelector('#image img')?.naturalWidth === 1);
     assert.equal(await page.locator('#image img').getAttribute('src'), 'https://pictures.example/pony.png');
     assert.equal(await page.evaluate(() => window.sourceUrl), 'https://catalog.example/ponies');

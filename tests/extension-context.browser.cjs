@@ -63,7 +63,7 @@ test('normal warm pins render and unpin', async () => {
 test('pending settings reject safely in display, clipboard, dashboard and spellcheck scripts', async () => {
   const p = await fixture({ delayed: true });
   await p.evaluate(() => document.body.insertAdjacentHTML('beforeend', '<section id="github-repositories-for-chatgpt"><footer class="ghrc-dashboard-footer"></footer></section>'));
-  for (const script of ['compact-header', 'collapse-sidebar', 'chat-display', 'clipboard-send', 'content', 'spellcheck-launcher', 'force-high-thinking', 'owner-grid', 'hide-cookie-preferences', 'chatgpt-disclaimer', 'block-voice-prompts', 'youtube-search', 'highlighted-pages']) {
+  for (const script of ['chat/compact-header', 'sidebar/collapse-sidebar', 'chat/chat-display', 'composer/clipboard-send', 'dashboard/content', 'launchers/spellcheck-launcher', 'chat/force-high-thinking', 'dashboard/owner-grid', 'chat/hide-cookie-preferences', 'chat/chatgpt-disclaimer', 'chat/block-voice-prompts', 'launchers/youtube-search', 'dashboard/highlighted-pages']) {
     await p.addScriptTag({ content: read(`js/${script}.js`) });
   }
   await p.evaluate(() => {
@@ -101,10 +101,10 @@ test('the lifecycle bootstrap runs before API-consuming content scripts', () => 
   assert.equal(early.js[0], 'js/core/extension-context.js');
 });
 
-for (const script of ['avatar-cache-ui', 'message-queue']) {
+for (const script of ['dashboard/avatar-cache-ui', 'composer/message-queue']) {
   test(`${script} handles a pending request rejected during reload`, async () => {
     const p = await fixture({ delayed: true });
-    if (script === 'avatar-cache-ui') await p.evaluate(() => {
+    if (script === 'dashboard/avatar-cache-ui') await p.evaluate(() => {
       document.body.insertAdjacentHTML('beforeend', '<section id="github-repositories-for-chatgpt"><img class="ghrc-owner-avatar" src="https://avatars.githubusercontent.com/u/1"></section>');
     });
     await p.addScriptTag({ content: read(`js/${script}.js`) });

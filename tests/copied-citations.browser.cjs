@@ -38,7 +38,7 @@ test('response Copy preserves all citation destinations in text and HTML and sta
       document.querySelector('#code-copy').onclick = () => navigator.clipboard.writeText('Scooch\n+2');
     });
     for (const file of ['clipboard-utm-sanitizer', 'citation-links-main']) {
-      await page.addScriptTag({ content: fs.readFileSync(path.join(__dirname, `../js/${file}.js`), 'utf8') });
+      await page.addScriptTag({ content: fs.readFileSync(path.join(__dirname, `../js/links/${file}.js`), 'utf8') });
     }
     await page.locator('[data-testid="copy-turn-btn"]').click();
     const copied = await page.evaluate(() => writes[0]);
