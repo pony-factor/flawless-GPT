@@ -24,7 +24,7 @@ test('only the observed completed prefix-only state is a candidate', () => {
     e => { e.turn.items.push({ type: 'image-generation' }); },
     e => { e.turn.items[1].items.push({ type: 'reasoning' }); },
     e => { e.turn.items[1].items.push({ type: 'reasoning', completed: false }); },
-    e => { e.turn.items[1].items.push({ type: 'assistant-message', completed: true }); },
+    e => { e.turn.items[1].items.push({ type: 'assistant-message', completed: false }); },
     e => { e.turn.items[1].items.push({ type: 'future-renderer', completed: true }); },
     e => { e.turn.items[1].completed = false; },
     e => { e.turn.items.pop(); },
@@ -32,6 +32,18 @@ test('only the observed completed prefix-only state is a candidate', () => {
     const entry = prefix(); mutate(entry);
     assert.equal(missingAnswer(entry), false);
   }
+});
+
+test('completed tool reasoning without a top-level answer is recoverable', () => {
+  const entry = prefix();
+  entry.turn.items[1].items = [
+    { type: 'assistant-message', completed: true },
+    { type: 'mcp-tool-call', completed: false },
+    { type: 'reasoning', completed: true },
+  ];
+  assert.equal(missingAnswer(entry), true);
+  entry.turn.items.push({ type: 'assistant-message', completed: true });
+  assert.equal(missingAnswer(entry), false);
 });
 
 test('finds an earlier missing answer on the selected branch after later replies', () => {

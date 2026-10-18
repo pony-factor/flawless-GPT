@@ -8,15 +8,17 @@
   function missingAnswer(entry) {
     const turn = entry?.turn;
     if (turn?.status !== "complete" || entry.errorMessage || !Array.isArray(turn.items)) return false;
-    // Unknown item kinds may be answers (images, tools, future renderers).
-    // Completed reasoning can contain steps even when the final answer is absent.
-    // Keep unknown or unfinished children out of this conservative recovery path.
+    // Completed reasoning groups also contain commentary and tool calls. Saved
+    // MCP calls can retain completed:false even after their group and turn finish.
+    // Only recognize these observed children; top-level answers still disqualify
+    // the turn, and recovery still requires saved final text on its selected branch.
     return turn.items.some(item => item.type === "user-message")
       && turn.items.some(item => item.type === "chatgpt-reasoning-group" && item.completed)
       && turn.items.every(item => item.type === "user-message"
         || item.type === "chatgpt-reasoning-group" && item.completed
           && Array.isArray(item.items)
-          && item.items.every(step => step.type === "reasoning" && step.completed === true));
+          && item.items.every(step => (step.type === "reasoning" || step.type === "assistant-message")
+            && step.completed === true || step.type === "mcp-tool-call"));
   }
 
   function answerForTurn(payload, userId) {
