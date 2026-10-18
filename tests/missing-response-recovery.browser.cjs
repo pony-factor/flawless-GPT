@@ -14,7 +14,7 @@ before(async () => {
 });
 after(async () => { await browser?.close(); });
 
-async function fixture({ draft = '', active = false, queued = false, fail = false, delayed = false, remainBroken = false, reasoningSteps = 0, earlierMissing = false, savedText = 'Saved answer', noMessageId = false } = {}) {
+async function fixture({ draft = '', active = false, queued = false, fail = false, delayed = false, remainBroken = false, reasoningSteps = 0, toolReasoning = false, earlierMissing = false, savedText = 'Saved answer', noMessageId = false } = {}) {
   const p = await browser.newPage();
   let loads = 0;
   let reads = 0;
@@ -52,6 +52,7 @@ async function fixture({ draft = '', active = false, queued = false, fail = fals
         const turn = document.querySelector('[data-turn-key]');
         const restored = sessionStorage.getItem('ghrc-missing-response-recovery:test');
         const items = [{type:'user-message'}, {type:'chatgpt-reasoning-group',completed:true,items:Array.from({length:${reasoningSteps}},()=>({type:'reasoning',completed:true}))}];
+        if (${toolReasoning}) items[1].items.push({type:'assistant-message',completed:true},{type:'mcp-tool-call',completed:false});
         if(restored && !${remainBroken}) { items.push({type:'assistant-message'}); document.getElementById('answer').textContent = 'Saved answer'; }
         turn.__reactFiber$fixture = {memoizedProps:{entry:{turn:{status:'complete',items}}}};
         if (${earlierMissing}) {
@@ -92,6 +93,16 @@ test('recovers completed reasoning despite an earlier turn with no saved answer'
   await f.p.waitForFunction(() => document.querySelector('[data-ghrc-recovered-answer]')?.textContent === 'Saved answer');
   assert.equal(f.loads(), 1);
   assert.equal(f.reads(), 1);
+  assert.deepEqual(f.errors, []);
+  await f.p.close();
+});
+
+test('recovers a completed tool turn while preserving the draft', async () => {
+  const f = await fixture({ toolReasoning: true, draft: 'Keep my draft' });
+  await settle(f.p);
+  await f.p.waitForFunction(() => document.querySelector('[data-ghrc-recovered-answer]')?.textContent === 'Saved answer');
+  assert.equal(await f.p.locator('textarea').inputValue(), 'Keep my draft');
+  assert.equal(f.loads(), 1);
   assert.deepEqual(f.errors, []);
   await f.p.close();
 });
