@@ -822,3 +822,27 @@ test('native Markdown updates can remove decorated links from their original par
   assert.equal(await page.locator('.ghrc-link-sidebar-button').getAttribute('data-href'), 'https://example.org/updated');
   await page.close();
 });
+
+
+test('details source chips retain their layout with the sidebar action on the same line', async () => {
+  const page = await fixture({ openExternalLinksInSplitView: true });
+  await page.locator('#source').evaluate(link => {
+    link.parentElement.style.cssText = 'width:360px';
+    link.style.cssText = 'display:inline-flex;justify-content:space-between';
+    link.dataset.testid = 'chatgpt-citation';
+    link.setAttribute('aria-label', 'League of Legends: Biography, https://example.org/source, 1 additional source');
+    link.innerHTML = '<span>League of Legends…</span><span>+1</span>';
+  });
+  await page.locator('#source.ghrc-source-citation').waitFor();
+  const boxes = await page.evaluate(() => {
+    const link = document.getElementById('source');
+    return { link: link.getBoundingClientRect().toJSON(),
+      count: link.lastElementChild.getBoundingClientRect().toJSON(),
+      action: link.nextElementSibling.getBoundingClientRect().toJSON() };
+  });
+  assert.ok(boxes.action.left >= boxes.link.right, JSON.stringify(boxes));
+  assert.ok(Math.abs(boxes.action.top - boxes.link.top) < 5, JSON.stringify(boxes));
+  assert.ok(boxes.count.right <= boxes.link.right, JSON.stringify(boxes));
+  assert.ok(boxes.action.right <= 360, JSON.stringify(boxes));
+  await page.close();
+});

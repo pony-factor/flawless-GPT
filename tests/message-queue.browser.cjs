@@ -2302,3 +2302,36 @@ test('Enter during queued delivery queues the overlay text without losing newer 
   assert.deepEqual(p.errors, []);
   await p.close();
 });
+
+
+test('details sidebar completion cannot release a queued prompt during main-conversation generation', async () => {
+  const p = await fixture({ active: true });
+  await p.evaluate(() => {
+    document.getElementById('turns').setAttribute('aria-label', 'Conversation');
+    const turn = document.querySelector('[data-testid^="conversation-turn-"]:last-child');
+    turn.insertAdjacentHTML('beforeend', '<div role="status">•••</div>');
+    // The native composer can briefly show Send when details opens.
+    button.dataset.testid = 'send-button';
+    button.setAttribute('aria-label', 'Send prompt');
+    const details = document.createElement('aside');
+    details.innerHTML = '<div data-message-author-role="assistant"><button aria-label="Copy">Copy details</button></div>';
+    document.body.append(details);
+  });
+  await p.locator('[data-composer-markdown]').fill('After the main reply');
+  await p.locator('[data-composer-markdown]').press('Enter');
+  await p.locator('.ghrc-message-queue-editor').waitFor();
+  await p.waitForTimeout(2000);
+  assert.deepEqual(await p.evaluate(() => sent), []);
+  assert.equal(await p.evaluate(() => stops), 0);
+  await p.evaluate(() => {
+    document.querySelector('[role="status"]').remove();
+    document.querySelector('#turns [data-testid^="conversation-turn-"]:last-child')
+      .insertAdjacentHTML('beforeend', '<button data-testid="copy-turn-action-button">Copy</button>');
+    window.active = false;
+    update();
+  });
+  await sentCount(p, 1);
+  assert.deepEqual(await p.evaluate(() => sent), ['After the main reply']);
+  assert.deepEqual(p.errors, []);
+  await p.close();
+});

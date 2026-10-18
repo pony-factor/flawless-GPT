@@ -753,6 +753,10 @@
   function ensureLinkActions(link) {
     const existing = linkActions.get(link);
     const url = externalUrlForLink(link);
+    // Details-panel source chips contain their own logo, label and count.
+    // Preserve that layout instead of treating the whole chip as prose.
+    link.classList.toggle('ghrc-source-citation', Boolean(url
+      && link.matches('[data-testid="chatgpt-citation"]')));
     if (url && link.closest('main') && link.textContent.trim()
         && !link.querySelector('img, picture, video, canvas')) {
       // Native text links append their new-tab SVG after the link label.

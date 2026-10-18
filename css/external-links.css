@@ -39,6 +39,19 @@ a:has(+ .ghrc-link-with-actions) {
   padding-inline-end: 30px;
 }
 
+a.ghrc-source-citation:has(+ .ghrc-link-with-actions) {
+  display: inline-flex !important;
+  max-width: min(15rem, calc(100% - 32px));
+  vertical-align: middle;
+  white-space: nowrap !important;
+  padding-inline-end: 0 !important;
+}
+
+a.ghrc-source-citation + .ghrc-link-with-actions {
+  margin-inline: 0;
+  vertical-align: middle;
+}
+
 .ghrc-link-with-actions {
   /* Occupy the link's trailing padding so the button follows its final line. */
   margin-inline: -27px 1px;
