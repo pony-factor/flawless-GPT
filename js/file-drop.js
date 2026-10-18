@@ -132,7 +132,7 @@
       '<div class="ghrc-file-drop-card">' +
       '<span class="ghrc-file-drop-icon" aria-hidden="true">＋</span>' +
       '<strong class="ghrc-file-drop-title">Drop files to attach</strong>' +
-      '<span class="ghrc-file-drop-detail">Add files to your message using the + attachment flow</span>' +
+      '<span class="ghrc-file-drop-detail" hidden></span>' +
       '</div>';
     document.body.append(overlay);
     return overlay;
@@ -160,8 +160,7 @@
     clearTimer();
     node.removeAttribute("data-ghrc-drop-error");
     node.querySelector(".ghrc-file-drop-title").textContent = "Drop files to attach";
-    node.querySelector(".ghrc-file-drop-detail").textContent =
-      "Add files to your message using the + attachment flow";
+    node.querySelector(".ghrc-file-drop-detail").hidden = true;
     node.hidden = false;
   }
 
@@ -172,6 +171,7 @@
     node.setAttribute("data-ghrc-drop-error", "");
     node.querySelector(".ghrc-file-drop-title").textContent = title;
     node.querySelector(".ghrc-file-drop-detail").textContent = message;
+    node.querySelector(".ghrc-file-drop-detail").hidden = false;
     node.hidden = false;
     feedbackTimer = setTimeout(reset, 3500);
   }
