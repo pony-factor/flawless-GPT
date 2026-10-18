@@ -36,17 +36,6 @@ html[data-ghrc-composer-placeholder] :is(#prompt-textarea, [data-composer-markdo
 }
 
 
-/* Give the thread real scrollable content after the newest turn.
-   A sibling spacer survives layouts where a child margin is collapsed,
-   clipped, or applied inside ChatGPT's turn wrapper. */
-[data-ghrc-conversation-tail-spacer] {
-  display: block !important;
-  flex: 0 0 clamp(10rem, 35vh, 28rem) !important;
-  height: clamp(10rem, 35vh, 28rem) !important;
-  min-height: clamp(10rem, 35vh, 28rem) !important;
-  pointer-events: none !important;
-}
-
 /* Wrap assistant-rendered prose and preformatted code without changing the composer,
    user messages, or other controls. CSS is enabled before preferences load. */
 html:not([data-ghrc-disable-response-wrap]) [data-message-author-role="assistant"] :is(.markdown, .prose, p, li, blockquote, td, th, a, code) {

@@ -65,7 +65,8 @@ async function fixture({ draft = '', active = false, queued = false, fail = fals
       </script>` });
   });
   await p.goto('https://recovery.test/c/test');
-  return { p, errors, loads: () => loads, reads: () => reads, release };
+  return { p, errors, loads: () => loads, reads: () => reads, release,
+    setSavedText: text => { savedText = text; } };
 }
 
 async function settle(p) {
@@ -153,6 +154,21 @@ test('a removed recovery is restored without navigation or another request', asy
   await f.p.close();
 });
 
+test('refreshes an incomplete saved final even when its message ID stays the same', async () => {
+  const f = await fixture({ savedText: 'Closing paragraph', draft: 'Keep my draft', active: true });
+  await settle(f.p);
+  assert.equal(await f.p.locator('[data-ghrc-recovered-answer]').textContent(), 'Closing paragraph');
+  f.setSavedText('Opening paragraph\n\nClosing paragraph');
+  await f.p.clock.runFor(16_000);
+  await f.p.waitForFunction(() => document.querySelector('[data-ghrc-recovered-answer]')?.textContent.includes('Opening paragraph'));
+  assert.equal(f.reads(), 2);
+  assert.equal(f.loads(), 1);
+  assert.equal(await f.p.locator('textarea').inputValue(), 'Keep my draft');
+  assert.equal(await f.p.locator('[aria-label="Stop"]').count(), 1);
+  assert.deepEqual(f.errors, []);
+  await f.p.close();
+});
+
 test('a late native answer cancels recovery after the network read', async () => {
   const f = await fixture({ delayed: true });
   await settle(f.p);
@@ -190,7 +206,7 @@ test('restores full saved text safely when only the mapping node has an ID', asy
   assert.equal(await f.p.locator('[data-ghrc-recovered-answer] pre code').textContent(), 'indented code\n');
   assert.equal(await f.p.locator('[data-ghrc-recovered-answer] script').count(), 0);
   await f.p.clock.runFor(60_000);
-  assert.equal(f.reads(), 1);
+  assert.equal(f.reads(), 4);
   assert.equal(f.loads(), 1);
   assert.deepEqual(f.errors, []);
   await f.p.close();

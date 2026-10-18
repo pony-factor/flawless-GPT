@@ -189,7 +189,9 @@
     }
     if (savedConversation) {
       repair(elements, savedConversation);
-      if (elements.every(element => answerForTurn(savedConversation, element.getAttribute("data-turn-key")))) return;
+      // A successfully saved final message can still be a partial snapshot.
+      // Refresh while native rendering remains broken, even when every turn
+      // already has a cached answer, so later saved text replaces that snapshot.
     }
     if (pending || Date.now() < retryAfter) return;
     pending = true;
