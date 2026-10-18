@@ -93,7 +93,10 @@
     // that terminal event, leaving its click-through "Add anything" veil stuck.
     // Give the page a file-free terminal drop to release its drag UI without
     // asking it to upload the same files a second time.
-    const target = event.target;
+    // Attaching can synchronously replace the drop target. Dispatch from the
+    // nearest surviving ancestor so cleanup still reaches React's root.
+    const target = event.composedPath().find(node => node instanceof Element && node.isConnected)
+      || document.body;
     if (!target?.dispatchEvent) return;
     try {
       // Native drag-leave handlers can require the original Files metadata and

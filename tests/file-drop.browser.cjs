@@ -161,6 +161,25 @@ test("native file-drag UI receives a viewport exit with the original transfer", 
   } finally { await page.close(); }
 });
 
+test("native cleanup still bubbles when the upload replaces the original drop target", async () => {
+  const page = await fixture();
+  try {
+    await page.evaluate(() => {
+      window.nativeCleanup = [];
+      document.getElementById("composer").addEventListener("drop", event => {
+        window.nativeCleanup.push(event.dataTransfer.files.length);
+      });
+      document.querySelector('input[type="file"]').addEventListener("change", () => {
+        document.getElementById("prompt-textarea").remove();
+      });
+    });
+    await drag(page, "drop", ["photo.png"]);
+    assert.deepEqual(await page.evaluate(() => window.uploaded), ["photo.png"]);
+    assert.deepEqual(await page.evaluate(() => window.nativeCleanup), [0]);
+    assert.equal(await page.locator('[data-composer-attachments] button').count(), 1);
+  } finally { await page.close(); }
+});
+
 test("overlay follows ChatGPT's live accent and surfaces, with independent composer overrides", async () => {
   const page = await fixture();
   try {
