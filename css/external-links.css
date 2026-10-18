@@ -39,6 +39,16 @@ a:has(+ .ghrc-link-with-actions) {
   padding-inline-end: 30px;
 }
 
+/* Image-source pills need their native flex alignment for the URL label. */
+a.bg-media-control-background:has(+ .ghrc-link-with-actions) {
+  display: inline-flex !important;
+}
+
+a.bg-media-control-background + .ghrc-link-with-actions {
+  display: inline-flex;
+  align-items: center;
+}
+
 a.ghrc-source-citation:has(+ .ghrc-link-with-actions) {
   display: inline-flex !important;
   max-width: min(15rem, calc(100% - 32px));

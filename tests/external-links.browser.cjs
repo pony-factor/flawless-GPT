@@ -890,3 +890,24 @@ test('details source counts keep padding inside the citation pill', async () => 
   assert.ok(Math.abs((boxes.count.top + boxes.count.bottom) / 2 - (boxes.pill.top + boxes.pill.bottom) / 2) <= 1, JSON.stringify(boxes));
   await page.close();
 });
+
+test('image-source URL text remains vertically centered beside its action', async () => {
+  const page = await fixture({ openExternalLinksInSplitView: true });
+  await page.addStyleTag({ content: '*{box-sizing:border-box}' });
+  await page.locator('#source').evaluate(link => {
+    link.parentElement.style.cssText = 'display:flex;font:16px/26px sans-serif';
+    link.classList.add('bg-media-control-background');
+    link.style.cssText = 'display:flex;align-items:center;height:24px;font:12px/16px sans-serif;padding-inline:8px';
+    link.innerHTML = '<span class="truncate">lol-walpapercave.blogspot.com</span>';
+  });
+  await page.locator('#source + .ghrc-link-with-actions').waitFor();
+  const centers = await page.locator('#source').evaluate(link => {
+    const range = document.createRange();
+    range.selectNodeContents(link.firstElementChild);
+    const text = range.getBoundingClientRect();
+    const action = link.nextElementSibling.querySelector('.ghrc-link-actions').getBoundingClientRect();
+    return { text: text.y + text.height / 2, action: action.y + action.height / 2 };
+  });
+  assert.ok(Math.abs(centers.text - centers.action) <= 1, JSON.stringify(centers));
+  await page.close();
+});
