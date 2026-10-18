@@ -870,3 +870,23 @@ test('trailing link punctuation shares the surrounding text baseline', async () 
   assert.ok(Math.abs(boxes.link.right - boxes.punctuation.left) < 0.5, JSON.stringify(boxes));
   await page.close();
 });
+
+
+test('details source counts keep padding inside the citation pill', async () => {
+  const page = await fixture({ openExternalLinksInSplitView: true });
+  await page.locator('#source').evaluate(link => {
+    link.dataset.testid = 'chatgpt-citation';
+    link.style.cssText = 'height:18px;padding-inline:4px 8px;font:9px/9px sans-serif';
+    link.innerHTML = '<span style="display:flex;align-items:center;height:100%"><span>League of Legends…</span><span id="source-count" style="display:flex;align-items:center;height:100%;padding-inline:4px;margin-inline-end:-4px">+1</span></span>';
+  });
+  await page.locator('#source.ghrc-source-citation').waitFor();
+  const boxes = await page.locator('#source').evaluate(link => {
+    const count = link.querySelector('#source-count');
+    const range = document.createRange();
+    range.selectNodeContents(count);
+    return { pill: link.getBoundingClientRect().toJSON(), count: range.getBoundingClientRect().toJSON() };
+  });
+  assert.ok(boxes.pill.right - boxes.count.right >= 7.5, JSON.stringify(boxes));
+  assert.ok(Math.abs((boxes.count.top + boxes.count.bottom) / 2 - (boxes.pill.top + boxes.pill.bottom) / 2) <= 1, JSON.stringify(boxes));
+  await page.close();
+});
