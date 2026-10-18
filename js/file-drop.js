@@ -96,6 +96,14 @@
     const target = event.target;
     if (!target?.dispatchEvent) return;
     try {
+      // Native drag-leave handlers can require the original Files metadata and
+      // an exit outside the viewport. An empty drop/dragend alone is ignored by
+      // those handlers. A leave carries no upload request, so keep the real
+      // transfer here without risking a duplicate attachment.
+      target.dispatchEvent(new DragEvent("dragleave", {
+        bubbles: true, cancelable: true, dataTransfer: event.dataTransfer,
+        clientX: 0, clientY: 0, relatedTarget: null,
+      }));
       const transfer = new DataTransfer();
       target.dispatchEvent(new DragEvent("drop", {
         bubbles: true, cancelable: true, dataTransfer: transfer,
