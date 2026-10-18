@@ -66,7 +66,7 @@ test('dashboard stays above Highlights on the right; plugin selection and settin
     for (const file of ['styles.css', 'highlighted-pages.css', 'deep-research-tracker.css']) {
       await page.addStyleTag({ content: fs.readFileSync(path.join(__dirname, '../css', file), 'utf8') });
     }
-    for (const file of ['deep-research-tracker.js', 'highlighted-pages.js']) {
+    for (const file of ['research/deep-research-tracker.js', 'dashboard/highlighted-pages.js']) {
       await page.addScriptTag({ content: fs.readFileSync(path.join(__dirname, '../js', file), 'utf8') });
     }
     await page.locator('#ghrc-highlighted-pages').waitFor();
@@ -150,7 +150,7 @@ test('native initialization fills the tracker automatically and clicking refresh
     });
     await page.goto('https://research.test/');
     await page.evaluate(() => { window.__ghrcExtensionContext = { active: () => true, onStop() {} }; });
-    for (const file of ['deep-research-usage.js', 'deep-research-tracker.js']) {
+    for (const file of ['research/deep-research-usage.js', 'research/deep-research-tracker.js']) {
       await page.addScriptTag({ content: fs.readFileSync(path.join(__dirname, '../js', file), 'utf8') });
     }
     const response = await page.evaluate(async () => (await fetch('/backend-api/conversation/init', { method: 'POST', body: '{}' })).json());
