@@ -59,8 +59,8 @@ async function fixture({labels=['Show sidebar','Hide sidebar'], enabled=true, ex
     window.requestAnimationFrame = () => 0;
     window.cancelAnimationFrame = () => {};
   });
-  await page.addScriptTag({content:read('js/extension-context.js')});
-  await page.addScriptTag({content:read('js/collapse-sidebar.js')});
+  await page.addScriptTag({content:read('js/core/extension-context.js')});
+  await page.addScriptTag({content:read('js/sidebar/collapse-sidebar.js')});
   return page;
 }
 for(const labels of [['Show sidebar','Hide sidebar'],['Open sidebar','Close sidebar'],['Expand sidebar','Collapse sidebar']]) {
@@ -376,7 +376,7 @@ test('the full rail below Library opens the sidebar with one mascot', async () =
   const page = await fixture();
   await page.evaluate(() => { chrome.runtime.getURL = file => 'chrome-extension://fixture/' + file; });
   await page.addStyleTag({ content: read('css/flawless-corner.css') });
-  await page.addScriptTag({ content: read('js/flawless-corner.js') });
+  await page.addScriptTag({ content: read('js/chat/flawless-corner.js') });
   await page.mouse.move(500, 20);
   await page.locator('#ghrc-flawless-corner').hover();
   await page.waitForTimeout(500);

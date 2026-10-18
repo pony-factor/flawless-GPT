@@ -4,7 +4,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const root = path.join(__dirname, "..");
-const source = fs.readFileSync(path.join(root, "js/options.js"), "utf8");
+const source = fs.readFileSync(path.join(root, "js/settings/options.js"), "utf8");
 const sharedIds = [...source.matchAll(/document\.getElementById\("([^"]+)"\)/g)]
   .map((match) => match[1]);
 

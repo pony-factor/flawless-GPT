@@ -19,10 +19,10 @@ for (const [route, width, legacy, enabled] of [
     const extension = path.join(temporary, 'extension');
     fs.mkdirSync(extension);
     const manifest = JSON.parse(fs.readFileSync(path.join(root, 'manifest.json'), 'utf8'));
-    const entry = manifest.content_scripts.find(e => e.js?.includes('js/compact-header.js'));
+    const entry = manifest.content_scripts.find(e => e.js?.includes('js/chat/compact-header.js'));
     assert.equal(entry.run_at, 'document_start');
-    assert.ok(entry.js.indexOf('js/compact-header.js') > entry.js.indexOf('js/extension-context.js'));
-    for (const file of ['js/extension-context.js', 'js/compact-header.js', 'css/compact-header.css']) {
+    assert.ok(entry.js.indexOf('js/chat/compact-header.js') > entry.js.indexOf('js/core/extension-context.js'));
+    for (const file of ['js/core/extension-context.js', 'js/chat/compact-header.js', 'css/compact-header.css']) {
       fs.mkdirSync(path.dirname(path.join(extension, file)), { recursive: true });
       fs.copyFileSync(path.join(root, file), path.join(extension, file));
     }
@@ -41,7 +41,7 @@ for (const [route, width, legacy, enabled] of [
       manifest_version: 3, name: 'Compact first paint fixture', version: '1.0', permissions: ['storage'],
       background: {service_worker: 'background.js'},
       content_scripts: [{matches:['http://127.0.0.1/*'], run_at:'document_start',
-        css:['css/compact-header.css'], js:['js/extension-context.js','delay-settings.js','js/compact-header.js']}],
+        css:['css/compact-header.css'], js:['js/core/extension-context.js','delay-settings.js','js/chat/compact-header.js']}],
     }));
     const timers = new Set();
     const server = http.createServer((request, response) => {

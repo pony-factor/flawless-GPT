@@ -5,7 +5,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 
 const source = fs.readFileSync(
-  path.join(__dirname, '../js/chatgpt-notification-settings.js'),
+  path.join(__dirname, '../js/chat/chatgpt-notification-settings.js'),
   'utf8'
 );
 

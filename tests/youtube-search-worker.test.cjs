@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 
-const source = fs.readFileSync(path.join(__dirname, '../js/youtube-search-worker.js'), 'utf8');
+const source = fs.readFileSync(path.join(__dirname, '../js/launchers/youtube-search-worker.js'), 'utf8');
 const sender = { url: 'https://chatgpt.com/', frameId: 0, tab: { id: 17 } };
 
 function worker({ failUpdate = false } = {}) {

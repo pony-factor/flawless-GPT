@@ -13,7 +13,7 @@ test('sidebar toggles stay in their tab while new documents start collapsed', as
     await context.addCookies([{
       name: 'codex_sidebar_state', value: 'expanded', url: 'http://sidebar.test/',
     }]);
-    await context.addInitScript({ path: path.join(__dirname, '../js/sidebar-tab-state.js') });
+    await context.addInitScript({ path: path.join(__dirname, '../js/sidebar/sidebar-tab-state.js') });
     const requestCookies = [];
     await context.route('http://sidebar.test/**', route => {
       requestCookies.push(route.request().headers().cookie || '');

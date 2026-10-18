@@ -18,7 +18,7 @@ test("upgrade promotions are hidden by default, detected when inserted, and rest
         },
       };
     });
-    await page.addScriptTag({ content: fs.readFileSync(path.join(__dirname, "../js/hide-upgrade-promotions.js"), "utf8") });
+    await page.addScriptTag({ content: fs.readFileSync(path.join(__dirname, "../js/chat/hide-upgrade-promotions.js"), "utf8") });
     await page.evaluate(() => {
       document.getElementById("promotions").innerHTML =
         '<aside id="promo"><div><strong>GPT-6 Astra is built for work like this</strong><p>Upgrade to Pro for more of Astra’s stronger judgment, deeper context, and more polished results.</p><button>Upgrade to Pro</button></div><button aria-label="Close">×</button></aside>';

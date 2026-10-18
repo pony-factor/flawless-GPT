@@ -2,7 +2,7 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
-const source = fs.readFileSync(require.resolve('../js/link-preview-host.js'), 'utf8');
+const source = fs.readFileSync(require.resolve('../js/links/link-preview-host.js'), 'utf8');
 function fixture(url) {
   const frames = [];
   const body = { append: frame => frames.push(frame), textContent: '' };

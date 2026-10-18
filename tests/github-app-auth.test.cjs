@@ -125,7 +125,7 @@ test("extension rejects callback state mismatches before redeeming a login", asy
       },
     },
   };
-  vm.runInNewContext(fs.readFileSync(require.resolve("../js/github-app-auth.js"), "utf8"), context);
+  vm.runInNewContext(fs.readFileSync(require.resolve("../js/github/github-app-auth.js"), "utf8"), context);
   await assert.rejects(context.GitHubAppAuth.connect(), /invalid callback/);
   assert.deepEqual(requests, ["http://127.0.0.1:8787/health"]);
 });

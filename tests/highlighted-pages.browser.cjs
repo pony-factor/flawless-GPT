@@ -16,24 +16,24 @@ before(async () => {
   for (const directory of ["js", "css", "vendor/pdfjs"]) {
     fs.mkdirSync(path.join(extension, directory), { recursive: true });
   }
-  for (const file of ["js/pdf-preview.mjs", "js/highlighted-pages-worker.js", "js/highlighted-pages-options.js", "js/highlighted-pages.js", "css/highlighted-pages.css", "css/options.css", "css/styles.css"]) {
+  for (const file of ["js/pdf-preview.mjs", "js/dashboard/highlighted-pages-worker.js", "js/settings/highlighted-pages-options.js", "js/dashboard/highlighted-pages.js", "css/highlighted-pages.css", "css/options.css", "css/styles.css"]) {
     fs.copyFileSync(path.join(root, file), path.join(extension, file));
   }
   fs.cpSync(path.join(root, "vendor/pdfjs"), path.join(extension, "vendor/pdfjs"), { recursive: true });
   fs.writeFileSync(path.join(extension, "manifest.json"), JSON.stringify({
     manifest_version: 3, name: "PDF preview fixture", version: "1.0",
     permissions: ["storage"], host_permissions: ["http://127.0.0.1/*"],
-    background: { service_worker: "js/highlighted-pages-worker.js" },
+    background: { service_worker: "js/dashboard/highlighted-pages-worker.js" },
     content_security_policy: JSON.parse(fs.readFileSync(path.join(root, "manifest.json"))).content_security_policy,
   }));
   const options = fs.readFileSync(path.join(root, "options.html"), "utf8");
   const section = options.match(/<fieldset id="highlighted-pages-settings">[\s\S]*?<\/fieldset>/)[0];
   const template = options.match(/<template id="highlighted-page-template">[\s\S]*?<\/template>/)[0];
-  fs.writeFileSync(path.join(extension, "fixture.html"), `<!doctype html><link rel="stylesheet" href="css/options.css"><link rel="stylesheet" href="css/styles.css"><link rel="stylesheet" href="css/highlighted-pages.css">${section}${template}<div id="github-repositories-for-chatgpt"><p>Repository dashboard</p></div><script src="js/highlighted-pages-options.js"></script><script src="js/highlighted-pages.js"></script>`);
+  fs.writeFileSync(path.join(extension, "fixture.html"), `<!doctype html><link rel="stylesheet" href="css/options.css"><link rel="stylesheet" href="css/styles.css"><link rel="stylesheet" href="css/highlighted-pages.css">${section}${template}<div id="github-repositories-for-chatgpt"><p>Repository dashboard</p></div><script src="js/settings/highlighted-pages-options.js"></script><script src="js/dashboard/highlighted-pages.js"></script>`);
   const popup = fs.readFileSync(path.join(root, "popup.html"), "utf8");
   const popupSection = popup.match(/<fieldset id="highlighted-pages-settings">[\s\S]*?<\/fieldset>/)[0];
   const popupTemplate = popup.match(/<template id="highlighted-page-template">[\s\S]*?<\/template>/)[0];
-  fs.writeFileSync(path.join(extension, "popup-fixture.html"), `<!doctype html>${popupSection}${popupTemplate}<script src="js/highlighted-pages-options.js"></script>`);
+  fs.writeFileSync(path.join(extension, "popup-fixture.html"), `<!doctype html>${popupSection}${popupTemplate}<script src="js/settings/highlighted-pages-options.js"></script>`);
   context = await chromium.launchPersistentContext(path.join(temporary, "profile"), {
     executablePath: process.env.BROWSER_EXECUTABLE || "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser",
     headless: true,

@@ -28,7 +28,7 @@
     "http://*/*"
   ],
   "background": {
-    "service_worker": "js/background.js"
+    "service_worker": "js/core/background.js"
   },
   "action": {
     "default_title": "Flawless ChatGPT",
@@ -48,18 +48,18 @@
         "https://chatgpt.com/*"
       ],
       "js": [
-        "js/sidebar-loading-background.js",
-        "js/clipboard-utm-sanitizer.js",
-        "js/citation-links-main.js",
-        "js/image-recovery-main.js",
-        "js/sidebar-chat-dates-main.js",
-        "js/chatgpt-route-events.js",
+        "js/sidebar/sidebar-loading-background.js",
+        "js/links/clipboard-utm-sanitizer.js",
+        "js/links/citation-links-main.js",
+        "js/links/image-recovery-main.js",
+        "js/sidebar/sidebar-chat-dates-main.js",
+        "js/core/chatgpt-route-events.js",
         "vendor/showdown.min.js",
         "vendor/purify.min.js",
-        "js/missing-response-recovery.js",
-        "js/sidebar-tab-state.js",
-        "js/deep-research-usage.js",
-        "js/chatgpt-personalization-api.js"
+        "js/chat/missing-response-recovery.js",
+        "js/sidebar/sidebar-tab-state.js",
+        "js/research/deep-research-usage.js",
+        "js/settings/chatgpt-personalization-api.js"
       ],
       "run_at": "document_start",
       "world": "MAIN"
@@ -89,41 +89,41 @@
         "css/repository-fast-ui.css"
       ],
       "js": [
-        "js/extension-context.js",
-        "js/flawless-corner.js",
-        "js/web-commit-guidance-sync.js",
-        "js/compact-header.js",
-        "js/2048-keyboard.js",
-        "js/collapse-sidebar.js",
-        "js/sidebar-chat-dates.js",
-        "js/dashboard-visibility.js",
-        "js/disable-work-mode.js",
-        "js/disable-manual-web-search.js",
-        "js/chat-display.js",
-        "js/unavailable-images.js",
-        "js/worked-duration.js",
-        "js/hide-share-label.js",
-        "js/composer-placeholder.js",
-        "js/composer-colors.js",
-        "js/force-high-thinking.js",
-        "js/autofocus-composer.js",
-        "js/preserve-scroll-on-send.js",
-        "js/hide-background-completion-notifications.js",
-        "js/hide-usage-card.js",
-        "js/hide-upgrade-promotions.js",
-        "js/external-links.js",
-        "js/research-report-host.js",
-        "js/research-import-dialog.js",
-        "js/research-launcher.js",
-        "js/hide-cookie-preferences.js",
-        "js/chatgpt-disclaimer.js",
-        "js/block-voice-prompts.js",
-        "js/clipboard-utm-preference.js",
-        "js/avatar-cache-ui.js",
-        "js/repository-fast-ui.js",
-        "js/owner-grid.js",
-        "js/repository-search-shortcut.js",
-        "js/content.js"
+        "js/core/extension-context.js",
+        "js/chat/flawless-corner.js",
+        "js/settings/web-commit-guidance-sync.js",
+        "js/chat/compact-header.js",
+        "js/games/2048-keyboard.js",
+        "js/sidebar/collapse-sidebar.js",
+        "js/sidebar/sidebar-chat-dates.js",
+        "js/dashboard/dashboard-visibility.js",
+        "js/chat/disable-work-mode.js",
+        "js/chat/disable-manual-web-search.js",
+        "js/chat/chat-display.js",
+        "js/links/unavailable-images.js",
+        "js/chat/worked-duration.js",
+        "js/chat/hide-share-label.js",
+        "js/composer/composer-placeholder.js",
+        "js/composer/composer-colors.js",
+        "js/chat/force-high-thinking.js",
+        "js/composer/autofocus-composer.js",
+        "js/composer/preserve-scroll-on-send.js",
+        "js/chat/hide-background-completion-notifications.js",
+        "js/chat/hide-usage-card.js",
+        "js/chat/hide-upgrade-promotions.js",
+        "js/links/external-links.js",
+        "js/research/research-report-host.js",
+        "js/research/research-import-dialog.js",
+        "js/research/research-launcher.js",
+        "js/chat/hide-cookie-preferences.js",
+        "js/chat/chatgpt-disclaimer.js",
+        "js/chat/block-voice-prompts.js",
+        "js/links/clipboard-utm-preference.js",
+        "js/dashboard/avatar-cache-ui.js",
+        "js/dashboard/repository-fast-ui.js",
+        "js/dashboard/owner-grid.js",
+        "js/dashboard/repository-search-shortcut.js",
+        "js/dashboard/content.js"
       ],
       "run_at": "document_start"
     },
@@ -145,18 +145,18 @@
         "css/deep-research-tracker.css"
       ],
       "js": [
-        "js/youtube-search.js",
-        "js/wooten-link-zipp-placeholder.js",
-        "js/spellcheck-launcher.js",
-        "js/2048.js",
-        "js/clipboard-send.js",
-        "js/message-queue.js",
-        "js/file-drop.js",
-        "js/temporary-chat-inline.js",
-        "js/pinned-issues-model.js",
-        "js/pinned-issues.js",
-        "js/highlighted-pages.js",
-        "js/deep-research-tracker.js"
+        "js/launchers/youtube-search.js",
+        "js/launchers/wooten-link-zipp-placeholder.js",
+        "js/launchers/spellcheck-launcher.js",
+        "js/games/2048.js",
+        "js/composer/clipboard-send.js",
+        "js/composer/message-queue.js",
+        "js/composer/file-drop.js",
+        "js/composer/temporary-chat-inline.js",
+        "js/dashboard/pinned-issues-model.js",
+        "js/dashboard/pinned-issues.js",
+        "js/dashboard/highlighted-pages.js",
+        "js/research/deep-research-tracker.js"
       ],
       "run_at": "document_start"
     },
@@ -167,8 +167,8 @@
       "js": [
         "vendor/turndown.js",
         "vendor/turndown-plugin-gfm.js",
-        "js/research-import-dialog.js",
-        "js/research-publisher.js"
+        "js/research/research-import-dialog.js",
+        "js/research/research-publisher.js"
       ],
       "all_frames": true,
       "match_about_blank": true,
@@ -180,7 +180,7 @@
         "https://github.com/*/*"
       ],
       "js": [
-        "js/github-empty-about.js"
+        "js/github/github-empty-about.js"
       ],
       "run_at": "document_start"
     }

@@ -24,9 +24,9 @@ test("custom composer placeholders update live, survive editor replacement, and 
         listeners.forEach(listener => listener({ composerPlaceholder: { newValue: value } }, "local"));
       };
     });
-    await page.addScriptTag({ content: read("js/extension-context.js") });
+    await page.addScriptTag({ content: read("js/core/extension-context.js") });
     await page.addStyleTag({ content: read("css/chat-display.css") });
-    await page.addScriptTag({ content: read("js/composer-placeholder.js") });
+    await page.addScriptTag({ content: read("js/composer/composer-placeholder.js") });
     assert.equal(await page.locator("[data-placeholder]").getAttribute("data-placeholder"), "Ask ChatGPT");
     await page.evaluate(() => {
       // Simulate the host editor restoring the placeholder it owns after a mutation.
@@ -45,7 +45,7 @@ test("custom composer placeholders update live, survive editor replacement, and 
     await page.waitForFunction(() => getComputedStyle(document.querySelector("[data-placeholder]"), "::before").content === '"Dash"');
     await page.waitForFunction(() => document.querySelector('textarea').placeholder === 'Dash');
     await page.evaluate(() => { settings.composerColors = { placeholder: '#123456' }; });
-    await page.addScriptTag({ content: read('js/composer-colors.js') });
+    await page.addScriptTag({ content: read('js/composer/composer-colors.js') });
     await page.waitForFunction(() => document.documentElement.style.getPropertyValue('--ghrc-composer-placeholder') === '#123456');
     assert.equal(await page.evaluate(() => getComputedStyle(document.querySelector('[data-placeholder]'), '::before').content), '"Dash"');
 
@@ -95,8 +95,8 @@ test("a composer that becomes editable after hydration receives its saved placeh
       window.chrome = {runtime:{id:'fixture'}, storage:{local:{get:async defaults=>({...defaults,composerPlaceholder:'Dash'})},onChanged:{addListener(){}}}};
     });
     await page.addStyleTag({ content: read('css/chat-display.css') });
-    await page.addScriptTag({ content: read('js/extension-context.js') });
-    await page.addScriptTag({ content: read('js/composer-placeholder.js') });
+    await page.addScriptTag({ content: read('js/core/extension-context.js') });
+    await page.addScriptTag({ content: read('js/composer/composer-placeholder.js') });
     await page.waitForTimeout(100);
     assert.equal(await page.locator('[data-ghrc-placeholder-text]').count(), 0);
     await page.evaluate(() => document.querySelector('[data-composer-markdown]').setAttribute('contenteditable', 'true'));

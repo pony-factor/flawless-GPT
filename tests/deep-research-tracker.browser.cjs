@@ -25,7 +25,7 @@ test('mounts, reads native usage, excludes messages, and cleans up on extension 
       };
     });
     await page.addStyleTag({ content: fs.readFileSync(path.join(__dirname, '../css/deep-research-tracker.css'), 'utf8') });
-    await page.addScriptTag({ content: fs.readFileSync(path.join(__dirname, '../js/deep-research-tracker.js'), 'utf8') });
+    await page.addScriptTag({ content: fs.readFileSync(path.join(__dirname, '../js/research/deep-research-tracker.js'), 'utf8') });
     const widget = page.locator('#ghrc-deep-research-tracker-composer');
     await widget.waitFor();
     assert.match(await widget.innerText(), /Check allowance/);
@@ -117,7 +117,7 @@ test('homepage only shows the Deep Research embed in the final five days', async
       const now = Date.now();
       document.documentElement.setAttribute('data-ghrc-deep-research-usage', JSON.stringify({ remaining: 13, resetAt: now + 6 * 24 * 60 * 60_000, observedAt: now }));
     });
-    await page.addScriptTag({ content: fs.readFileSync(path.join(__dirname, '../js/deep-research-tracker.js'), 'utf8') });
+    await page.addScriptTag({ content: fs.readFileSync(path.join(__dirname, '../js/research/deep-research-tracker.js'), 'utf8') });
     const dashboard = page.locator('#ghrc-deep-research-tracker');
     const composer = page.locator('#ghrc-deep-research-tracker-composer');
     await composer.waitFor();
@@ -196,7 +196,7 @@ test('Research options independently control homepage, composer, counts, reset l
         remaining: 13, resetAt: Date.now() + 10 * 24 * 3600_000, observedAt: Date.now(),
       }));
     });
-    await page.addScriptTag({ content: fs.readFileSync(path.join(__dirname, '../js/deep-research-tracker.js'), 'utf8') });
+    await page.addScriptTag({ content: fs.readFileSync(path.join(__dirname, '../js/research/deep-research-tracker.js'), 'utf8') });
     const homepage = page.locator('#ghrc-deep-research-tracker');
     const composer = page.locator('#ghrc-deep-research-tracker-composer');
     await homepage.waitFor();

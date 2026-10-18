@@ -40,7 +40,7 @@ async function fixture(native = true) {
     };
   });
   await page.addStyleTag({ content: read("css/temporary-chat-inline.css") });
-  await page.addScriptTag({ content: read("js/temporary-chat-inline.js") });
+  await page.addScriptTag({ content: read("js/composer/temporary-chat-inline.js") });
   return { page, errors };
 }
 

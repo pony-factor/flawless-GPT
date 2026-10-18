@@ -21,7 +21,7 @@ function fixture({ supported = true, source = {}, partner = null, fail = false }
       group: async props => { calls.push(['group', props]); },
     },
   } });
-  vm.runInContext(fs.readFileSync(require.resolve('../js/native-split-view.js'), 'utf8'), context);
+  vm.runInContext(fs.readFileSync(require.resolve('../js/links/native-split-view.js'), 'utf8'), context);
   return { context, calls, listener, navigation, session };
 }
 test('creates adjacent grouped tabs and splits them before activating GitHub', async () => {

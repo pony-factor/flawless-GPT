@@ -1,6 +1,6 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { missingAnswer, answerForTurn, entryFor } = require('../js/missing-response-recovery.js');
+const { missingAnswer, answerForTurn, entryFor } = require('../js/chat/missing-response-recovery.js');
 
 const prefix = () => ({ errorMessage: null, turn: { status: 'complete', items: [
   { type: 'user-message' },

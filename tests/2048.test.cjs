@@ -5,7 +5,7 @@ const {
   moveBoard,
   canMove,
   cloneBoard,
-} = require('../js/2048.js');
+} = require('../js/games/2048.js');
 
 test('merges each pair only once per move', () => {
   assert.deepEqual(collapseLine([2, 2, 2, 2]), {
@@ -150,7 +150,7 @@ test('all 23 Windsor Flight colors are used for empty and numbered tiles', () =>
 });
 
 test('higher-than-2048 tile classes remain colored without limiting the game', () => {
-  const { tileClass } = require('../js/2048.js');
+  const { tileClass } = require('../js/games/2048.js');
   for (const value of [2048, 4096, 8192, 16384, 131072, 4194304]) {
     assert.equal(tileClass(value), `ghrc-2048-tile-${value}`);
   }

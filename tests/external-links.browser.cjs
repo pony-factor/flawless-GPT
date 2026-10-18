@@ -19,7 +19,7 @@ async function fixture(settings = {}, githubResponse = null, nativeSplitSupporte
   }));
   await page.route('https://example.org/**', route => route.fulfill({ contentType: 'text/html', body: '<h1>Source content</h1>' }));
   await page.route('https://preview.test/link-preview.html', route => route.fulfill({
-    contentType: 'text/html', body: '<body><script>' + read('js/link-preview-host.js') + '</script></body>',
+    contentType: 'text/html', body: '<body><script>' + read('js/links/link-preview-host.js') + '</script></body>',
   }));
   await page.goto('https://chatgpt.com/c/example');
   await page.evaluate(({ settings, githubResponse, nativeSplitSupported }) => {
@@ -56,8 +56,8 @@ async function fixture(settings = {}, githubResponse = null, nativeSplitSupporte
     };
   }, { settings, githubResponse, nativeSplitSupported });
   await page.addStyleTag({ content: read('css/external-links.css') });
-  await page.addScriptTag({ content: read('js/citation-links-main.js') });
-  await page.addScriptTag({ content: read('js/external-links.js') });
+  await page.addScriptTag({ content: read('js/links/citation-links-main.js') });
+  await page.addScriptTag({ content: read('js/links/external-links.js') });
   return page;
 }
 

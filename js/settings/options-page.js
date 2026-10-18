@@ -61,7 +61,7 @@
   }
 
   const authScript = document.createElement("script");
-  authScript.src = chrome.runtime.getURL("js/github-app-auth.js");
+  authScript.src = chrome.runtime.getURL("js/github/github-app-auth.js");
   authScript.addEventListener("load", async () => {
     await globalThis.GitHubAppAuth?.saveConfig(GITHUB_APP_CONFIG);
     await globalThis.GitHubAppAuth?.mountSettingsUi({ popup: false });

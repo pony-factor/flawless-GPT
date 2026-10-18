@@ -4,7 +4,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
 
-const source = fs.readFileSync(path.join(__dirname, "../js/worked-duration.js"), "utf8");
+const source = fs.readFileSync(path.join(__dirname, "../js/chat/worked-duration.js"), "utf8");
 const style = fs.readFileSync(path.join(__dirname, "../css/worked-duration.css"), "utf8");
 
 function fixture(text = "Worked for 8m 41s", { excluded = false, dotsEnabled = false } = {}) {
@@ -177,7 +177,7 @@ test("opt-in dots render one per minute and switch live", async () => {
 });
 
 test("dot display is an opt-in preference exposed in both settings pages", () => {
-  const js = fs.readFileSync(path.join(__dirname, "../js/options.js"), "utf8");
+  const js = fs.readFileSync(path.join(__dirname, "../js/settings/options.js"), "utf8");
   for (const htmlFile of ["options.html", "popup.html"]) {
     const html = fs.readFileSync(path.join(__dirname, "..", htmlFile), "utf8");
     assert.match(html, /id="worked-duration-dots"/);

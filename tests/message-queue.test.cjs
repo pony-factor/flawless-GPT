@@ -5,7 +5,7 @@ const path = require("node:path");
 const vm = require("node:vm");
 
 const source = fs.readFileSync(
-  path.join(__dirname, "../js/message-queue.js"),
+  path.join(__dirname, "../js/composer/message-queue.js"),
   "utf8",
 );
 

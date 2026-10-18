@@ -53,9 +53,9 @@ test('sidebar conversations show compact relative creation ages before the title
     window.chrome = { runtime: { id: 'fixture' }, storage: { local: {} } };
   }, now);
   await page.addStyleTag({ content: read('css/sidebar-chat-dates.css') });
-  await page.addScriptTag({ content: read('js/sidebar-chat-dates-main.js') });
-  await page.addScriptTag({ content: read('js/extension-context.js') });
-  await page.addScriptTag({ content: read('js/sidebar-chat-dates.js') });
+  await page.addScriptTag({ content: read('js/sidebar/sidebar-chat-dates-main.js') });
+  await page.addScriptTag({ content: read('js/core/extension-context.js') });
+  await page.addScriptTag({ content: read('js/sidebar/sidebar-chat-dates.js') });
 
   await page.evaluate(() => fetch('/backend-api/conversations?offset=0&limit=100&order=updated'));
   await page.waitForFunction(() => document.querySelector('a[href="/c/alpha"] > .ghrc-chat-date')?.textContent === '2d');

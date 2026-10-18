@@ -15,7 +15,7 @@ async function fixture() {
   const p = await browser.newPage();
   await p.setContent('<textarea id="prompt-textarea"></textarea><div id="github-repositories-for-chatgpt"><footer class="ghrc-dashboard-footer"><nav class="ghrc-pagination"><button>Previous</button><button>Next</button></nav></footer></div>');
   await p.addStyleTag({ content: read('css/2048.css') });
-  await p.addScriptTag({ content: read('js/2048-keyboard.js') });
+  await p.addScriptTag({ content: read('js/games/2048-keyboard.js') });
   await p.evaluate(() => {
     // A deterministic initial board: two adjacent twos in the first row.
     Math.random = () => 0;
@@ -25,7 +25,7 @@ async function fixture() {
       event.stopImmediatePropagation();
     }, true);
   });
-  await p.addScriptTag({ content: read('js/2048.js') });
+  await p.addScriptTag({ content: read('js/games/2048.js') });
   return p;
 }
 
@@ -118,6 +118,6 @@ test('host inputs and frames cannot take game focus, and focus is released on cl
 
 test('the keyboard bridge is installed at document_start', () => {
   const manifest = JSON.parse(read('manifest.json'));
-  const script = manifest.content_scripts.find(c => c.js?.includes('js/2048-keyboard.js'));
+  const script = manifest.content_scripts.find(c => c.js?.includes('js/games/2048-keyboard.js'));
   assert.equal(script.run_at, 'document_start');
 });

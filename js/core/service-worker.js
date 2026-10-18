@@ -1,4 +1,4 @@
-importScripts("token-vault.js");
+importScripts("../github/token-vault.js");
 
 const DEFAULT_OWNER_ORDER = [];
 const REPOSITORIES_PER_PAGE = 100;
