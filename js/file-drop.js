@@ -93,9 +93,20 @@
     // that terminal event, leaving its click-through "Add anything" veil stuck.
     // Give the page a file-free terminal drop to release its drag UI without
     // asking it to upload the same files a second time.
-    const target = event.target;
+    // Attaching can synchronously replace the drop target. Dispatch from the
+    // nearest surviving ancestor so cleanup still reaches React's root.
+    const target = event.composedPath().find(node => node instanceof Element && node.isConnected)
+      || document.body;
     if (!target?.dispatchEvent) return;
     try {
+      // Native drag-leave handlers can require the original Files metadata and
+      // an exit outside the viewport. An empty drop/dragend alone is ignored by
+      // those handlers. A leave carries no upload request, so keep the real
+      // transfer here without risking a duplicate attachment.
+      target.dispatchEvent(new DragEvent("dragleave", {
+        bubbles: true, cancelable: true, dataTransfer: event.dataTransfer,
+        clientX: 0, clientY: 0, relatedTarget: null,
+      }));
       const transfer = new DataTransfer();
       target.dispatchEvent(new DragEvent("drop", {
         bubbles: true, cancelable: true, dataTransfer: transfer,
@@ -121,7 +132,7 @@
       '<div class="ghrc-file-drop-card">' +
       '<span class="ghrc-file-drop-icon" aria-hidden="true">＋</span>' +
       '<strong class="ghrc-file-drop-title">Drop files to attach</strong>' +
-      '<span class="ghrc-file-drop-detail">Add files to your message using the + attachment flow</span>' +
+      '<span class="ghrc-file-drop-detail" hidden></span>' +
       '</div>';
     document.body.append(overlay);
     return overlay;
@@ -149,8 +160,7 @@
     clearTimer();
     node.removeAttribute("data-ghrc-drop-error");
     node.querySelector(".ghrc-file-drop-title").textContent = "Drop files to attach";
-    node.querySelector(".ghrc-file-drop-detail").textContent =
-      "Add files to your message using the + attachment flow";
+    node.querySelector(".ghrc-file-drop-detail").hidden = true;
     node.hidden = false;
   }
 
@@ -161,6 +171,7 @@
     node.setAttribute("data-ghrc-drop-error", "");
     node.querySelector(".ghrc-file-drop-title").textContent = title;
     node.querySelector(".ghrc-file-drop-detail").textContent = message;
+    node.querySelector(".ghrc-file-drop-detail").hidden = false;
     node.hidden = false;
     feedbackTimer = setTimeout(reset, 3500);
   }

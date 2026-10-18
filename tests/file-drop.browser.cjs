@@ -133,6 +133,53 @@ test("intercepted image drops release ChatGPT's click-through native drag overla
   } finally { await page.close(); }
 });
 
+test("native file-drag UI receives a viewport exit with the original transfer", async () => {
+  const page = await fixture();
+  try {
+    await page.evaluate(() => {
+      window.nativeDragging = false;
+      window.nativeExitFiles = [];
+      document.getElementById("composer").addEventListener("dragenter", event => {
+        if (event.dataTransfer.types.includes("Files")) window.nativeDragging = true;
+      });
+      // Ignore file-free drop/dragend cleanup, as file-filtered native handlers do.
+      document.getElementById("composer").addEventListener("dragleave", event => {
+        if (!event.dataTransfer.types.includes("Files")) return;
+        if (event.relatedTarget || event.clientX || event.clientY) return;
+        window.nativeExitFiles = [...event.dataTransfer.files].map(file => file.name);
+        window.nativeDragging = false;
+      });
+    });
+    await drag(page, "dragenter", ["photo.png"]);
+    assert.equal(await page.evaluate(() => window.nativeDragging), true);
+    await drag(page, "drop", ["photo.png"]);
+    assert.equal(await page.evaluate(() => window.nativeDragging), false);
+    assert.deepEqual(await page.evaluate(() => window.nativeExitFiles), ["photo.png"]);
+    assert.deepEqual(await page.evaluate(() => window.uploaded), ["photo.png"]);
+    assert.deepEqual(await page.evaluate(() => window.nativeDropEvents), []);
+    assert.equal(await page.locator('[data-composer-attachments] button').count(), 1);
+  } finally { await page.close(); }
+});
+
+test("native cleanup still bubbles when the upload replaces the original drop target", async () => {
+  const page = await fixture();
+  try {
+    await page.evaluate(() => {
+      window.nativeCleanup = [];
+      document.getElementById("composer").addEventListener("drop", event => {
+        window.nativeCleanup.push(event.dataTransfer.files.length);
+      });
+      document.querySelector('input[type="file"]').addEventListener("change", () => {
+        document.getElementById("prompt-textarea").remove();
+      });
+    });
+    await drag(page, "drop", ["photo.png"]);
+    assert.deepEqual(await page.evaluate(() => window.uploaded), ["photo.png"]);
+    assert.deepEqual(await page.evaluate(() => window.nativeCleanup), [0]);
+    assert.equal(await page.locator('[data-composer-attachments] button').count(), 1);
+  } finally { await page.close(); }
+});
+
 test("overlay follows ChatGPT's live accent and surfaces, with independent composer overrides", async () => {
   const page = await fixture();
   try {
@@ -195,6 +242,14 @@ test("overlay follows ChatGPT's live accent and surfaces, with independent compo
     });
     assert.equal((await palette()).border, "rgb(69, 169, 129)");
     assert.equal((await palette()).background, "rgb(23, 27, 36)");
+    // Current ChatGPT exposes its accent through app tokens; the old submit
+    // token can be absent or neutral even with a colorful active theme.
+    await page.evaluate(() => {
+      document.documentElement.style.setProperty("--app-color-icon-accent", "#48a04c");
+      document.documentElement.style.setProperty("--theme-submit-btn-bg", "#ffffff");
+    });
+    assert.equal((await palette()).border, "rgb(72, 160, 76)");
+    assert.equal((await palette()).icon, "rgb(72, 160, 76)");
   } finally { await page.close(); }
 });
 
