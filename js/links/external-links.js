@@ -650,7 +650,7 @@
     content.append(title, instructions, destination, note);
   }
 
-  function createLinkActions(link, url) {
+  function createLinkActions(link, url, includeCopy = false) {
     const actions = document.createElement("span");
     actions.className = "ghrc-link-actions";
     actions.setAttribute("contenteditable", "false");
@@ -662,6 +662,15 @@
     sidebar.setAttribute("aria-label", "Open link beside chat");
     sidebar.innerHTML = '<svg viewBox="0 0 20 20" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="2.5" y="3" width="15" height="14" rx="2"/><path d="M11 3v14"/></svg>';
 
+    if (includeCopy) {
+      const copy = document.createElement("button");
+      copy.className = "ghrc-link-copy-button";
+      copy.type = "button";
+      copy.title = "Copy source link";
+      copy.setAttribute("aria-label", "Copy source link");
+      copy.innerHTML = '<svg viewBox="0 0 20 20" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="1.5"/><path d="M13 7V4.5A1.5 1.5 0 0 0 11.5 3h-7A1.5 1.5 0 0 0 3 4.5v7A1.5 1.5 0 0 0 4.5 13H7"/></svg>';
+      actions.append(copy);
+    }
     actions.append(sidebar);
     linkActions.set(link, actions);
     actionSources.set(actions, link);
@@ -672,7 +681,10 @@
   function updateLinkActions(link, url, actions = linkActions.get(link)) {
     const sidebar = actions?.querySelector(".ghrc-link-sidebar-button");
     if (!sidebar) return;
-    sidebar.dataset.href = stripTrackingFromUrl(url).href;
+    const href = stripTrackingFromUrl(url).href;
+    sidebar.dataset.href = href;
+    const copy = actions.querySelector(".ghrc-link-copy-button");
+    if (copy) copy.dataset.href = href;
   }
 
   function removeLinkActions(link, actions) {
@@ -829,7 +841,7 @@
     if (!["http:", "https:"].includes(url.protocol)) return;
     let actions = linkActions.get(button);
     if (!actions?.isConnected) {
-      actions = createLinkActions(button, url);
+      actions = createLinkActions(button, url, !inline);
       actions.classList.add(inline ? "ghrc-inline-citation-actions" : "ghrc-citation-actions");
       button.after(actions);
     } else updateLinkActions(button, url, actions);
@@ -1026,6 +1038,18 @@
   });
 
   document.addEventListener("click", (event) => {
+    const copy = event.target.closest?.(".ghrc-link-copy-button");
+    if (copy) {
+      // React-owned source cards intercept clicks during capture; copying must
+      // not trigger their navigation or the adjacent split-view action.
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      const href = copy.dataset.href;
+      if (href && navigator.clipboard?.writeText) {
+        void navigator.clipboard.writeText(href).catch(() => {});
+      }
+      return;
+    }
     const sidebar = event.target.closest?.(".ghrc-link-sidebar-button");
     if (sidebar) {
       // Image cards handle clicks during React's capture phase. Intercept the

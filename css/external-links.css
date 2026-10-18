@@ -100,7 +100,8 @@ a:has(+ .ghrc-link-has-punctuation) {
   color: currentColor;
 }
 
-.ghrc-link-sidebar-button {
+.ghrc-link-sidebar-button,
+.ghrc-link-copy-button {
   align-items: center;
   justify-content: center;
   min-width: 20px;
@@ -108,7 +109,8 @@ a:has(+ .ghrc-link-has-punctuation) {
   box-sizing: border-box;
 }
 
-.ghrc-link-sidebar-button {
+.ghrc-link-sidebar-button,
+.ghrc-link-copy-button {
   display: inline-flex;
   width: 24px;
   padding: 0;
@@ -119,11 +121,13 @@ a:has(+ .ghrc-link-has-punctuation) {
   cursor: pointer;
 }
 
-.ghrc-link-sidebar-button:hover {
+.ghrc-link-sidebar-button:hover,
+.ghrc-link-copy-button:hover {
   background: color-mix(in srgb, currentColor 10%, transparent);
 }
 
-.ghrc-link-sidebar-button:focus-visible {
+.ghrc-link-sidebar-button:focus-visible,
+.ghrc-link-copy-button:focus-visible {
   outline: 2px solid Highlight;
   outline-offset: -2px;
 }
@@ -141,6 +145,22 @@ a:has(+ .ghrc-link-has-punctuation) {
   position: absolute;
   inset-inline-end: 8px;
   margin: 0;
+}
+
+/* Source-card controls overlay the card: the extra button must not widen its popup. */
+.ghrc-citation-actions .ghrc-link-copy-button {
+  visibility: hidden;
+}
+
+.ghrc-citation-source:hover + .ghrc-citation-actions .ghrc-link-copy-button,
+.ghrc-citation-source:focus + .ghrc-citation-actions .ghrc-link-copy-button,
+.ghrc-citation-actions:hover .ghrc-link-copy-button,
+.ghrc-citation-actions:focus-within .ghrc-link-copy-button {
+  visibility: visible;
+}
+
+.ghrc-link-copy-button + .ghrc-link-sidebar-button {
+  border-left: 1px solid color-mix(in srgb, currentColor 24%, transparent);
 }
 
 #ghrc-link-preview {

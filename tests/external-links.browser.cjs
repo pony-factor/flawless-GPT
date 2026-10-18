@@ -448,6 +448,80 @@ test('embedded citation buttons open the actual source beside chat without invok
   await page.close();
 });
 
+
+test('source card copy controls appear on hover, copy each card URL, and preserve popup width', async () => {
+  const page = await fixture({ openExternalLinksInSplitView: true });
+  await page.evaluate(() => {
+    const popup = document.createElement('div');
+    popup.id = 'source-popup';
+    popup.setAttribute('role', 'dialog');
+    popup.style.cssText = 'box-sizing:border-box;position:relative;width:260px;padding:12px;border:1px solid gray';
+    for (const [id, href] of [
+      ['first-card', 'https://example.org/first?utm_source=chatgpt&keep=1#part'],
+      ['second-card', 'https://example.org/second?keep=2'],
+    ]) {
+      const source = document.createElement('button');
+      source.id = id;
+      source.type = 'button';
+      source.style.cssText = 'display:block;width:100%;height:64px';
+      source.setAttribute('data-d-component', 'pressable');
+      source.setAttribute('aria-label', 'Open ' + id);
+      source.textContent = 'Source document ' + id;
+      source.__reactFiber$fixture = {
+        memoizedProps: {}, return: {
+          memoizedProps: { __dilHostElement: { props: { onVisibleKey: href } } },
+        },
+      };
+      source.addEventListener('click', () => { window.nativeSourceClicks++; });
+      popup.append(source);
+    }
+    window.nativeSourceClicks = 0;
+    document.body.append(popup);
+  });
+
+  const popup = page.locator('#source-popup');
+  const first = page.locator('#first-card + .ghrc-citation-actions');
+  const second = page.locator('#second-card + .ghrc-citation-actions');
+  const firstCopy = first.locator('.ghrc-link-copy-button');
+  const secondCopy = second.locator('.ghrc-link-copy-button');
+  await firstCopy.waitFor({ state: 'attached' });
+  await secondCopy.waitFor({ state: 'attached' });
+  assert.equal(await firstCopy.isVisible(), false);
+  assert.equal(await secondCopy.isVisible(), false);
+  assert.equal(await page.locator('main .ghrc-link-copy-button').count(), 0);
+
+  const originalWidth = await popup.evaluate(element => element.getBoundingClientRect().width);
+  await page.locator('#first-card').hover();
+  assert.equal(await firstCopy.isVisible(), true);
+  assert.equal(await secondCopy.isVisible(), false);
+  const positions = await first.evaluate(actions => ({
+    copy: actions.querySelector('.ghrc-link-copy-button').getBoundingClientRect().toJSON(),
+    sidebar: actions.querySelector('.ghrc-link-sidebar-button').getBoundingClientRect().toJSON(),
+  }));
+  assert.ok(positions.copy.right <= positions.sidebar.left + 1, JSON.stringify(positions));
+  await firstCopy.click();
+  assert.deepEqual(await page.evaluate(() => copiedLinks), ['https://example.org/first?keep=1#part']);
+  assert.equal(await popup.evaluate(element => element.getBoundingClientRect().width), originalWidth);
+
+  await page.locator('#second-card').hover();
+  assert.equal(await secondCopy.isVisible(), true);
+  await secondCopy.click();
+  assert.deepEqual(await page.evaluate(() => copiedLinks), [
+    'https://example.org/first?keep=1#part',
+    'https://example.org/second?keep=2',
+  ]);
+  assert.equal(await popup.evaluate(element => element.getBoundingClientRect().width), originalWidth);
+  assert.equal(await page.evaluate(() => nativeSourceClicks), 0);
+  assert.equal((await page.evaluate(() => previewRequests)).filter(message => message.type === 'open-native-split-view').length, 0);
+  assert.equal(await page.locator('#ghrc-link-preview').count(), 0);
+
+  await page.evaluate(() => settingsListeners.forEach(listener =>
+    listener({ openExternalLinksInSplitView: { newValue: false } }, 'local')));
+  assert.equal(await popup.locator('.ghrc-link-copy-button, .ghrc-link-sidebar-button').count(), 0);
+  assert.deepEqual(page.errors, []);
+  await page.close();
+});
+
 test('sidebar fallback still loads after extension APIs are invalidated by a reload', async () => {
   const page = await fixture({ openExternalLinksInSplitView: true });
   await page.locator('.ghrc-link-sidebar-button').waitFor();
