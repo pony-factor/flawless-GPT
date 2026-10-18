@@ -129,8 +129,9 @@ test('sidebar icons follow trailing punctuation without changing the sentence or
     const group = document.getElementById('source').nextElementSibling;
     const trigger = document.createElement('span');
     trigger.setAttribute('data-d-component', 'popover-trigger');
+    const link = group.previousElementSibling;
     group.before(trigger);
-    trigger.append(group.previousElementSibling, group);
+    trigger.append(link, group);
     trigger.after(document.createTextNode('). Next sentence.'));
   });
   await page.locator('.ghrc-link-trailing-punctuation').waitFor();
@@ -161,8 +162,9 @@ test('late hydration moves whitespace-separated punctuation before the sidebar i
     const group = document.getElementById('source').nextElementSibling;
     const trigger = document.createElement('span');
     trigger.setAttribute('data-d-component', 'popover-trigger');
+    const link = group.previousElementSibling;
     group.before(trigger);
-    trigger.append(group.previousElementSibling, group);
+    trigger.append(link, group);
     trigger.after(document.createTextNode(' '), document.createTextNode('. After hydration.'));
   });
   await page.locator('.ghrc-link-trailing-punctuation').waitFor();
@@ -362,8 +364,9 @@ test('ordinary link popovers keep a single sidebar icon', async () => {
     const trigger = document.createElement('span');
     trigger.setAttribute('data-d-component', 'popover-trigger');
     trigger.__reactFiber$fixture = { memoizedProps: { __dilHostElement: { props: { onVisibleKey: 'https://example.org/source' } } } };
+    const link = group.previousElementSibling;
     group.before(trigger);
-    trigger.append(group.previousElementSibling, group);
+    trigger.append(link, group);
   });
   await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
   assert.equal(await page.locator('.ghrc-link-sidebar-button').count(), 1);
