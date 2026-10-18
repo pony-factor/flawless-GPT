@@ -846,3 +846,27 @@ test('details source chips retain their layout with the sidebar action on the sa
   assert.ok(boxes.action.right <= 360, JSON.stringify(boxes));
   await page.close();
 });
+
+test('trailing link punctuation shares the surrounding text baseline', async () => {
+  const page = await fixture({ openExternalLinksInSplitView: true });
+  await page.locator('.ghrc-link-with-actions').waitFor();
+  await page.locator('#source').evaluate(link => {
+    const paragraph = document.createElement('p');
+    paragraph.style.cssText = 'font:16px/26px sans-serif';
+    paragraph.append(link.cloneNode(true), document.createTextNode('. Watch the next sentence.'));
+    link.parentElement.replaceWith(paragraph);
+  });
+  await page.locator('.ghrc-link-trailing-punctuation').waitFor();
+  const boxes = await page.evaluate(() => {
+    const rect = element => {
+      const range = document.createRange();
+      range.selectNodeContents(element);
+      return range.getBoundingClientRect().toJSON();
+    };
+    return { link: rect(document.getElementById('source')),
+      punctuation: rect(document.querySelector('.ghrc-link-trailing-punctuation')) };
+  });
+  assert.ok(Math.abs(boxes.link.top - boxes.punctuation.top) < 0.5, JSON.stringify(boxes));
+  assert.ok(Math.abs(boxes.link.right - boxes.punctuation.left) < 0.5, JSON.stringify(boxes));
+  await page.close();
+});

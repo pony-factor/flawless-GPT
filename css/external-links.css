@@ -64,6 +64,7 @@ a:has(+ .ghrc-link-has-punctuation) {
 
 .ghrc-link-with-actions.ghrc-link-has-punctuation {
   margin-inline: 0;
+  vertical-align: baseline;
 }
 
 .ghrc-link-has-punctuation > .ghrc-link-actions {
