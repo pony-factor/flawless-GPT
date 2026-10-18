@@ -98,7 +98,7 @@
     section.append(heading, row);
 
     syncLayout(widget, section);
-    const anchor = document.getElementById('ghrc-deep-research-dashboard') || widget;
+    const anchor = document.getElementById("ghrc-pinned-issues") || document.getElementById('ghrc-deep-research-dashboard') || widget;
     anchor.insertAdjacentElement("afterend", section);
   }
 
@@ -131,7 +131,7 @@
       section?.remove();
       return;
     }
-    const anchor = document.getElementById('ghrc-deep-research-dashboard') || widget;
+    const anchor = document.getElementById("ghrc-pinned-issues") || document.getElementById('ghrc-deep-research-dashboard') || widget;
     if (section && anchor.nextElementSibling === section) {
       syncLayout(widget, section);
       return;
@@ -140,7 +140,7 @@
       mutation.target === widget
       || [...mutation.addedNodes, ...mutation.removedNodes].some((node) => (
         node instanceof Element
-        && ([WIDGET_ID, SECTION_ID].includes(node.id) || Boolean(node.querySelector?.(`#${WIDGET_ID}, #${SECTION_ID}`)))
+        && ([WIDGET_ID, SECTION_ID, "ghrc-pinned-issues"].includes(node.id) || Boolean(node.querySelector?.(`#${WIDGET_ID}, #${SECTION_ID}, #ghrc-pinned-issues`)))
       ))
     ));
     if (widgetChanged) scheduleMount();

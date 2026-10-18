@@ -669,3 +669,25 @@ button.secondary {
 .repository-shortcut-setting .help {
   margin-top: 8px;
 }
+
+.pinned-issue-add{align-items:center;display:grid;gap:8px;grid-template-columns:minmax(0,1fr) auto}
+.pinned-issue-add input{min-width:0}
+#pinned-issue-label{grid-column:1/-1}
+.pinned-issues-status{min-height:18px}
+.pinned-issues-status[data-state="error"]{color:light-dark(#cf222e,#f85149)}
+.pinned-issues-settings-list{display:grid;gap:8px}
+.pinned-issue-setting {
+  background:light-dark(#f6f8fa,#161b22);border:1px solid light-dark(#d0d7de,#3d444d);
+  border-radius:7px;cursor:grab;display:grid;gap:8px;
+  grid-template-columns:auto minmax(0,1fr);padding:8px;
+}
+.pinned-issue-setting.dragging{cursor:grabbing;opacity:.55}
+.pinned-issue-copy{display:grid;gap:3px;min-width:0}
+.pinned-issue-copy strong,.pinned-issue-copy small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pinned-issue-copy small{color:light-dark(#656d76,#9198a1)}
+.pinned-issue-controls{display:flex;flex-wrap:wrap;gap:4px;grid-column:2}
+.pinned-issue-controls button{padding:4px 7px}
+.pinned-issues-empty {
+  border:1px dashed light-dark(#d0d7de,#3d444d);border-radius:6px;
+  color:light-dark(#656d76,#9198a1);font-size:13px;margin:0;padding:12px;text-align:center;
+}
