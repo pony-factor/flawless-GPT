@@ -90,3 +90,29 @@ for (const withConversation of [false, true]) {
     await page.close();
   });
 }
+
+test('main conversation remains scrollable after assistant details opens beside it', async () => {
+  const { page, errors } = await fixture(true);
+  await page.locator('#conversation-scroller').evaluate(el => {
+    el.setAttribute('aria-label', 'Conversation');
+    el.scrollTop = 400;
+  });
+  await page.locator('[data-testid="send-button"]').click();
+  await page.evaluate(() => {
+    const details = document.createElement('div');
+    details.id = 'details';
+    details.style.cssText = 'position:fixed;right:0;top:0;width:200px;height:300px;overflow-y:scroll';
+    details.innerHTML = '<div data-message-author-role="assistant" style="height:1500px">Entity details</div>';
+    document.body.append(details);
+  });
+  await page.mouse.move(400, 100);
+  await page.mouse.wheel(0, -180);
+  await page.waitForFunction(() => document.querySelector('#conversation-scroller').scrollTop < 350, null, { timeout: 2000 });
+  const mainTop = await page.locator('#conversation-scroller').evaluate(el => el.scrollTop);
+  await page.mouse.move(900, 100);
+  await page.mouse.wheel(0, 180);
+  await page.waitForFunction(() => document.getElementById('details').scrollTop > 0);
+  assert.equal(await page.locator('#conversation-scroller').evaluate(el => el.scrollTop), mainTop);
+  assert.deepEqual(errors, []);
+  await page.close();
+});

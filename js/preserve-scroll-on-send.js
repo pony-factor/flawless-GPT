@@ -47,7 +47,13 @@
   }
 
   function findConversationScrollContainer() {
-    const turns = document.querySelectorAll(MESSAGE_SELECTOR);
+    // Details panes also render assistant messages. Keep the guard and wheel
+    // handler bound to the main conversation, including when details opens
+    // after a send has already captured the reading position.
+    const conversation = document.querySelector('[aria-label="Conversation"]');
+    const conversationScroller = scrollableAncestor(conversation);
+    if (conversationScroller) return conversationScroller;
+    const turns = (conversation || document).querySelectorAll(MESSAGE_SELECTOR);
     const lastTurn = turns[turns.length - 1];
     const turnScroller = scrollableAncestor(lastTurn);
     if (turnScroller) return turnScroller;

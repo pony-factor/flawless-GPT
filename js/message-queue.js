@@ -436,8 +436,14 @@
     return null;
   }
 
+  function conversationRoot() {
+    // Entity details render assistant messages and completion controls too.
+    // Only the main conversation can release a queued prompt.
+    return document.querySelector('[aria-label="Conversation"]') || document;
+  }
+
   function generationIndicatorIsActive() {
-    const latestAssistant = [...document.querySelectorAll(
+    const latestAssistant = [...conversationRoot().querySelectorAll(
       '[data-message-author-role="assistant"], [data-content-search-unit-key$=":assistant"], [data-testid="generated-image-gallery"]'
     )].at(-1);
     const root = latestAssistant?.closest('[data-testid^="conversation-turn-"], .group') || latestAssistant;
@@ -627,7 +633,7 @@
   }
 
   function roleTurns(role) {
-    const roleNodes = [...document.querySelectorAll(
+    const roleNodes = [...conversationRoot().querySelectorAll(
       `[data-message-author-role="${role}"], [data-content-search-unit-key$=":${role}"]`
       + (role === "assistant" ? ', [data-testid="generated-image-gallery"]' : '')
     )];
@@ -691,11 +697,11 @@
     const assistantTurns = roleTurns("assistant");
     // Earlier interrupted replies can leave more user messages than answers.
     // Check message order instead of requiring lifetime counts to balance.
-    const latestUser = [...document.querySelectorAll('[data-message-author-role="user"], [data-content-search-unit-key$=":user"]')].at(-1);
-    const latestAssistant = [...document.querySelectorAll('[data-message-author-role="assistant"], [data-content-search-unit-key$=":assistant"], [data-testid="generated-image-gallery"]')].at(-1);
+    const latestUser = [...conversationRoot().querySelectorAll('[data-message-author-role="user"], [data-content-search-unit-key$=":user"]')].at(-1);
+    const latestAssistant = [...conversationRoot().querySelectorAll('[data-message-author-role="assistant"], [data-content-search-unit-key$=":assistant"], [data-testid="generated-image-gallery"]')].at(-1);
     const latestUserAnswered = Boolean(latestUser && latestAssistant
       && (latestUser.compareDocumentPosition(latestAssistant) & Node.DOCUMENT_POSITION_FOLLOWING));
-    const turnCount = document.querySelectorAll('[data-testid^="conversation-turn-"], [data-content-search-unit-key]').length;
+    const turnCount = conversationRoot().querySelectorAll('[data-testid^="conversation-turn-"], [data-content-search-unit-key]').length;
     const roleStateKnown = turnCount === 0 || userTurns.length + assistantTurns.length > 0;
 
     return {
