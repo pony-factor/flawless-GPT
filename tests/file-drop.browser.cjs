@@ -6,7 +6,7 @@ const path = require("node:path");
 const { chromium } = require("playwright");
 
 let browser;
-const source = fs.readFileSync(path.join(__dirname, "../js/file-drop.js"), "utf8");
+const source = fs.readFileSync(path.join(__dirname, "../js/composer/file-drop.js"), "utf8");
 const style = fs.readFileSync(path.join(__dirname, "../css/file-drop.css"), "utf8");
 
 before(async () => {

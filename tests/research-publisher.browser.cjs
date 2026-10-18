@@ -20,7 +20,7 @@ test('import chooses a category, cancellation never publishes, and report links 
         return { ok: true, repository: 'Research', branch: 'main', path: 'Markets/report.md', url: 'https://github.com/example/Research/blob/main/Markets/report.md' };
       } } };
     });
-    for (const file of ['vendor/turndown.js', 'vendor/turndown-plugin-gfm.js', 'js/research-import-dialog.js', 'js/research-publisher.js']) await page.addScriptTag({ content: fs.readFileSync(file, 'utf8') });
+    for (const file of ['vendor/turndown.js', 'vendor/turndown-plugin-gfm.js', 'js/research/research-import-dialog.js', 'js/research/research-publisher.js']) await page.addScriptTag({ content: fs.readFileSync(file, 'utf8') });
     const button = page.getByRole('button', { name: 'Add to repo', exact: true });
     await button.click();
     await page.getByRole('dialog').waitFor();
@@ -54,7 +54,7 @@ test('fullscreen hides both composer versions and restores them when the report 
     const page = await browser.newPage();
     await page.setContent('<form><div id="prompt-textarea">Draft</div></form><div data-composer-surface-variant="inline"><div data-composer-markdown>New draft</div></div><div style="position:fixed;inset:0"><iframe></iframe></div>');
     await page.evaluate(() => { window.chrome = { runtime: { onMessage: { addListener() {} } } }; });
-    await page.addScriptTag({ content: fs.readFileSync('js/research-report-host.js', 'utf8') });
+    await page.addScriptTag({ content: fs.readFileSync('js/research/research-report-host.js', 'utf8') });
     await page.evaluate(() => window.dispatchEvent(new MessageEvent('message', { origin: 'https://mcp-app-abc123.web-sandbox.oaiusercontent.com', source: document.querySelector('iframe').contentWindow, data: { type: 'ghrc-research-report-state', report: true } })));
     assert.equal(await page.locator('form').evaluate(n => getComputedStyle(n).visibility), 'hidden');
     assert.equal(await page.locator('[data-composer-surface-variant]').evaluate(n => getComputedStyle(n).visibility), 'hidden');
@@ -75,7 +75,7 @@ test('import confirmation links open through the bridge inside a sandbox frame',
       window.calls = [];
       window.chrome = { runtime: { sendMessage: async message => { calls.push(message); return { ok: true }; } } };
     });
-    await frame.addScriptTag({ content: fs.readFileSync('js/research-import-dialog.js', 'utf8') });
+    await frame.addScriptTag({ content: fs.readFileSync('js/research/research-import-dialog.js', 'utf8') });
     await frame.evaluate(() => window.__ghrcResearchImportStatus(document.querySelector('[role=status]'), {
       repository: 'Research', branch: 'main', path: 'report.md', url: 'https://github.com/example/Research/blob/main/report.md',
     }));
@@ -100,7 +100,7 @@ test('filename context uses the prompt preceding the report, not an earlier or l
     await page.locator('iframe').first().evaluate(frame => { frame.setAttribute('src', 'https://mcp-app-abc123.web-sandbox.oaiusercontent.com/old-report'); });
     await page.locator('iframe').last().evaluate(frame => { frame.setAttribute('src', 'https://mcp-app-abc123.web-sandbox.oaiusercontent.com/report'); });
     await page.evaluate(() => { window.chrome = { runtime: { onMessage: { addListener(listener) { window.contextListener = listener; } } } }; });
-    await page.addScriptTag({ content: fs.readFileSync('js/research-report-host.js', 'utf8') });
+    await page.addScriptTag({ content: fs.readFileSync('js/research/research-report-host.js', 'utf8') });
     const context = await page.evaluate(() => new Promise(resolve => contextListener({ type: 'research-report-context', reportUrl: 'https://mcp-app-abc123.web-sandbox.oaiusercontent.com/report' }, {}, resolve)));
     assert.equal(context.title, 'DTC Bond Purchaser Tracking');
     assert.equal(context.prompt, 'DTC Bond Purchaser Tracking');
@@ -113,7 +113,7 @@ test('root shortcut finishes immediately from a nested folder in both chooser mo
   try {
     const page = await browser.newPage({ viewport: { width: 560, height: 520 } });
     await page.setContent('<body></body>');
-    await page.addScriptTag({ content: fs.readFileSync('js/research-import-dialog.js', 'utf8') });
+    await page.addScriptTag({ content: fs.readFileSync('js/research/research-import-dialog.js', 'utf8') });
     for (const launch of [false, true]) {
       await page.evaluate(launch => {
         window.chosen = undefined;
@@ -136,7 +136,7 @@ test('stale report scripts explain recovery instead of exposing a missing runtim
     await page.evaluate(() => {
       window.chrome = { storage: { local: { get: async d => ({ ...d, researchPublisherEnabled: true }) }, onChanged: { addListener() {} } }, runtime: { sendMessage: async () => ({ ok: true }) } };
     });
-    for (const file of ['vendor/turndown.js', 'vendor/turndown-plugin-gfm.js', 'js/research-import-dialog.js', 'js/research-publisher.js']) await page.addScriptTag({ content: fs.readFileSync(file, 'utf8') });
+    for (const file of ['vendor/turndown.js', 'vendor/turndown-plugin-gfm.js', 'js/research/research-import-dialog.js', 'js/research/research-publisher.js']) await page.addScriptTag({ content: fs.readFileSync(file, 'utf8') });
     const button = page.getByRole('button', { name: 'Add to repo', exact: true });
     await button.waitFor();
     await page.evaluate(() => { delete chrome.runtime; });
@@ -155,7 +155,7 @@ test('stale report scripts explain recovery instead of exposing a missing runtim
     await page.evaluate(() => {
       window.chrome = { storage: { local: { get: async d => ({ ...d, researchPublisherEnabled: true }) }, onChanged: { addListener() {} } }, runtime: { sendMessage: async () => ({ ok: true }) } };
     });
-    for (const file of ['vendor/turndown.js', 'vendor/turndown-plugin-gfm.js', 'js/research-import-dialog.js', 'js/research-publisher.js']) await page.addScriptTag({ content: fs.readFileSync(file, 'utf8') });
+    for (const file of ['vendor/turndown.js', 'vendor/turndown-plugin-gfm.js', 'js/research/research-import-dialog.js', 'js/research/research-publisher.js']) await page.addScriptTag({ content: fs.readFileSync(file, 'utf8') });
     const button = page.getByRole('button', { name: 'Add to repo', exact: true });
     await button.waitFor();
     await page.evaluate(() => { delete chrome.runtime; });
@@ -189,7 +189,7 @@ test('automatic import exposes lookup and terminal errors, then resumes after re
         }
       } } };
     });
-    for (const file of ['vendor/turndown.js', 'vendor/turndown-plugin-gfm.js', 'js/research-import-dialog.js', 'js/research-publisher.js'])
+    for (const file of ['vendor/turndown.js', 'vendor/turndown-plugin-gfm.js', 'js/research/research-import-dialog.js', 'js/research/research-publisher.js'])
       await page.addScriptTag({ content: fs.readFileSync(file, 'utf8') });
     await page.waitForFunction(() => document.querySelector('.ghrc-report-status')?.textContent.includes('reconnecting'));
     await page.evaluate(() => { window.mode = 'terminal-error'; });

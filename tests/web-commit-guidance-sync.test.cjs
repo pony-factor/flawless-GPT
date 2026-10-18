@@ -52,8 +52,8 @@ function fixture({ get, set, bridgeError, delayedBridge = false } = {}) {
     clearTimeout(id) { timers.delete(id); },
     console: { warn(...args) { warnings.push(args); } },
   });
-  vm.runInContext(read("extension-context.js"), sandbox);
-  vm.runInContext(read("web-commit-guidance-sync.js"), sandbox);
+  vm.runInContext(read("core/extension-context.js"), sandbox);
+  vm.runInContext(read("settings/web-commit-guidance-sync.js"), sandbox);
   return { sandbox, chrome, stored, calls, warnings, timers, listeners, storageListeners };
 }
 

@@ -7,7 +7,7 @@ const vm = require("node:vm");
 function loadShortcuts() {
   const context = { globalThis: {} };
   vm.runInNewContext(
-    fs.readFileSync(path.join(__dirname, "../js/repository-search-shortcut.js"), "utf8"),
+    fs.readFileSync(path.join(__dirname, "../js/dashboard/repository-search-shortcut.js"), "utf8"),
     context,
   );
   return context.globalThis.__ghrcRepositorySearchShortcut;
@@ -90,14 +90,14 @@ test("the shortcut helper is loaded before both settings and the content script"
   const manifest = JSON.parse(fs.readFileSync(path.join(root, "manifest.json"), "utf8"));
   const scripts = manifest.content_scripts.find((entry) =>
     entry.matches.includes("https://chatgpt.com/*")
-    && entry.js.includes("js/content.js"),
+    && entry.js.includes("js/dashboard/content.js"),
   ).js;
-  assert.ok(scripts.indexOf("js/repository-search-shortcut.js") >= 0);
-  assert.ok(scripts.indexOf("js/repository-search-shortcut.js") < scripts.indexOf("js/content.js"));
+  assert.ok(scripts.indexOf("js/dashboard/repository-search-shortcut.js") >= 0);
+  assert.ok(scripts.indexOf("js/dashboard/repository-search-shortcut.js") < scripts.indexOf("js/dashboard/content.js"));
   for (const name of ["options.html", "popup.html"]) {
     const html = fs.readFileSync(path.join(root, name), "utf8");
     assert.ok(html.includes('id="repository-search-shortcut"'));
-    assert.ok(html.indexOf('src="js/repository-search-shortcut.js"')
-      < html.indexOf('src="js/options.js"'));
+    assert.ok(html.indexOf('src="js/dashboard/repository-search-shortcut.js"')
+      < html.indexOf('src="js/settings/options.js"'));
   }
 });

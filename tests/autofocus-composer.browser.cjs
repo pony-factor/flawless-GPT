@@ -28,7 +28,7 @@ test('composer focus survives hydration and explicit chat actions without steali
         }, 400);
       };
     });
-    await page.addScriptTag({ content: fs.readFileSync(path.join(__dirname, '../js/autofocus-composer.js'), 'utf8') });
+    await page.addScriptTag({ content: fs.readFileSync(path.join(__dirname, '../js/composer/autofocus-composer.js'), 'utf8') });
     const focused = () => page.waitForFunction(() => document.activeElement.matches('[data-composer-markdown]'));
     await page.evaluate(() => document.querySelector('[data-composer-markdown]').contentEditable = 'true');
     await focused();

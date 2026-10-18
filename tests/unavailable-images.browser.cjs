@@ -19,7 +19,7 @@ test('recover only source-backed mascot images; retain failed placeholders and r
       window.__ghrcExtensionContext = { active: () => window.active, onStop: fn => { window.stop = fn; } };
       window.chrome = { runtime: { sendMessage: async () => ({ ok: true, url: 'https://mascots.pone.voyage/', html: '<section><h2>Clipper Ship</h2><img data-src="assets/images/image02.png"><img src="symbol.png"></section><section><h2>Treasure Trove</h2><img src="assets/images/image01.png"></section>' }) } };
     });
-    await page.addScriptTag({ content: fs.readFileSync(path.join(__dirname, '../js/unavailable-images.js'), 'utf8') });
+    await page.addScriptTag({ content: fs.readFileSync(path.join(__dirname, '../js/links/unavailable-images.js'), 'utf8') });
     await page.waitForFunction(() => document.querySelector('#clipper').getAttribute('aria-label') === 'Clipper Ship');
     await page.waitForFunction(() => !document.querySelector('#treasure img'));
     assert.equal(await page.locator('#clipper img').evaluate(img => img.naturalWidth), 1);
@@ -50,7 +50,7 @@ test('recover arbitrary captions and original proxy URLs without replacing healt
         return { ok: true, url: 'https://pictures.example/catalog/', html: '<img alt="Moon Garden" src="../garden.png"><img alt="Blue Lake" src="lake1.png"><img alt="Blue Lake" src="lake2.png">' };
       } } };
     });
-    await page.addScriptTag({ content: fs.readFileSync(path.join(__dirname, '../js/unavailable-images.js'), 'utf8') });
+    await page.addScriptTag({ content: fs.readFileSync(path.join(__dirname, '../js/links/unavailable-images.js'), 'utf8') });
     await page.waitForFunction(() => document.querySelector('#garden img')?.naturalWidth === 1 && document.querySelector('#proxy').style.visibility === 'hidden');
     assert.equal(await page.locator('#garden img').getAttribute('src'), 'https://pictures.example/garden.png');
     assert.equal(await page.locator('#ambiguous img').count(), 0);
@@ -70,7 +70,7 @@ test('recover original image URLs from image renderer metadata', async () => {
     await page.evaluate(() => {
       document.querySelector('#image').__reactFiber$fixture = { memoizedProps: {}, return: { memoizedProps: { resetKey: { props: { src: 'https://pictures.example/renderer.png' } } } } };
     });
-    await page.addScriptTag({ content: fs.readFileSync(path.join(__dirname, '../js/image-recovery-main.js'), 'utf8') });
+    await page.addScriptTag({ content: fs.readFileSync(path.join(__dirname, '../js/links/image-recovery-main.js'), 'utf8') });
     await page.evaluate(() => document.querySelector('#image').dispatchEvent(new Event('ghrc-resolve-image-source', { bubbles: true })));
     assert.equal(await page.locator('#image').getAttribute('data-ghrc-original-image'), 'https://pictures.example/renderer.png');
   } finally { await browser.close(); }
@@ -92,7 +92,7 @@ test('recover DIL citations and catalog artwork after an original image fails', 
         return { ok: true, url: message.url, html: '<table><tr><td id="End_Zone">End Zone</td><td><img alt="earth" data-relevant="0" data-src="https://pictures.example/icon.png"></td><td><img alt="End Zone ID S8E1" data-relevant="1" data-src="https://pictures.example/pony.png"></td></tr></table>' };
       } } };
     });
-    for (const file of ['image-recovery-main.js', 'unavailable-images.js']) await page.addScriptTag({ content: fs.readFileSync(path.join(__dirname, '../js', file), 'utf8') });
+    for (const file of ['image-recovery-main.js', 'unavailable-images.js']) await page.addScriptTag({ content: fs.readFileSync(path.join(__dirname, '../js/links', file), 'utf8') });
     await page.waitForFunction(() => document.querySelector('#image img')?.naturalWidth === 1);
     assert.equal(await page.locator('#image img').getAttribute('src'), 'https://pictures.example/pony.png');
     assert.equal(await page.evaluate(() => window.sourceUrl), 'https://catalog.example/ponies');
@@ -119,7 +119,7 @@ test('ignores failed citation favicon images instead of recovering them as artwo
         return { ok: true, url: 'https://source.example/report', html: '<img alt="image" src="photo.png">' };
       } } };
     });
-    await page.addScriptTag({ content: fs.readFileSync(path.join(__dirname, '../js/unavailable-images.js'), 'utf8') });
+    await page.addScriptTag({ content: fs.readFileSync(path.join(__dirname, '../js/links/unavailable-images.js'), 'utf8') });
     await page.waitForTimeout(150);
     assert.equal(await page.evaluate(() => recoveryCalls), 0);
     assert.equal(await page.locator('#citation-icon').getAttribute('src'), 'https://www.google.com/s2/favicons?domain=https://www.newyorkfed.org&sz=32');
@@ -139,7 +139,7 @@ test('collapses exhausted empty image columns and retries when original metadata
       window.__ghrcExtensionContext = { active: () => true, onStop: fn => { window.stop = fn; } };
       window.chrome = { runtime: { sendMessage: async () => ({ ok: false }) } };
     });
-    await page.addScriptTag({ content: fs.readFileSync(path.join(__dirname, '../js/unavailable-images.js'), 'utf8') });
+    await page.addScriptTag({ content: fs.readFileSync(path.join(__dirname, '../js/links/unavailable-images.js'), 'utf8') });
     await page.waitForFunction(() => document.querySelector('#column').style.display === 'none');
     assert.equal(await page.locator('#text').isVisible(), true);
     assert.equal(await page.locator('#missing').count(), 1);
@@ -162,7 +162,7 @@ test('matches source image filenames when alt text is an unrelated caption', asy
       window.__ghrcExtensionContext = { active: () => true, onStop: () => {} };
       window.chrome = { runtime: { sendMessage: async () => ({ ok: true, url: 'https://catalog.example/episode', html: '<img alt="...but he has stiff competition." data-image-name="Swooning Ponies.png" src="https://pictures.example/group.png">' }) } };
     });
-    await page.addScriptTag({ content: fs.readFileSync(path.join(__dirname, '../js/unavailable-images.js'), 'utf8') });
+    await page.addScriptTag({ content: fs.readFileSync(path.join(__dirname, '../js/links/unavailable-images.js'), 'utf8') });
     await page.waitForFunction(() => document.querySelector('#missing img')?.naturalWidth === 1);
     assert.equal(await page.locator('#missing').isVisible(), true);
   } finally { await browser.close(); }

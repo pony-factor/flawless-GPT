@@ -5,7 +5,7 @@ const vm = require('node:vm');
 const path = require('node:path');
 
 const source = fs.readFileSync(
-  path.join(__dirname, '../js/hide-background-completion-notifications.js'),
+  path.join(__dirname, '../js/chat/hide-background-completion-notifications.js'),
   'utf8'
 );
 

@@ -4,7 +4,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
 
-const source = fs.readFileSync(path.join(__dirname, "../js/hide-upgrade-promotions.js"), "utf8");
+const source = fs.readFileSync(path.join(__dirname, "../js/chat/hide-upgrade-promotions.js"), "utf8");
 
 function api() {
   const testApi = {};

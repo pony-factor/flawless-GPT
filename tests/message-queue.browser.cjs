@@ -5,8 +5,8 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const { chromium } = require('playwright');
-const source = fs.readFileSync(path.join(__dirname, '../js/message-queue.js'), 'utf8');
-const clipboardSource = fs.readFileSync(path.join(__dirname, '../js/clipboard-send.js'), 'utf8');
+const source = fs.readFileSync(path.join(__dirname, '../js/composer/message-queue.js'), 'utf8');
+const clipboardSource = fs.readFileSync(path.join(__dirname, '../js/composer/clipboard-send.js'), 'utf8');
 const queueCss = fs.readFileSync(path.join(__dirname, '../css/message-queue.css'), 'utf8');
 const hatCss = fs.readFileSync(path.join(__dirname, '../css/top-hat-send-button.css'), 'utf8');
 let browser;
@@ -136,11 +136,11 @@ async function fixture({ active = false, voice = false, editable = true, stored 
     search.setAttribute('aria-label', 'Search WootenLink');
     document.querySelector('form').prepend(search);
   });
-  await page.addScriptTag({ content: fs.readFileSync(path.join(__dirname, "../js/extension-context.js"), "utf8") });
+  await page.addScriptTag({ content: fs.readFileSync(path.join(__dirname, "../js/core/extension-context.js"), "utf8") });
   if (clipboard) await page.addScriptTag({ content: clipboardSource });
   if (preserveScroll) {
     await page.evaluate(() => { storage.preserveScrollPositionOnSend = true; });
-    await page.addScriptTag({ content: fs.readFileSync(path.join(__dirname, '../js/preserve-scroll-on-send.js'), 'utf8') });
+    await page.addScriptTag({ content: fs.readFileSync(path.join(__dirname, '../js/composer/preserve-scroll-on-send.js'), 'utf8') });
   }
   await page.addScriptTag({ content: source });
   if (!delayQueueStorage && queueButton) await page.locator('#ghrc-message-queue-button').waitFor();
@@ -1197,7 +1197,7 @@ test('disclaimer is hidden by default, toggles live, and leaves message content 
   await p.evaluate(() => {
     document.body.insertAdjacentHTML('beforeend', '<div id="notice">ChatGPT can make mistakes. Check important info.</div><article><p id="message">ChatGPT can make mistakes. This is message content.</p></article>');
   });
-  await p.addScriptTag({ content: fs.readFileSync(path.join(__dirname, '../js/chatgpt-disclaimer.js'), 'utf8') });
+  await p.addScriptTag({ content: fs.readFileSync(path.join(__dirname, '../js/chat/chatgpt-disclaimer.js'), 'utf8') });
   await p.waitForFunction(() => getComputedStyle(document.getElementById('notice')).display === 'none');
   assert.equal(await p.locator('#message').isVisible(), true);
   await p.evaluate(() => chrome.storage.local.set({ showChatgptDisclaimer: true }));

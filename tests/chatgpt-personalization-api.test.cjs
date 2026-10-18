@@ -5,7 +5,7 @@ const test = require("node:test");
 const vm = require("node:vm");
 
 const SOURCE = fs.readFileSync(
-  path.join(__dirname, "..", "js", "chatgpt-personalization-api.js"),
+  path.join(__dirname, "..", "js", "settings/chatgpt-personalization-api.js"),
   "utf8",
 );
 

@@ -16,7 +16,7 @@ function fixture(fetch) {
       removeAttribute: key => attributes.delete(key),
     } },
   });
-  for (const name of ['sidebar-chat-dates-main.js', 'deep-research-usage.js']) {
+  for (const name of ['sidebar/sidebar-chat-dates-main.js', 'research/deep-research-usage.js']) {
     vm.runInContext(fs.readFileSync(path.join(__dirname, '../js', name), 'utf8'), context);
   }
   return { window, messages, attributes };

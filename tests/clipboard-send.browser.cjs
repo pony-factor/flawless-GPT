@@ -34,7 +34,7 @@ test('clipboard URL button only appears on the New Chat route', async () => {
       };
     });
 
-    await page.addScriptTag({ content: fs.readFileSync(path.join(__dirname, '../js/clipboard-send.js'), 'utf8') });
+    await page.addScriptTag({ content: fs.readFileSync(path.join(__dirname, '../js/composer/clipboard-send.js'), 'utf8') });
 
     await page.waitForSelector('#ghrc-clipboard-open-url-button');
     assert.equal(await page.locator('#ghrc-clipboard-open-url-button').count(), 1);

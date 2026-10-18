@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const path = require('node:path');
 
-const source = fs.readFileSync(path.join(__dirname, '../js/spellcheck-launcher.js'), 'utf8');
+const source = fs.readFileSync(path.join(__dirname, '../js/launchers/spellcheck-launcher.js'), 'utf8');
 
 function fixture({ clipboard = 'clipboard text', draft = '', suggestionAvailable = true, adjacentDescription = false, externalAppChip = false, rejectInlineInsertion = false } = {}) {
   let now = 0;

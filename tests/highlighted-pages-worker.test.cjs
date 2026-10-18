@@ -5,7 +5,7 @@ const path = require("node:path");
 const vm = require("node:vm");
 
 const source = fs.readFileSync(
-  path.join(__dirname, "../js/highlighted-pages-worker.js"),
+  path.join(__dirname, "../js/dashboard/highlighted-pages-worker.js"),
   "utf8",
 );
 

@@ -3,7 +3,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
-const source = fs.readFileSync(path.join(__dirname, "../js/composer-colors.js"), "utf8");
+const source = fs.readFileSync(path.join(__dirname, "../js/composer/composer-colors.js"), "utf8");
 const css = fs.readFileSync(path.join(__dirname, "../css/composer-colors.css"), "utf8");
 
 test("composer color overrides validate, update live and clean up", async () => {

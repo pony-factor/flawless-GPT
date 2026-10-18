@@ -26,8 +26,8 @@ async function fixture() {
     };
   });
   await page.addStyleTag({ content: read('css/flawless-corner.css') });
-  await page.addScriptTag({ content: read('js/extension-context.js') });
-  await page.addScriptTag({ content: read('js/flawless-corner.js') });
+  await page.addScriptTag({ content: read('js/core/extension-context.js') });
+  await page.addScriptTag({ content: read('js/chat/flawless-corner.js') });
   return page;
 }
 

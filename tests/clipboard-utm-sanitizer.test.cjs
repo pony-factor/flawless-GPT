@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const sourcePath = path.join(__dirname, '../js/clipboard-utm-sanitizer.js');
+const sourcePath = path.join(__dirname, '../js/links/clipboard-utm-sanitizer.js');
 const source = fs.readFileSync(sourcePath, 'utf8');
 const {
   stripTrackingFromUrlValue,

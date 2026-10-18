@@ -1,0 +1,14 @@
+importScripts(
+  "../dashboard/avatar-cache.js",
+  "../links/image-recovery-worker.js",
+  "../dashboard/highlighted-pages-worker.js",
+  "../chat/chatgpt-notification-settings.js",
+  "../core/service-worker.js",
+  "../links/clipboard-url-navigation.js",
+  "../links/native-split-view.js",
+  "../links/github-link-preview.js",
+  "../github/github-app-auth.js",
+  "../launchers/youtube-search-worker.js",
+  "../research/research-publisher-background.js",
+  "../research/research-launcher-background.js"
+);

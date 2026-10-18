@@ -2,7 +2,7 @@ const {test}=require("node:test");
 const assert=require("node:assert/strict");
 const fs=require("node:fs");
 const path=require("node:path");
-const {MAX_ISSUES,parseIssueUrl,normalizePinnedIssues}=require("../js/pinned-issues-model.js");
+const {MAX_ISSUES,parseIssueUrl,normalizePinnedIssues}=require("../js/dashboard/pinned-issues-model.js");
 test("GitHub issue URLs are canonicalized",()=>{
   assert.deepEqual(parseIssueUrl("https://github.com/pony-factor/flawless-GPT/issues/12?x=y#c"),
     {url:"https://github.com/pony-factor/flawless-GPT/issues/12",owner:"pony-factor",repository:"flawless-GPT",number:12});
@@ -28,10 +28,10 @@ test("settings panels and content scripts load pinned issues before Highlights",
     const html=fs.readFileSync(path.join(__dirname,"..",name),"utf8");
     assert.ok(html.indexOf('id="pinned-issues-settings"')<html.indexOf('id="highlighted-pages-settings"'));
     assert.ok(html.includes('id="pinned-issue-template"'));
-    assert.ok(html.indexOf("js/pinned-issues-model.js")<html.indexOf("js/pinned-issues-options.js"));
+    assert.ok(html.indexOf("js/dashboard/pinned-issues-model.js")<html.indexOf("js/settings/pinned-issues-options.js"));
   }
   const manifest=JSON.parse(fs.readFileSync(path.join(__dirname,"..","manifest.json"),"utf8"));
-  const scripts=manifest.content_scripts.find(x=>x.js.includes("js/highlighted-pages.js")).js;
-  assert.ok(scripts.indexOf("js/pinned-issues-model.js")<scripts.indexOf("js/pinned-issues.js"));
-  assert.ok(scripts.indexOf("js/pinned-issues.js")<scripts.indexOf("js/highlighted-pages.js"));
+  const scripts=manifest.content_scripts.find(x=>x.js.includes("js/dashboard/highlighted-pages.js")).js;
+  assert.ok(scripts.indexOf("js/dashboard/pinned-issues-model.js")<scripts.indexOf("js/dashboard/pinned-issues.js"));
+  assert.ok(scripts.indexOf("js/dashboard/pinned-issues.js")<scripts.indexOf("js/dashboard/highlighted-pages.js"));
 });

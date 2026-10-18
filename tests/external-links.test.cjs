@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const path = require('node:path');
 
-const source = fs.readFileSync(path.join(__dirname, '../js/external-links.js'), 'utf8');
+const source = fs.readFileSync(path.join(__dirname, '../js/links/external-links.js'), 'utf8');
 
 class Element {
   closest() { return null; }

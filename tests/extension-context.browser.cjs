@@ -27,14 +27,14 @@ async function fixture({ delayed = false } = {}) {
     }, onChanged: { addListener(fn) { listeners.push(fn); } } } };
     window.__ghrcMessageQueue = { findActionButton: () => document.getElementById('send'), enqueueText: async t => { window.queued = t; return true; } };
   }, { delayed });
-  await p.addScriptTag({ content: read('js/extension-context.js') });
+  await p.addScriptTag({ content: read('js/core/extension-context.js') });
   return p;
 }
 for (const mode of ['missing-runtime', 'missing-storage', 'rejected-request']) {
   test(`warm pins survive ${mode} without unhandled errors or repeated API calls`, async () => {
     const p = await fixture({ delayed: mode === 'rejected-request' });
     await p.evaluate(() => { document.body.insertAdjacentHTML('beforeend', '<section id="github-repositories-for-chatgpt"><p class="ghrc-state">Loading repositories…</p></section>'); });
-    await p.addScriptTag({ content: read('js/repository-fast-ui.js') });
+    await p.addScriptTag({ content: read('js/dashboard/repository-fast-ui.js') });
     await p.evaluate(mode => {
       if (mode === 'missing-runtime') chrome.runtime = undefined;
       else if (mode === 'missing-storage') chrome.storage = undefined;
@@ -54,7 +54,7 @@ for (const mode of ['missing-runtime', 'missing-storage', 'rejected-request']) {
 test('normal warm pins render and unpin', async () => {
   const p = await fixture();
   await p.evaluate(() => document.body.insertAdjacentHTML('beforeend', '<section id="github-repositories-for-chatgpt"><p class="ghrc-state">Loading repositories…</p></section>'));
-  await p.addScriptTag({ content: read('js/repository-fast-ui.js') });
+  await p.addScriptTag({ content: read('js/dashboard/repository-fast-ui.js') });
   await p.getByRole('button', { name: 'Unpin owner/repo' }).click();
   assert.equal(await p.locator('.ghrc-repository').count(), 0);
   assert.deepEqual(p.errors, []);
@@ -63,7 +63,7 @@ test('normal warm pins render and unpin', async () => {
 test('pending settings reject safely in display, clipboard, dashboard and spellcheck scripts', async () => {
   const p = await fixture({ delayed: true });
   await p.evaluate(() => document.body.insertAdjacentHTML('beforeend', '<section id="github-repositories-for-chatgpt"><footer class="ghrc-dashboard-footer"></footer></section>'));
-  for (const script of ['compact-header', 'collapse-sidebar', 'chat-display', 'clipboard-send', 'content', 'spellcheck-launcher', 'force-high-thinking', 'owner-grid', 'hide-cookie-preferences', 'chatgpt-disclaimer', 'block-voice-prompts', 'youtube-search', 'highlighted-pages']) {
+  for (const script of ['chat/compact-header', 'sidebar/collapse-sidebar', 'chat/chat-display', 'composer/clipboard-send', 'dashboard/content', 'launchers/spellcheck-launcher', 'chat/force-high-thinking', 'dashboard/owner-grid', 'chat/hide-cookie-preferences', 'chat/chatgpt-disclaimer', 'chat/block-voice-prompts', 'launchers/youtube-search', 'dashboard/highlighted-pages']) {
     await p.addScriptTag({ content: read(`js/${script}.js`) });
   }
   await p.evaluate(() => {
@@ -83,7 +83,7 @@ test('clipboard denial preserves the draft, resets the button, and permits a ret
     document.getElementById('prompt-textarea').value = 'Partial draft';
     navigator.clipboard.readText = async () => { throw new DOMException('Denied', 'NotAllowedError'); };
   });
-  await p.addScriptTag({ content: read('js/clipboard-send.js') });
+  await p.addScriptTag({ content: read('js/composer/clipboard-send.js') });
   const button = p.locator('#ghrc-clipboard-send-button');
   await button.click();
   assert.equal(await button.isEnabled(), true);
@@ -98,13 +98,13 @@ test('clipboard denial preserves the draft, resets the button, and permits a ret
 test('the lifecycle bootstrap runs before API-consuming content scripts', () => {
   const manifest = JSON.parse(read('manifest.json'));
   const early = manifest.content_scripts.find(s => s.run_at === 'document_start' && s.world !== 'MAIN');
-  assert.equal(early.js[0], 'js/extension-context.js');
+  assert.equal(early.js[0], 'js/core/extension-context.js');
 });
 
-for (const script of ['avatar-cache-ui', 'message-queue']) {
+for (const script of ['dashboard/avatar-cache-ui', 'composer/message-queue']) {
   test(`${script} handles a pending request rejected during reload`, async () => {
     const p = await fixture({ delayed: true });
-    if (script === 'avatar-cache-ui') await p.evaluate(() => {
+    if (script === 'dashboard/avatar-cache-ui') await p.evaluate(() => {
       document.body.insertAdjacentHTML('beforeend', '<section id="github-repositories-for-chatgpt"><img class="ghrc-owner-avatar" src="https://avatars.githubusercontent.com/u/1"></section>');
     });
     await p.addScriptTag({ content: read(`js/${script}.js`) });
@@ -127,7 +127,7 @@ for (const script of ['avatar-cache-ui', 'message-queue']) {
 }
 test('queue navigation catches invalidation after its storage read starts', async () => {
   const p = await fixture({ delayed: true });
-  await p.addScriptTag({ content: read('js/message-queue.js') });
+  await p.addScriptTag({ content: read('js/composer/message-queue.js') });
   await p.evaluate(() => { pending.forEach(p => p.resolve(p.defaults)); pending = []; });
   await p.waitForTimeout(50);
   await p.evaluate(() => {
@@ -160,7 +160,7 @@ for (const pendingAction of ['get', 'set']) {
         window.postMessage({ ...message, direction: 'response', ok: true, guidance: 'Remote' }, location.origin);
       });
     }, pendingAction);
-    await p.addScriptTag({ content: read('js/web-commit-guidance-sync.js') });
+    await p.addScriptTag({ content: read('js/settings/web-commit-guidance-sync.js') });
     await p.waitForFunction(action => bridgeRequests.includes(action), pendingAction);
     await p.evaluate(() => {
       chrome.runtime = undefined;

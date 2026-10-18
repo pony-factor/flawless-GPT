@@ -10,7 +10,7 @@ function fixture(fetchGitHub, tokens = [], graphqlFetch = null) {
     githubHeaders: token => ({ Authorization: 'Bearer ' + token }),
     chrome: { runtime: { id: 'extension', onMessage: { addListener(fn) { listener = fn; } } } },
   });
-  vm.runInContext(fs.readFileSync(require.resolve('../js/github-link-preview.js'), 'utf8'), context);
+  vm.runInContext(fs.readFileSync(require.resolve('../js/links/github-link-preview.js'), 'utf8'), context);
   return { context, listener };
 }
 test('commit preview returns display data and patches', async () => {

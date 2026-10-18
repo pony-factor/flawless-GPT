@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const vm = require('node:vm');
 const fs = require('node:fs');
 const path = require('node:path');
-const source = fs.readFileSync(path.join(__dirname, '../js/image-recovery-worker.js'), 'utf8');
+const source = fs.readFileSync(path.join(__dirname, '../js/links/image-recovery-worker.js'), 'utf8');
 function fixture(fetch) {
   const sandbox = { URL, URLSearchParams, AbortController, setTimeout, clearTimeout, TextDecoder, Uint8Array, fetch, chrome: { runtime: { id: 'fixture', onMessage: { addListener(fn) { sandbox.listener = fn; } } } } };
   vm.createContext(sandbox);

@@ -5,7 +5,7 @@ const test = require("node:test");
 const vm = require("node:vm");
 
 const SOURCE = fs.readFileSync(
-  path.join(__dirname, "..", "js", "web-commit-guidance.js"),
+  path.join(__dirname, "..", "js", "settings/web-commit-guidance.js"),
   "utf8",
 );
 

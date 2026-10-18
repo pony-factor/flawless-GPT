@@ -40,7 +40,7 @@ function makeRepository(index) {
 }
 
 function createWorker({ storage = {}, loadTokens, fetchImpl }) {
-  const source = fs.readFileSync(require.resolve("../js/service-worker.js"), "utf8");
+  const source = fs.readFileSync(require.resolve("../js/core/service-worker.js"), "utf8");
   const local = { ...storage };
   const tokenCalls = [];
   let messageListener = null;

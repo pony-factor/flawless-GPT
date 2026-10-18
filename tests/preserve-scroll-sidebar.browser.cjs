@@ -5,7 +5,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { chromium } = require('playwright');
 
-const source = fs.readFileSync(path.join(__dirname, '../js/preserve-scroll-on-send.js'), 'utf8');
+const source = fs.readFileSync(path.join(__dirname, '../js/composer/preserve-scroll-on-send.js'), 'utf8');
 let browser;
 before(async () => {
   browser = await chromium.launch({

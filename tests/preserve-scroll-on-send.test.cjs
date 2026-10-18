@@ -5,7 +5,7 @@ const vm = require("node:vm");
 const path = require("node:path");
 
 const source = fs.readFileSync(
-  path.join(__dirname, "../js/preserve-scroll-on-send.js"),
+  path.join(__dirname, "../js/composer/preserve-scroll-on-send.js"),
   "utf8"
 );
 

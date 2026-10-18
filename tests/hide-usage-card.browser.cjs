@@ -16,7 +16,7 @@ test('hides split and spaced usage percentages, preserves chat text, and restore
         onChanged: { addListener: listener => listeners.push(listener) },
       } };
     });
-    await page.addScriptTag({ content: fs.readFileSync(path.join(__dirname, '../js/hide-usage-card.js'), 'utf8') });
+    await page.addScriptTag({ content: fs.readFileSync(path.join(__dirname, '../js/chat/hide-usage-card.js'), 'utf8') });
     for (const [index, percentage] of ['5%', '5 %', '<span>5</span><span>%</span>'].entries()) {
       await page.evaluate(({ index, percentage }) => {
         document.getElementById('cards').insertAdjacentHTML('beforeend', `<section id="card-${index}"><button>${percentage}<span>usage remaining</span></button><p>Weekly 5% remaining</p><button>Add credits</button><button>Upgrade</button></section>`);

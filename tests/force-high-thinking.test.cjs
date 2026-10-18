@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 const path = require('node:path');
-const source = fs.readFileSync(path.join(__dirname, '../js/force-high-thinking.js'), 'utf8');
+const source = fs.readFileSync(path.join(__dirname, '../js/chat/force-high-thinking.js'), 'utf8');
 
 class Element {
   constructor(text = '', attrs = {}) { this.textContent = text; this.attrs = attrs; this.isConnected = true; this.clicks = 0; }
@@ -35,7 +35,7 @@ function fixture() {
     },
   };
   vm.createContext(context);
-  vm.runInContext(fs.readFileSync(path.join(__dirname, "../js/extension-context.js"), "utf8"), context);
+  vm.runInContext(fs.readFileSync(path.join(__dirname, "../js/core/extension-context.js"), "utf8"), context);
   vm.runInContext(source.slice(0, source.indexOf('  chrome.storage.onChanged')) + `
     globalThis.api = { effortLevel, ensureStyle, selectMaximum, controlCacheKey, scanControls, finishSelection,
       begin(selector, state, initialLevel, focusedComposer) { pending = { selector, state, initialLevel, focusedComposer }; },

@@ -20,7 +20,7 @@ test('startup waits for body before reading and displaying a research handoff', 
       sendMessage: async () => { window.reads++; return { ok: true, job: { state: 'error', error: 'Recovered handoff' } }; },
     } };
   });
-  for (const file of ['js/extension-context.js', 'js/research-launcher.js'])
+  for (const file of ['js/core/extension-context.js', 'js/research/research-launcher.js'])
     await page.addScriptTag({ content: fs.readFileSync(file, 'utf8') });
   assert.equal(await page.evaluate(() => window.reads), 0);
   await page.evaluate(() => document.documentElement.append(document.createElement('body')));
@@ -81,7 +81,7 @@ async function fixture({ handoff = false, draft = '', path = '/' } = {}) {
     };
     chrome.storage = { local: {} };
   }, { handoff, draft });
-  for (const file of ['js/extension-context.js', 'js/research-import-dialog.js', 'js/research-launcher.js'])
+  for (const file of ['js/core/extension-context.js', 'js/research/research-import-dialog.js', 'js/research/research-launcher.js'])
     await page.addScriptTag({ content: fs.readFileSync(file, 'utf8') });
   await page.getByRole('button', { name: 'Research and import', exact: true }).waitFor();
   return page;
@@ -161,7 +161,7 @@ test('stable completed report auto-imports once while busy and ordinary reports 
         return { ok: true };
       } } };
   });
-  for (const file of ['vendor/turndown.js', 'vendor/turndown-plugin-gfm.js', 'js/research-import-dialog.js', 'js/research-publisher.js'])
+  for (const file of ['vendor/turndown.js', 'vendor/turndown-plugin-gfm.js', 'js/research/research-import-dialog.js', 'js/research/research-publisher.js'])
     await p.addScriptTag({ content: fs.readFileSync(file, 'utf8') });
   await p.waitForTimeout(1200);
   assert.equal(await p.evaluate(() => calls.filter(message => message.type === 'publish-research-report').length), 0);
@@ -201,7 +201,7 @@ test('a recovered popup retries automatically and restores completion without a 
         return { ok: true };
       } } };
   });
-  for (const file of ['vendor/turndown.js', 'vendor/turndown-plugin-gfm.js', 'js/research-import-dialog.js', 'js/research-publisher.js'])
+  for (const file of ['vendor/turndown.js', 'vendor/turndown-plugin-gfm.js', 'js/research/research-import-dialog.js', 'js/research/research-publisher.js'])
     await p.addScriptTag({ content: fs.readFileSync(file, 'utf8') });
   await p.waitForFunction(() => run.state === 'complete', { timeout: 15000 });
   assert.equal(await p.evaluate(() => attempts), 2);

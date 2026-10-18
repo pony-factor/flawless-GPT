@@ -1,7 +1,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { parseAllowance } = require('../js/deep-research-tracker.js');
-const { quotaFromResponse } = require('../js/deep-research-usage.js');
+const { parseAllowance } = require('../js/research/deep-research-tracker.js');
+const { quotaFromResponse } = require('../js/research/deep-research-usage.js');
 
 test('reads the server report bucket and timestamp while excluding lightweight reports', () => {
   assert.deepEqual(quotaFromResponse({ limits_progress: [

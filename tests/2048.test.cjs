@@ -5,7 +5,7 @@ const {
   moveBoard,
   canMove,
   cloneBoard,
-} = require('../js/2048.js');
+} = require('../js/games/2048.js');
 
 test('merges each pair only once per move', () => {
   assert.deepEqual(collapseLine([2, 2, 2, 2]), {
@@ -81,7 +81,7 @@ test('snapshots remain independent for unlimited undo history', () => {
 test('2048 keeps its board geometry stable while rendering moves', () => {
   const fs = require('node:fs');
   const path = require('node:path');
-  const source = fs.readFileSync(path.join(__dirname, '..', 'js', '2048.js'), 'utf8');
+  const source = fs.readFileSync(path.join(__dirname, '..', 'js', 'games/2048.js'), 'utf8');
   const styles = fs.readFileSync(path.join(__dirname, '..', 'css', '2048.css'), 'utf8');
 
   assert.doesNotMatch(source, /boardElement\.replaceChildren\(\)/);
@@ -93,7 +93,7 @@ test('2048 keeps its board geometry stable while rendering moves', () => {
 test('2048 captures game keys before the ChatGPT page can react', () => {
   const fs = require('node:fs');
   const path = require('node:path');
-  const source = fs.readFileSync(path.join(__dirname, '..', 'js', '2048.js'), 'utf8');
+  const source = fs.readFileSync(path.join(__dirname, '..', 'js', 'games/2048.js'), 'utf8');
 
   assert.match(source, /window\.addEventListener\("keydown", onKeyDown, true\);/);
   assert.match(source, /event\.stopImmediatePropagation\(\);/);
@@ -102,7 +102,7 @@ test('2048 captures game keys before the ChatGPT page can react', () => {
 test('2048 launcher keeps Button Mash icon and uses Windsor Flight palette', () => {
   const fs = require('node:fs');
   const path = require('node:path');
-  const source = fs.readFileSync(path.join(__dirname, '..', 'js', '2048.js'), 'utf8');
+  const source = fs.readFileSync(path.join(__dirname, '..', 'js', 'games/2048.js'), 'utf8');
   const styles = fs.readFileSync(path.join(__dirname, '..', 'css', '2048.css'), 'utf8');
 
   assert.match(source, /ghrc-2048-button-mash-mark/);
@@ -150,7 +150,7 @@ test('all 23 Windsor Flight colors are used for empty and numbered tiles', () =>
 });
 
 test('higher-than-2048 tile classes remain colored without limiting the game', () => {
-  const { tileClass } = require('../js/2048.js');
+  const { tileClass } = require('../js/games/2048.js');
   for (const value of [2048, 4096, 8192, 16384, 131072, 4194304]) {
     assert.equal(tileClass(value), `ghrc-2048-tile-${value}`);
   }
@@ -159,7 +159,7 @@ test('higher-than-2048 tile classes remain colored without limiting the game', (
   assert.equal(tileClass(3), 'ghrc-2048-tile-super');
   const fs = require('node:fs');
   const path = require('node:path');
-  const source = fs.readFileSync(path.join(__dirname, '..', 'js', '2048.js'), 'utf8');
+  const source = fs.readFileSync(path.join(__dirname, '..', 'js', 'games/2048.js'), 'utf8');
   assert.match(source, /value >= 1000000 \? "micro"/);
   assert.match(source, /value >= 10000 \? "tiny"/);
 });
@@ -168,9 +168,9 @@ test('higher-than-2048 tile classes remain colored without limiting the game', (
 test('2048 launcher is disabled by default and controlled by the display preference', () => {
   const fs = require('node:fs');
   const path = require('node:path');
-  const source = fs.readFileSync(path.join(__dirname, '..', 'js', '2048.js'), 'utf8');
+  const source = fs.readFileSync(path.join(__dirname, '..', 'js', 'games/2048.js'), 'utf8');
   const options = fs.readFileSync(path.join(__dirname, '..', 'options.html'), 'utf8');
-  const settings = fs.readFileSync(path.join(__dirname, '..', 'js', 'options.js'), 'utf8');
+  const settings = fs.readFileSync(path.join(__dirname, '..', 'js', 'settings/options.js'), 'utf8');
 
   assert.match(options, /id="show-2048-launcher" type="checkbox"/);
   assert.doesNotMatch(options, /id="show-2048-launcher"[^>]*checked/);

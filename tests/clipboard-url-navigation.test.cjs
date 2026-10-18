@@ -19,7 +19,7 @@ function clipboard(url, response = { ok: true }) {
     __ghrcExtensionContext: { active: () => true, handleError: error => { throw error; } },
   };
   vm.createContext(scope);
-  const source = read("clipboard-send.js"), end = source.indexOf("  async function sendClipboardPrompt");
+  const source = read("composer/clipboard-send.js"), end = source.indexOf("  async function sendClipboardPrompt");
   assert.ok(end > 0);
   vm.runInContext(source.slice(0, end) + "\nglobalThis.openForTest = openClipboardUrl;\n})();", scope);
   return { run: () => scope.openForTest(button), navigations, messages, button };
@@ -27,7 +27,7 @@ function clipboard(url, response = { ok: true }) {
 
 function worker(allowed = true, fail = false) {
   const navigations = []; let listener;
-  vm.runInNewContext(read("clipboard-url-navigation.js"), { URL, chrome: {
+  vm.runInNewContext(read("links/clipboard-url-navigation.js"), { URL, chrome: {
     extension: { isAllowedFileSchemeAccess: async () => allowed },
     tabs: { update: async (id, { url }) => {
       if (fail) throw Error("browser blocked local URL");

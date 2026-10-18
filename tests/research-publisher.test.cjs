@@ -26,7 +26,7 @@ function background(enabled, nativeResult = { ok: true, repository: 'research', 
       },
     },
   };
-  vm.runInNewContext(fs.readFileSync('js/research-publisher-background.js', 'utf8'), { chrome, URL, TextEncoder, Date, Error });
+  vm.runInNewContext(fs.readFileSync('js/research/research-publisher-background.js', 'utf8'), { chrome, URL, TextEncoder, Date, Error });
   const sender = { id: 'test-extension', url: 'https://connector-openai-deep-research.web-sandbox.oaiusercontent.com/', tab: { id: 1, url: 'https://chatgpt.com/c/example' } };
   return {
     calls,
@@ -126,7 +126,7 @@ test('settings default off, confirm on enable, and recheck on click', async () =
     },
     runtime: { sendMessage: async () => { sends++; return { ok: true, repository: 'research', branch: 'main' }; } },
   };
-  vm.runInNewContext(fs.readFileSync('js/research-publisher-options.js', 'utf8'), {
+  vm.runInNewContext(fs.readFileSync('js/settings/research-publisher-options.js', 'utf8'), {
     chrome, document: { getElementById: (id) => elements.get(id) },
   });
   await new Promise(setImmediate);
@@ -149,7 +149,7 @@ test('settings default off, confirm on enable, and recheck on click', async () =
 });
 
 test('import launcher stays available while the enabled publisher is disconnected', () => {
-  const source = fs.readFileSync('js/research-publisher.js', 'utf8');
+  const source = fs.readFileSync('js/research/research-publisher.js', 'utf8');
   const boundary = source.indexOf('  chrome.storage.local.get');
   const context = { WeakSet, TextEncoder, URL };
   vm.createContext(context);

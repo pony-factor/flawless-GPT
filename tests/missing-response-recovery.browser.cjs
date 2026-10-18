@@ -6,7 +6,7 @@ const { chromium } = require('playwright');
 const source = [
   'vendor/showdown.min.js',
   'vendor/purify.min.js',
-  'js/missing-response-recovery.js',
+  'js/chat/missing-response-recovery.js',
 ].map(file => fs.readFileSync(path.join(__dirname, '..', file), 'utf8')).join('\n;\n');
 let browser;
 before(async () => {
