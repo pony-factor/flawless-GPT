@@ -165,6 +165,17 @@
         </fieldset>
 
         <hr class="section-divider" />
+        <fieldset id="pinned-issues-settings">
+          <legend>Pinned issues</legend>
+          <p class="help">Pin GitHub issues below repositories and above Highlights. Give them optional labels, reorder, or remove. Links are stored locally; issue metadata is not fetched.</p>
+          <div class="pinned-issue-add">
+            <input id="pinned-issue-url" type="url" inputmode="url" spellcheck="false" placeholder="https://github.com/owner/repo/issues/123" aria-label="GitHub issue URL" />
+            <button id="add-pinned-issue" class="secondary" type="button">Pin issue</button>
+            <input id="pinned-issue-label" type="text" maxlength="120" placeholder="Label (optional)" aria-label="Optional pinned issue label" />
+          </div>
+          <p id="pinned-issues-status" class="help pinned-issues-status" role="status" aria-live="polite"></p>
+          <div id="pinned-issues-list" class="pinned-issues-settings-list"></div>
+        </fieldset>
         <fieldset id="highlighted-pages-settings">
           <legend>Highlights</legend>
           <p class="help">Add webpages and PDF documents to a single horizontal shelf beneath the repository dashboard. PDFs show their first page. Preview details are cached locally and only refreshed when you ask.</p>
@@ -559,6 +570,18 @@
         </div>
       </div>
     </template>
+    <template id="pinned-issue-template">
+      <div class="pinned-issue-setting" draggable="true">
+        <span class="drag-handle" aria-hidden="true">⋮⋮</span>
+        <span class="pinned-issue-copy"><strong class="pinned-issue-name"></strong><small class="pinned-issue-repository"></small></span>
+        <span class="pinned-issue-controls">
+          <button class="secondary move-issue-up" type="button" aria-label="Move issue up">↑</button>
+          <button class="secondary move-issue-down" type="button" aria-label="Move issue down">↓</button>
+          <button class="secondary rename-issue" type="button">Rename</button>
+          <button class="secondary remove-issue" type="button">Remove</button>
+        </span>
+      </div>
+    </template>
     <template id="highlighted-page-template">
       <div class="highlighted-page-setting" draggable="true">
         <span class="drag-handle" aria-hidden="true">⋮⋮</span>
@@ -579,6 +602,8 @@
     <script src="js/token-vault.js"></script>
     <script src="js/repository-search-shortcut.js"></script>
     <script src="js/options.js"></script>
+    <script src="js/pinned-issues-model.js"></script>
+    <script src="js/pinned-issues-options.js"></script>
     <script src="js/highlighted-pages-options.js"></script>
     <script src="js/research-publisher-options.js"></script>
     <script src="js/web-commit-guidance.js"></script>

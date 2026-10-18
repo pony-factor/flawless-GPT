@@ -140,6 +140,7 @@
         "css/temporary-chat-inline.css",
         "css/top-hat-send-button.css",
         "css/message-queue.css",
+        "css/pinned-issues.css",
         "css/highlighted-pages.css",
         "css/deep-research-tracker.css"
       ],
@@ -152,6 +153,8 @@
         "js/message-queue.js",
         "js/file-drop.js",
         "js/temporary-chat-inline.js",
+        "js/pinned-issues-model.js",
+        "js/pinned-issues.js",
         "js/highlighted-pages.js",
         "js/deep-research-tracker.js"
       ],
