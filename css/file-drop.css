@@ -4,7 +4,8 @@
 #ghrc-file-drop-overlay {
   --ghrc-drop-accent: var(--ghrc-composer-focus-ring,
     var(--ghrc-composer-surface-border,
-      var(--theme-submit-btn-bg, var(--text-accent, var(--text-primary, CanvasText)))));
+      var(--app-color-icon-accent,
+        var(--theme-submit-btn-bg, var(--text-accent, var(--ghrc-accent, Highlight))))));
   --ghrc-drop-surface: var(--ghrc-composer-surface, var(--main-surface-primary, Canvas));
   --ghrc-drop-text: var(--ghrc-composer-text, var(--text-primary, CanvasText));
   position: fixed;

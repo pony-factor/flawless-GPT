@@ -242,6 +242,14 @@ test("overlay follows ChatGPT's live accent and surfaces, with independent compo
     });
     assert.equal((await palette()).border, "rgb(69, 169, 129)");
     assert.equal((await palette()).background, "rgb(23, 27, 36)");
+    // Current ChatGPT exposes its accent through app tokens; the old submit
+    // token can be absent or neutral even with a colorful active theme.
+    await page.evaluate(() => {
+      document.documentElement.style.setProperty("--app-color-icon-accent", "#48a04c");
+      document.documentElement.style.setProperty("--theme-submit-btn-bg", "#ffffff");
+    });
+    assert.equal((await palette()).border, "rgb(72, 160, 76)");
+    assert.equal((await palette()).icon, "rgb(72, 160, 76)");
   } finally { await page.close(); }
 });
 
