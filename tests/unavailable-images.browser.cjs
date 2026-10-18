@@ -128,3 +128,42 @@ test('ignores failed citation favicon images instead of recovering them as artwo
     await browser.close();
   }
 });
+
+test('collapses exhausted empty image columns and retries when original metadata arrives', async () => {
+  const browser = await chromium.launch({ executablePath: '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser', headless: true });
+  const page = await browser.newPage();
+  try {
+    await page.route('https://pictures.example/late.png', route => route.fulfill({ contentType: 'image/png', body: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=', 'base64') }));
+    await page.setContent('<div data-message-author-role="assistant"><div data-d-component="row"><div id="column" data-d-component="box" style="width:144px"><div data-d-component="box"><div id="missing" role="img" aria-label="Image unavailable" style="width:112px;height:112px"><svg></svg></div></div></div><div id="text">Swoon Song, Fond Feather, Dear Darling</div></div></div>');
+    await page.evaluate(() => {
+      window.__ghrcExtensionContext = { active: () => true, onStop: fn => { window.stop = fn; } };
+      window.chrome = { runtime: { sendMessage: async () => ({ ok: false }) } };
+    });
+    await page.addScriptTag({ content: fs.readFileSync(path.join(__dirname, '../js/unavailable-images.js'), 'utf8') });
+    await page.waitForFunction(() => document.querySelector('#column').style.display === 'none');
+    assert.equal(await page.locator('#text').isVisible(), true);
+    assert.equal(await page.locator('#missing').count(), 1);
+    await page.locator('#missing').evaluate(e => e.setAttribute('data-original-src', 'https://pictures.example/late.png'));
+    await page.waitForFunction(() => document.querySelector('#missing img')?.naturalWidth === 1);
+    assert.equal(await page.locator('#column').isVisible(), true);
+    await page.evaluate(() => window.stop());
+    assert.equal(await page.locator('#column').evaluate(e => e.style.display), '');
+    assert.equal(await page.locator('#missing svg').evaluate(e => e.style.display), '');
+  } finally { await browser.close(); }
+});
+
+test('matches source image filenames when alt text is an unrelated caption', async () => {
+  const browser = await chromium.launch({ executablePath: '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser', headless: true });
+  const page = await browser.newPage();
+  try {
+    await page.route('https://pictures.example/group.png', route => route.fulfill({ contentType: 'image/png', body: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=', 'base64') }));
+    await page.setContent('<div data-message-author-role="assistant"><a href="https://catalog.example/episode">Source</a><div data-d-component="row"><div id="missing" role="img" aria-label="Image unavailable" style="width:112px;height:112px"></div><strong>Swooning Ponies</strong></div></div>');
+    await page.evaluate(() => {
+      window.__ghrcExtensionContext = { active: () => true, onStop: () => {} };
+      window.chrome = { runtime: { sendMessage: async () => ({ ok: true, url: 'https://catalog.example/episode', html: '<img alt="...but he has stiff competition." data-image-name="Swooning Ponies.png" src="https://pictures.example/group.png">' }) } };
+    });
+    await page.addScriptTag({ content: fs.readFileSync(path.join(__dirname, '../js/unavailable-images.js'), 'utf8') });
+    await page.waitForFunction(() => document.querySelector('#missing img')?.naturalWidth === 1);
+    assert.equal(await page.locator('#missing').isVisible(), true);
+  } finally { await browser.close(); }
+});

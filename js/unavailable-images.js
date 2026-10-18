@@ -6,7 +6,35 @@
   const attempted = new WeakSet();
   const restorations = new Map();
   const sources = new Map();
+  const unavailable = new Map();
   let scheduled = false;
+
+  function recoveryKey(element) {
+    const row = element.closest('[data-d-component="row"], figure');
+    const root = element.closest(ROOT);
+    return [element.getAttribute("data-ghrc-original-image"), element.getAttribute("data-original-src"),
+      element.getAttribute("data-src"), element.getAttribute("data-image-url"),
+      element.getAttribute("data-ghrc-image-citations"), row?.textContent,
+      [...root?.querySelectorAll('a[href]') || []].map(link => link.getAttribute('href')).join("\n")].join("\n");
+  }
+
+  function collapseUnavailable(element) {
+    if (!context.active() || !element.isConnected
+        || !element.matches('[role="img"][aria-label="Image unavailable"]') || unavailable.has(element)
+        || element.textContent.trim() || element.querySelector('img,a,button')) return;
+    // Leave React's nodes in place. Collapse only the empty image column, never
+    // a surrounding row, caption, link, or any other response content.
+    let box = element;
+    for (let parent = box.parentElement; parent?.matches('[data-d-component="box"]')
+        && parent.children.length === 1 && !parent.textContent.trim(); parent = box.parentElement) box = parent;
+    const display = box.style.getPropertyValue("display");
+    const priority = box.style.getPropertyPriority("display");
+    unavailable.set(element, { box, key: recoveryKey(element), restore() {
+      if (display) box.style.setProperty("display", display, priority);
+      else box.style.removeProperty("display");
+    } });
+    box.style.setProperty("display", "none", "important");
+  }
 
   function publicUrl(value, base = location.href) {
     try {
@@ -39,7 +67,9 @@
       const rowLabel = tableRow?.querySelector("td[id],th[scope=row]")?.textContent;
       // Catalog tables contain decorative species/sex icons beside the artwork.
       const artwork = img.getAttribute("data-relevant") !== "0";
-      result.push({ url, alt: normalize(img.getAttribute("alt") || img.getAttribute("title")), heading: normalize(heading), rowLabel: artwork ? normalize(rowLabel) : "", lazy: img.hasAttribute("data-src") || img.hasAttribute("data-lazy-src") });
+      result.push({ url, alt: normalize(img.getAttribute("alt") || img.getAttribute("title")),
+        name: artwork ? normalize((img.getAttribute("data-image-name") || "").replace(/\.[a-z0-9]+$/i, "")) : "",
+        heading: normalize(heading), rowLabel: artwork ? normalize(rowLabel) : "", lazy: img.hasAttribute("data-src") || img.hasAttribute("data-lazy-src") });
     }
     return result;
   }
@@ -91,8 +121,9 @@
     const unique = [...new Set(links)].slice(0, 6);
     const images = (await Promise.all(unique.map(loadSource))).flat();
     const ranked = images.map(image => {
-      let score = image.alt === caption ? 100 : image.heading === caption || image.rowLabel === caption ? 80 : 0;
+      let score = image.alt === caption || image.name === caption ? 100 : image.heading === caption || image.rowLabel === caption ? 80 : 0;
       if (!score && image.alt.includes(caption) && image.alt.length <= caption.length * 2) score = 60;
+      if (!score && image.name.includes(caption) && image.name.length <= caption.length * 2) score = 60;
       // Lazy artwork wins over adjacent decorative symbols under the same heading.
       if (score && image.lazy) score++;
       return { ...image, score };
@@ -106,7 +137,7 @@
     let urls = originalCandidates(element);
     let triedSources = !urls.length;
     if (triedSources) urls = await sourceCandidates(element);
-    if (!urls.length) { attempted.delete(element); return; }
+    if (!urls.length) { collapseUnavailable(element); return; }
     if (!context.active() || !element.isConnected) return;
     const native = element.tagName === "IMG";
     const image = document.createElement("img");
@@ -159,6 +190,7 @@
         }
       }
       restore(); restorations.delete(element);
+      collapseUnavailable(element);
     };
     // Keep same-origin attachment authentication; omit cross-site referrers.
     image.referrerPolicy = "no-referrer";
@@ -179,10 +211,18 @@
   function scan() {
     scheduled = false;
     if (!context.active()) return;
+    for (const [element, state] of unavailable) {
+      const remainsEmpty = state.box === element || state.box.children.length === 1
+        && !state.box.textContent.trim() && state.box.querySelectorAll('img,a,button').length === 0;
+      if (!element.isConnected || !element.matches('[role="img"][aria-label="Image unavailable"]')
+          || recoveryKey(element) !== state.key || !remainsEmpty) {
+        state.restore(); unavailable.delete(element); attempted.delete(element);
+      }
+    }
     for (const element of document.querySelectorAll(`[role="img"][aria-label="Image unavailable"], ${ROOT.split(", ").map(root => `${root} img`).join(", ")}`)) {
       if (attempted.has(element) || isCitationFavicon(element) || element.tagName === "IMG" && (!element.complete || element.naturalWidth || !element.getAttribute("src"))) continue;
       attempted.add(element);
-      void recover(element).catch(() => {});
+      void recover(element).catch(() => { collapseUnavailable(element); });
     }
     for (const [element, restore] of restorations) if (!element.isConnected) { restore(); restorations.delete(element); }
   }
@@ -192,13 +232,16 @@
     requestAnimationFrame(scan);
   }
   const observer = new MutationObserver(schedule);
-  observer.observe(document, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ["src", "srcset", "aria-label"] });
+  observer.observe(document, { childList: true, subtree: true, characterData: true, attributes: true,
+    attributeFilter: ["src", "srcset", "aria-label", "href", "data-ghrc-original-image", "data-original-src", "data-src", "data-image-url", "data-ghrc-image-citations"] });
   document.addEventListener("error", schedule, true);
   context.onStop(() => {
     observer.disconnect();
     document.removeEventListener("error", schedule, true);
     for (const restore of restorations.values()) restore();
     restorations.clear();
+    for (const state of unavailable.values()) state.restore();
+    unavailable.clear();
     sources.clear();
   });
   schedule();
