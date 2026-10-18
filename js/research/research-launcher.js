@@ -2,6 +2,8 @@
   const context = globalThis.__ghrcExtensionContext;
   if (!context?.active()) return;
   const BUTTON = 'ghrc-research-writing-block';
+  const VISIBILITY_KEY = 'showResearchWritingBlockLauncher';
+  let launcherVisible = false;
   const runs = new Map();
   let mounting = false;
   let polling = false;
@@ -56,9 +58,11 @@
     if (!document.getElementById('ghrc-research-launch-style')) {
       const style = document.createElement('style');
       style.id = 'ghrc-research-launch-style';
-      style.textContent = `.${BUTTON}{display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;padding:8px;border:0;border-radius:50%;background:transparent;color:inherit;cursor:pointer}.${BUTTON}:hover{background:color-mix(in srgb,currentColor 10%,transparent)}.${BUTTON}:disabled{opacity:.5;cursor:default}.${BUTTON}:focus-visible{outline:2px solid currentColor;outline-offset:2px}.ghrc-research-launch-status{font:12px/1.4 system-ui;margin:0 12px 8px;overflow-wrap:anywhere}.ghrc-research-launch-status:empty{display:none}#ghrc-research-run-status{position:fixed;z-index:9999;top:0;left:0;right:0;padding:8px 12px;background:light-dark(#fff,#202123);color:light-dark(#111,#fff);border-bottom:1px solid #888;font:12px/1.4 system-ui;pointer-events:none}.ghrc-report-import{color:inherit;background:light-dark(#fff,#202123);border:1px solid #888;border-radius:12px;padding:24px;max-width:420px;width:calc(100% - 64px);color-scheme:light dark}.ghrc-report-import::backdrop{background:#0008}.ghrc-report-import h2{margin-top:0;font-size:20px}.ghrc-report-import p{font-size:13px}.ghrc-report-import input{display:block;box-sizing:border-box;width:100%;padding:10px;margin-top:8px}.ghrc-report-import form>div{display:flex;justify-content:flex-end;gap:12px;margin-top:20px}.ghrc-report-import button{padding:8px 12px;cursor:pointer}`;
+      style.textContent = `.${BUTTON}{display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;padding:8px;border:0;border-radius:50%;background:transparent;color:inherit;cursor:pointer}.${BUTTON}:hover{background:color-mix(in srgb,currentColor 10%,transparent)}.${BUTTON}:disabled{opacity:.5;cursor:default}.${BUTTON}[hidden]{display:none}.${BUTTON}:focus-visible{outline:2px solid currentColor;outline-offset:2px}.ghrc-research-launch-status{font:12px/1.4 system-ui;margin:0 12px 8px;overflow-wrap:anywhere}.ghrc-research-launch-status:empty{display:none}#ghrc-research-run-status{position:fixed;z-index:9999;top:0;left:0;right:0;padding:8px 12px;background:light-dark(#fff,#202123);color:light-dark(#111,#fff);border-bottom:1px solid #888;font:12px/1.4 system-ui;pointer-events:none}.ghrc-report-import{color:inherit;background:light-dark(#fff,#202123);border:1px solid #888;border-radius:12px;padding:24px;max-width:420px;width:calc(100% - 64px);color-scheme:light dark}.ghrc-report-import::backdrop{background:#0008}.ghrc-report-import h2{margin-top:0;font-size:20px}.ghrc-report-import p{font-size:13px}.ghrc-report-import input{display:block;box-sizing:border-box;width:100%;padding:10px;margin-top:8px}.ghrc-report-import form>div{display:flex;justify-content:flex-end;gap:12px;margin-top:20px}.ghrc-report-import button{padding:8px 12px;cursor:pointer}`;
       document.head.append(style);
     }
+    document.querySelectorAll('.' + BUTTON).forEach(button => { button.hidden = !launcherVisible; });
+    if (!launcherVisible) return;
     for (const block of document.querySelectorAll('[data-oai-writing-block-surface][data-markdown-copy-text]')) {
       const header = block.querySelector('header');
       const copy = header?.querySelector('button[aria-label="Copy"]');
@@ -217,10 +221,22 @@
     respond({ ready: Boolean(activeRun && activeRun.id === message.id && userTurns() > 0 && !stopped()) });
     return false;
   });
+  const settingsChanged = (changes, area) => {
+    if (area === 'local' && changes[VISIBILITY_KEY]) {
+      launcherVisible = changes[VISIBILITY_KEY].newValue !== false;
+      schedule();
+    }
+  };
+  chrome.storage.onChanged.addListener(settingsChanged);
+  void context.run(async () => {
+    const settings = await chrome.storage.local.get({ [VISIBILITY_KEY]: true });
+    launcherVisible = settings[VISIBILITY_KEY] !== false;
+    schedule();
+  });
   const observer = new MutationObserver(schedule);
   observer.observe(document, { childList: true, subtree: true });
   const timer = setInterval(() => { void context.run(poll); }, 1000);
-  context.onStop(() => { observer.disconnect(); clearInterval(timer); });
+  context.onStop(() => { observer.disconnect(); clearInterval(timer); chrome.storage.onChanged.removeListener(settingsChanged); });
   schedule();
   void context.run(poll);
 })();

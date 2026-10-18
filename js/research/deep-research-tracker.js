@@ -29,9 +29,12 @@
   const ID = 'ghrc-deep-research-tracker';
   const DASHBOARD_ID = 'ghrc-deep-research-dashboard';
   const COMPOSER_ID = `${ID}-composer`;
+  const HOME_LAUNCHER_ID = 'ghrc-research-home-launcher';
+  const RESEARCH_MENTION = '[app-mention-path="app://connector_openai_deep_research"], [app-mention-path="app://connector_openai_deep_research_work"]';
   const USAGE_ATTRIBUTE = 'data-ghrc-deep-research-usage';
   const DAY_MS = 24 * 60 * 60_000;
   const SETTINGS_DEFAULTS = Object.freeze({
+    showResearchHomepageLauncher: true,
     showDeepResearchTracker: true,
     showDeepResearchHomepage: true,
     showDeepResearchComposer: true,
@@ -48,6 +51,7 @@
   let observedAt = 0;
   let pending = false;
   let serverQuota = null;
+  let launchingResearch = false;
 
   function readServerQuota() {
     try {
@@ -135,6 +139,87 @@
     // No task is selected or submitted. The user can hover the native research entry.
   }
 
+
+  const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+  async function prefillResearchMention() {
+    const input = [...document.querySelectorAll('#prompt-textarea, [data-composer-markdown][contenteditable="true"]')]
+      .find(visible);
+    if (!input || !input.isContentEditable) throw new Error('The ChatGPT input is not ready.');
+    const scope = input.closest('form, [data-type="unified-composer"]') || input;
+    if (scope.querySelector(RESEARCH_MENTION)) { input.focus(); return; }
+
+    // Insert an actual app mention at the beginning; never erase existing text.
+    input.focus();
+    const selection = window.getSelection();
+    if (!selection) throw new Error('Could not select the chat input.');
+    const range = document.createRange();
+    range.selectNodeContents(input);
+    range.collapse(true);
+    selection.removeAllRanges();
+    selection.addRange(range);
+    const transfer = new DataTransfer();
+    transfer.setData('text/plain', 'Deep research ');
+    transfer.setData('text/html', '<p><span app-mention-name="deep-research" app-mention-display-name="Deep research" app-mention-path="app://connector_openai_deep_research" app-mention-icon="/images/ecosystem/apps/deep_research_app/icon.png" data-prompt-link-href="app://connector_openai_deep_research" data-prompt-link-label="$deep-research" contenteditable="false">Deep research</span> </p>');
+    input.dispatchEvent(new ClipboardEvent('paste', { bubbles: true, cancelable: true, clipboardData: transfer }));
+    for (let i = 0; i < 30; i++) {
+      if (scope.querySelector(RESEARCH_MENTION)) {
+        (document.querySelector('#prompt-textarea, [data-composer-markdown][contenteditable="true"]') || input).focus();
+        return;
+      }
+      await pause(100);
+    }
+    throw new Error('ChatGPT did not accept the Deep Research plugin.');
+  }
+
+  async function launchResearchWithSpellcheck() {
+    if (launchingResearch || location.pathname !== '/') return;
+    launchingResearch = true;
+    const homeLauncher = document.getElementById(HOME_LAUNCHER_ID);
+    const status = homeLauncher?.querySelector('.ghrc-research-home-status');
+    if (status) status.textContent = 'Preparing Deep Research…';
+    try {
+      await prefillResearchMention();
+      if (status) status.textContent = 'Opening Spellcheck Only…';
+      const settings = await chrome.storage.local.get({ openExternalLinksInSplitViewOnLeft: false });
+      const result = await chrome.runtime.sendMessage({
+        type: 'open-research-spellcheck-split',
+        onLeft: settings.openExternalLinksInSplitViewOnLeft === true,
+      });
+      if (!result?.ok) throw new Error(result?.error || 'Could not open Spellcheck Only.');
+      if (status) status.textContent = result.split
+        ? '' : 'Split view unavailable; Spellcheck Only opened in a separate tab.';
+    } catch (error) {
+      if (status) status.textContent = error?.message || 'Could not prepare Deep Research.';
+    } finally {
+      launchingResearch = false;
+    }
+  }
+
+  function renderHomepageLauncher(composer) {
+    let wrapper = document.getElementById(HOME_LAUNCHER_ID);
+    if (!wrapper) {
+      wrapper = document.createElement('div');
+      wrapper.id = HOME_LAUNCHER_ID;
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.title = 'Prepare Deep Research and open Spellcheck Only in split view';
+      button.setAttribute('aria-label', 'Prepare Deep Research with Spellcheck Only');
+      const icon = document.createElement('img');
+      icon.src = chrome.runtime.getURL('artwork/research-telescope.png');
+      icon.alt = '';
+      icon.setAttribute('aria-hidden', 'true');
+      button.append(icon);
+      button.addEventListener('click', () => { void context.run(launchResearchWithSpellcheck); });
+      const status = document.createElement('span');
+      status.className = 'ghrc-research-home-status';
+      status.setAttribute('role', 'status');
+      status.setAttribute('aria-live', 'polite');
+      wrapper.append(button, status);
+    }
+    if (wrapper.nextElementSibling !== composer) composer.before(wrapper);
+  }
+
   function renderWidget(id) {
     let widget = document.getElementById(id);
     if (!widget) {
@@ -150,7 +235,11 @@
       const label = document.createElement('span');
       label.className = 'ghrc-research-allowance';
       widget.append(icon, label);
-      widget.addEventListener('click', checkAllowance);
+      widget.addEventListener('click', () => {
+        if (id === ID && location.pathname === '/' && preferences.showResearchHomepageLauncher !== false) {
+          void context.run(launchResearchWithSpellcheck);
+        } else checkAllowance();
+      });
     }
     // An old observation is not a live balance; require another native check.
     const fresh = Date.now() - observedAt < 5 * 60_000;
@@ -171,7 +260,9 @@
     const visibleText = text === 'Deep Research' ? '' : text.replace(/^Deep Research · /, '');
     if (label.textContent !== visibleText) label.textContent = visibleText;
     if (widget.getAttribute('aria-label') !== text) widget.setAttribute('aria-label', text);
-    widget.title = 'Deep Research allowance. Click to refresh or open the native tools menu. Lightweight allowances are excluded.';
+    widget.title = homepage && location.pathname === '/' && preferences.showResearchHomepageLauncher !== false
+      ? 'Prepare Deep Research and open Spellcheck Only in split view'
+      : 'Deep Research allowance. Click to refresh or open the native tools menu. Lightweight allowances are excluded.';
     return widget;
   }
 
@@ -180,6 +271,12 @@
     if (!context.active()) return;
     readServerQuota();
     readAllowance();
+    const homeComposer = [...document.querySelectorAll('#prompt-textarea, [data-composer-markdown][contenteditable="true"]')]
+      .find(visible)?.closest('form, [data-type="unified-composer"]');
+    if (preferences.showResearchHomepageLauncher !== false && location.pathname === '/' && homeComposer?.parentElement) {
+      renderHomepageLauncher(homeComposer);
+    } else document.getElementById(HOME_LAUNCHER_ID)?.remove();
+
     const repositories = document.getElementById('github-repositories-for-chatgpt');
     if (enabled && preferences.showDeepResearchHomepage !== false && repositories && visible(repositories) && dashboardVisible()) {
       let row = document.getElementById(DASHBOARD_ID);
@@ -260,6 +357,7 @@
     globalThis.chrome?.storage?.onChanged?.removeListener(settingsChanged);
     document.getElementById(DASHBOARD_ID)?.remove();
     document.getElementById(COMPOSER_ID)?.remove();
+    document.getElementById(HOME_LAUNCHER_ID)?.remove();
   });
   schedule();
 })();

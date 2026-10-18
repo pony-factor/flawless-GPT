@@ -72,6 +72,8 @@ const disableManualWebSearchInput = document.getElementById("disable-manual-web-
 const showSpellcheckGptLauncherInput = document.getElementById("show-spellcheck-gpt-launcher");
 const show2048LauncherInput = document.getElementById("show-2048-launcher");
 const showDeepResearchTrackerInput = document.getElementById("show-deep-research-tracker");
+const showResearchHomepageLauncherInput = document.getElementById("show-research-homepage-launcher");
+const showResearchWritingBlockLauncherInput = document.getElementById("show-research-writing-block-launcher");
 const showDeepResearchHomepageInput = document.getElementById("show-deep-research-homepage");
 const showDeepResearchComposerInput = document.getElementById("show-deep-research-composer");
 const showDeepResearchHomepageCountInput = document.getElementById("show-deep-research-homepage-count");
@@ -407,6 +409,8 @@ async function loadSettings() {
     disableWorkMode: false,
     showSpellcheckGptLauncher: false,
     show2048Launcher: false,
+    showResearchHomepageLauncher: true,
+    showResearchWritingBlockLauncher: true,
     showDeepResearchTracker: true,
     showDeepResearchHomepage: true,
     showDeepResearchComposer: true,
@@ -470,6 +474,8 @@ async function loadSettings() {
   disableManualWebSearchInput.checked = Boolean(settings.disableManualWebSearch);
   showSpellcheckGptLauncherInput.checked = Boolean(settings.showSpellcheckGptLauncher);
   show2048LauncherInput.checked = Boolean(settings.show2048Launcher);
+  showResearchHomepageLauncherInput.checked = settings.showResearchHomepageLauncher !== false;
+  showResearchWritingBlockLauncherInput.checked = settings.showResearchWritingBlockLauncher !== false;
   showDeepResearchTrackerInput.checked = settings.showDeepResearchTracker !== false;
   showDeepResearchHomepageInput.checked = settings.showDeepResearchHomepage !== false;
   showDeepResearchComposerInput.checked = settings.showDeepResearchComposer !== false;
@@ -581,6 +587,8 @@ async function saveSettings() {
       disableManualWebSearch: disableManualWebSearchInput.checked,
       showSpellcheckGptLauncher: showSpellcheckGptLauncherInput.checked,
       show2048Launcher: show2048LauncherInput.checked,
+      showResearchHomepageLauncher: showResearchHomepageLauncherInput.checked,
+      showResearchWritingBlockLauncher: showResearchWritingBlockLauncherInput.checked,
       showDeepResearchTracker: showDeepResearchTrackerInput.checked,
       showDeepResearchHomepage: showDeepResearchHomepageInput.checked,
       showDeepResearchComposer: showDeepResearchComposerInput.checked,

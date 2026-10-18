@@ -124,6 +124,16 @@ Chat history entries show compact creation ages (such as `2d`, `2mo`, or `2y`).
 Conversations less than a day old show a small 🆕 icon rather than `0d`.
 Hovering the age or icon still reveals the absolute creation date.
 
+### Research telescope shortcuts
+
+Under **Research**, independently toggle the homepage telescope above the new-chat
+composer and the Deep Research telescope button on writing blocks. Both are on by
+default. Clicking the homepage telescope selects the Deep Research app in the
+existing chat input without submitting or replacing the draft, and opens a second
+ChatGPT tab beside it with the Spellcheck Only app selected. Supported browsers use
+native split view; otherwise the Spellcheck Only tab opens normally. The existing
+Deep Research allowance tracker remains separately configurable.
+
 ### Deep Research allowance tracker
 
 Under **Research** in either the compact extension menu or Full settings, customize
