@@ -707,20 +707,26 @@
       let blocked = false;
       for (let node = tail.nextSibling, count = 0; node && count < 8; node = node.nextSibling, count += 1) {
         if (node.nodeType === Node.ELEMENT_NODE && node.classList.contains('ghrc-link-with-actions')) continue;
-        if (node.nodeType !== Node.TEXT_NODE) {
+        // The streaming renderer wraps individual words, including sentence
+        // punctuation, in spans. Read their text without moving React's spans.
+        const textNode = node.nodeType === Node.TEXT_NODE ? node
+          : node.nodeType === Node.ELEMENT_NODE && node.matches('span[data-d-text-flow="word"]')
+            && node.childNodes.length === 1 && node.firstChild.nodeType === Node.TEXT_NODE
+            ? node.firstChild : null;
+        if (!textNode) {
           blocked = true;
           break;
         }
-        const match = /^(\s*)([.,;:!?…\)\]\}"'»”’]+)/u.exec(node.data);
+        const match = /^(\s*)([.,;:!?…\)\]\}"'»”’]+)/u.exec(textNode.data);
         if (match) {
-          parts.push({ node, parent: node.parentNode, text: match[0] });
+          parts.push({ node: textNode, parent: textNode.parentNode, anchor: node, text: match[0] });
           return { tail, parts, text: match[2] };
         }
-        if (!/^\s*$/u.test(node.data)) {
+        if (!/^\s*$/u.test(textNode.data)) {
           blocked = true;
           break;
         }
-        parts.push({ node, parent: node.parentNode, text: node.data });
+        parts.push({ node: textNode, parent: textNode.parentNode, anchor: node, text: textNode.data });
       }
       if (blocked || !tail.parentElement?.matches('span')) break;
       tail = tail.parentElement;
@@ -735,7 +741,7 @@
     const current = linkPunctuation.get(link);
     if (current) {
       if (!match && current.span.parentElement === group && current.span.nextSibling === actions
-          && current.tail.isConnected && (current.tail.nextSibling === group ? group.nextSibling : current.tail.nextSibling) === current.parts[0].node
+          && current.tail.isConnected && (current.tail.nextSibling === group ? group.nextSibling : current.tail.nextSibling) === current.parts[0].anchor
           && current.parts.every(({ node, parent }) => node.isConnected && node.parentNode === parent)) return;
       // Prefer the newly hydrated text over a stale relocation.
       restoreLinkPunctuation(link, !match);

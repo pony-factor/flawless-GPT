@@ -207,6 +207,41 @@ test('hydration replacing punctuation repositions it without duplication or a re
   await page.close();
 });
 
+test('streamed word spans keep punctuation before sidebar buttons through hydration and opt-out', async () => {
+  const page = await fixture({ openExternalLinksInSplitView: true });
+  await page.locator('.ghrc-link-with-actions').waitFor();
+  await page.evaluate(() => {
+    const link = document.getElementById('source');
+    const wrapper = document.createElement('span');
+    wrapper.innerHTML = '<span data-d-component="popover-trigger"></span>';
+    link.before(wrapper);
+    wrapper.firstChild.append(link, link.nextElementSibling);
+    const punctuation = document.createElement('span');
+    punctuation.dataset.dTextFlow = 'word';
+    punctuation.id = 'streamed-punctuation';
+    punctuation.textContent = ', ';
+    wrapper.after(punctuation);
+    window.originalPunctuation = punctuation;
+  });
+  await page.waitForFunction(() => document.querySelector('.ghrc-link-trailing-punctuation')?.textContent === ',');
+  assert.equal(await page.locator('#streamed-punctuation').evaluate(e => e === window.originalPunctuation), true);
+  await page.evaluate(() => { document.getElementById('streamed-punctuation').textContent = '. Next sentence.'; });
+  await page.waitForFunction(() => document.querySelector('.ghrc-link-trailing-punctuation')?.textContent === '.');
+  assert.equal(await page.locator('main p:first-child').textContent(), 'Source reference. Next sentence.');
+  const gap = await page.evaluate(() => {
+    const range = document.createRange();
+    range.selectNodeContents(document.getElementById('source'));
+    const end = range.getBoundingClientRect().right;
+    range.selectNodeContents(document.querySelector('.ghrc-link-trailing-punctuation'));
+    return range.getBoundingClientRect().left - end;
+  });
+  assert.ok(Math.abs(gap) < 1, `Gap before streamed punctuation: ${gap}px`);
+  await page.evaluate(() => settingsListeners.forEach(listener =>
+    listener({ openExternalLinksInSplitView: { newValue: false } }, 'local')));
+  assert.equal(await page.locator('#streamed-punctuation').textContent(), '. Next sentence.');
+  await page.close();
+});
+
 test('long links wrap beside their button without overflowing a narrow chat', async () => {
   const page = await fixture({ openExternalLinksInSplitView: true });
   await page.locator('.ghrc-link-with-actions').waitFor();
