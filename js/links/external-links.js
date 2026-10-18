@@ -882,6 +882,11 @@
 
   function inspectMutationNode(node) {
     if (!(node instanceof Element)) return;
+    if (node.matches('span[data-d-text-flow="word"]')) node = node.parentElement;
+    if (!node) return;
+    if (node.matches('.ghrc-link-with-actions') && node.previousElementSibling?.matches('a[href]')) {
+      ensureLinkActions(node.previousElementSibling);
+    }
     const containingLink = node.closest('a[href]');
     if (containingLink) ensureLinkActions(containingLink);
     inspectDialogs(node);
@@ -920,6 +925,9 @@
     decorateExternalLinks(document.documentElement);
     new MutationObserver((mutations) => {
       for (const mutation of mutations) {
+        if (mutation.type === 'childList' && mutation.target.matches?.('span[data-d-text-flow="word"]')) {
+          queueMutationNode(mutation.target);
+        }
         if (mutation.type === "characterData") {
           queueMutationNode(mutation.target.parentElement);
           continue;
