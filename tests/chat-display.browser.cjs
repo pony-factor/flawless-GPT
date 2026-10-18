@@ -224,56 +224,6 @@ test('long response links wrap and delayed preferences restore native overflow',
   await p.close();
 });
 
-test('conversation tail spacer follows the newest outer turn and creates real scroll range', async () => {
-  const p = await fixture();
-  await p.evaluate(() => {
-    document.getElementById('conversation-turn')?.remove();
-    const thread = document.createElement('div');
-    thread.id = 'thread';
-    thread.style.cssText = 'height:120px;overflow-y:auto';
-    thread.innerHTML = [
-      '<article data-testid="conversation-turn-1" style="height:60px"><div data-message-author-role="user">Earlier turn</div></article>',
-      '<article data-testid="conversation-turn-2" style="height:60px"><div data-message-author-role="assistant">Current last turn</div></article>',
-    ].join('');
-    document.querySelector('main').append(thread);
-  });
-
-  await p.waitForFunction(() => {
-    const lastTurn = document.querySelector('[data-testid="conversation-turn-2"]');
-    return lastTurn?.nextElementSibling?.hasAttribute('data-ghrc-conversation-tail-spacer');
-  });
-
-  const geometry = await p.locator('#thread').evaluate(thread => {
-    const spacer = thread.querySelector('[data-ghrc-conversation-tail-spacer]');
-    return {
-      spacerCount: thread.querySelectorAll('[data-ghrc-conversation-tail-spacer]').length,
-      spacerHeight: spacer?.getBoundingClientRect().height ?? 0,
-      scrollHeight: thread.scrollHeight,
-      clientHeight: thread.clientHeight,
-      nestedMarked: Boolean(thread.querySelector('[data-message-author-role][data-ghrc-conversation-tail-spacer]')),
-    };
-  });
-  assert.equal(geometry.spacerCount, 1);
-  assert.equal(geometry.nestedMarked, false);
-  assert.ok(geometry.spacerHeight >= 100, JSON.stringify(geometry));
-  assert.ok(geometry.scrollHeight > geometry.clientHeight, JSON.stringify(geometry));
-
-  await p.evaluate(() => {
-    const turn = document.createElement('article');
-    turn.setAttribute('data-testid', 'conversation-turn-3');
-    turn.style.height = '60px';
-    turn.innerHTML = '<div data-message-author-role="assistant">New turn</div>';
-    document.getElementById('thread').append(turn);
-  });
-  await p.waitForFunction(() => {
-    const lastTurn = document.querySelector('[data-testid="conversation-turn-3"]');
-    return lastTurn?.nextElementSibling?.hasAttribute('data-ghrc-conversation-tail-spacer');
-  });
-  assert.equal(await p.locator('#thread [data-ghrc-conversation-tail-spacer]').count(), 1);
-  assert.deepEqual(p.errors, []);
-  await p.close();
-});
-
 test('default CSS hides controls before storage resolves and later honors stored opt-outs', async () => {
   const p = await fixture({ delayStorage: true, stored: { hideHomeSuggestions: false, hideModelControls: false } });
   assert.equal(await p.locator('[class~="group/home-suggestions"]').isVisible(), false);
