@@ -385,9 +385,60 @@
       return control.hasAttribute("data-ghrc-citation-url");
     });
   }
+  // Writing cards sometimes serialize their HTML document as text/plain.
+  // Convert only that card's Copy action; selections and code copies keep
+  // their native representation.
+  let copyingWritingBlock = false;
+  let copiedWritingMarkdown = null;
+  function writingMarkdown(value, enabled, htmlFragment = false) {
+    if (!enabled || typeof TurndownService === "undefined") return value;
+    const isNode = value && typeof value.cloneNode === "function";
+    if (!isNode && !htmlFragment && !/^\s*(?:<!doctype html[^>]*>\s*)?<html[\s>]/i.test(value)) return value;
+    const root = isNode ? value.cloneNode(true) : new DOMParser().parseFromString(value, "text/html").body;
+    root.querySelectorAll('button, script, style, [aria-hidden="true"]').forEach(node => node.remove());
+    for (const item of root.querySelectorAll('li[data-checked]')) {
+      if (item.querySelector('input[type="checkbox"]')) continue;
+      const input = root.ownerDocument.createElement("input");
+      input.type = "checkbox";
+      input.checked = item.getAttribute("data-checked") === "true";
+      item.prepend(input);
+    }
+    const converter = new TurndownService({ headingStyle: "atx", codeBlockStyle: "fenced", bulletListMarker: "-", emDelimiter: "_" });
+    converter.use(turndownPluginGfm.gfm);
+    for (const item of root.querySelectorAll("li")) {
+      const checkbox = item.querySelector('input[type="checkbox"]');
+      if (!checkbox || checkbox.closest("li") !== item) continue;
+      const checked = checkbox.checked || checkbox.hasAttribute("checked");
+      checkbox.remove();
+      for (const span of item.querySelectorAll("span")) {
+        if (!span.textContent.trim() && !span.children.length) span.remove();
+      }
+      const paragraph = item.querySelector("p");
+      const marker = root.ownerDocument.createElement("span");
+      marker.setAttribute("data-ghrc-task-marker", checked ? "x" : " ");
+      marker.textContent = "task";
+      (paragraph || item).prepend(marker);
+      for (const wrapper of item.querySelectorAll("div")) wrapper.replaceWith(...wrapper.childNodes);
+    }
+    converter.addRule("writing-task-marker", {
+      filter: node => node.hasAttribute("data-ghrc-task-marker"),
+      replacement: (_, node) => `[${node.getAttribute("data-ghrc-task-marker")}] `,
+    });
+    converter.addRule("writing-github-link", {
+      filter: node => node.nodeName === "A" && /^https?:\/\/github\.com\//i.test(node.getAttribute("href") || ""),
+      replacement: (_, node) => node.getAttribute("href"),
+    });
+    return converter.turndown(root);
+  }
   let copiedCitations = [];
   const nativeCopies = new WeakMap();
+  const nativeWritingCopies = new WeakMap();
   document.addEventListener?.("copy", (event) => {
+    if (copyingWritingBlock && event.clipboardData) {
+      nativeWritingCopies.set(event.clipboardData, copiedWritingMarkdown);
+      copyingWritingBlock = false;
+      copiedWritingMarkdown = null;
+    }
     if (copiedCitations.length && event.clipboardData) {
       nativeCopies.set(event.clipboardData, copiedCitations);
       copiedCitations = [];
@@ -405,10 +456,16 @@
   }
   document.addEventListener?.("click", (event) => {
     copiedCitations = [];
+    copyingWritingBlock = false;
+    copiedWritingMarkdown = null;
     const button = event.target?.closest?.('button, [role="button"], [data-d-component="pressable"]');
     if (!button || !(button.matches('[data-testid="copy-turn-btn"]')
         || /^(?:Copy|Copy response)$/i.test(button.getAttribute("aria-label") || button.textContent.trim()))) return;
     if (button.closest("pre")) return;
+    const writingBlock = button.closest("[data-oai-writing-block-surface]");
+    copyingWritingBlock = Boolean(writingBlock);
+    const editor = writingBlock?.querySelector('[contenteditable="true"]');
+    if (editor) copiedWritingMarkdown = writingMarkdown(editor, true);
     let turn = button.closest('article, [data-testid^="conversation-turn-"], [data-turn="assistant"], [data-dil-message-id]');
     if (!turn || !sourceControls(turn).length) {
       // DIL places the toolbar outside its message element. Find the smallest
@@ -434,6 +491,17 @@
     }
   }, true);
   window.addEventListener?.("copy", (event) => {
+    if (event.clipboardData && nativeWritingCopies.has(event.clipboardData)) {
+      const data = event.clipboardData;
+      const markdown = nativeWritingCopies.get(data)
+        ?? writingMarkdown(data.getData("text/html") || data.getData("text/plain"), true, Boolean(data.getData("text/html")));
+      if (markdown) {
+        data.clearData();
+        data.setData("text/plain", sanitizeCopiedText(markdown, copyFormattingOptions(), nativeCopies.get(data) || []));
+        event.preventDefault();
+      }
+      return;
+    }
     const citations = event.clipboardData && nativeCopies.get(event.clipboardData);
     if (!citations?.length) return;
     const selection = window.getSelection();
@@ -461,7 +529,10 @@
     patchMethod(clipboardPrototype, "writeText", (original) => function writeText(text) {
       const citations = copiedCitations;
       copiedCitations = [];
-      const value = sanitizeCopiedText(String(text), copyFormattingOptions(), citations);
+      const writing = copyingWritingBlock;
+      copyingWritingBlock = false;
+      const value = sanitizeCopiedText(copiedWritingMarkdown ?? writingMarkdown(String(text), writing), copyFormattingOptions(), citations);
+      copiedWritingMarkdown = null;
       return original.call(this, value);
     });
 
@@ -471,13 +542,26 @@
           const options = copyFormattingOptions();
           const citations = copiedCitations;
           copiedCitations = [];
+          const writing = copyingWritingBlock;
+          copyingWritingBlock = false;
+          const markdown = copiedWritingMarkdown;
+          copiedWritingMarkdown = null;
           const sanitizedItems = Array.from(items, (item) => {
             const data = {};
+            if (writing && (markdown !== null || item.types.includes("text/plain") || item.types.includes("text/html"))) {
+              // A rich HTML flavor makes paste targets prefer the rendered card,
+              // losing Markdown headings and task state. Writing Copy is Markdown.
+              const source = markdown !== null ? Promise.resolve(markdown)
+                : item.getType(item.types.includes("text/html") ? "text/html" : "text/plain")
+                  .then(async blob => writingMarkdown(await blob.text(), true, item.types.includes("text/html")));
+              return new ClipboardItem({ "text/plain": source.then(text => new Blob(
+                [sanitizeCopiedText(text, options, citations)], { type: "text/plain" })) });
+            }
             for (const type of item.types) {
               const blob = item.getType(type);
               if (type === "text/plain") {
                 data[type] = blob.then(async (value) => new Blob(
-                  [sanitizeCopiedText(await value.text(), options, citations)],
+                  [sanitizeCopiedText(writingMarkdown(await value.text(), writing), options, citations)],
                   { type: value.type || type },
                 ));
               } else if (type === "text/html") {

@@ -234,8 +234,7 @@ function updateResearchSettingsControls() {
   showDeepResearchHomepageCountInput.disabled = !homepage;
   showDeepResearchHomepageResetInput.disabled = !homepage;
   deepResearchHomepageVisibilityInput.disabled = !homepage;
-  deepResearchHomepageWindowDaysInput.disabled =
-    !homepage || deepResearchHomepageVisibilityInput.value !== "near-reset";
+  deepResearchHomepageWindowDaysInput.disabled = !homepage;
   showDeepResearchComposerCountInput.disabled = !composer;
   showDeepResearchComposerResetInput.disabled = !composer;
 }

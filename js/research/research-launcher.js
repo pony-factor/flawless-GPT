@@ -2,6 +2,20 @@
   const context = globalThis.__ghrcExtensionContext;
   if (!context?.active()) return;
   const BUTTON = 'ghrc-research-writing-block';
+  const BUTTON_SETTING = 'showWritingResearchButton';
+  let showResearchButton = false;
+  function updateResearchButton(enabled) {
+    showResearchButton = enabled !== false;
+    document.querySelectorAll(`.${BUTTON}`).forEach(button => {
+      button.style.display = showResearchButton ? '' : 'none';
+    });
+  }
+  if (chrome.storage.local.get) {
+    chrome.storage.local.get({ [BUTTON_SETTING]: true }).then(settings => updateResearchButton(settings[BUTTON_SETTING])).catch(() => {});
+  } else showResearchButton = true;
+  chrome.storage.onChanged?.addListener((changes, area) => {
+    if (area === 'local' && changes[BUTTON_SETTING]) updateResearchButton(changes[BUTTON_SETTING].newValue);
+  });
   const runs = new Map();
   let mounting = false;
   let polling = false;
@@ -66,6 +80,7 @@
       const button = document.createElement('button');
       button.type = 'button';
       button.className = BUTTON;
+      button.style.display = showResearchButton ? '' : 'none';
       button.title = 'Run Deep Research and import the finished report';
       button.setAttribute('aria-label', 'Research and import');
       const icon = document.createElement('img');

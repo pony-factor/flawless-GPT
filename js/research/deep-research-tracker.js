@@ -58,11 +58,14 @@
     } catch { serverQuota = null; }
   }
 
-  function dashboardVisible() {
-    if (preferences.deepResearchHomepageVisibility === 'always') return true;
+  function withinResetWindow() {
     if (!serverQuota || serverQuota.resetAt === null) return false;
     const remainingMs = serverQuota.resetAt - Date.now();
     return remainingMs >= 0 && remainingMs <= preferences.deepResearchHomepageWindowDays * DAY_MS;
+  }
+
+  function dashboardVisible() {
+    return preferences.deepResearchHomepageVisibility === 'always' || withinResetWindow();
   }
 
   function serverText(includeCount, includeReset) {
@@ -159,6 +162,10 @@
       : 'Check allowance';
     const reset = fresh && allowance.reset ? allowance.reset : 'Reset unknown';
     const homepage = id === ID;
+    const nearReset = homepage && withinResetWindow();
+    if (widget.classList.contains('ghrc-research-near-reset') !== nearReset) {
+      widget.classList.toggle('ghrc-research-near-reset', nearReset);
+    }
     const includeCount = homepage
       ? preferences.showDeepResearchHomepageCount !== false
       : preferences.showDeepResearchComposerCount !== false;

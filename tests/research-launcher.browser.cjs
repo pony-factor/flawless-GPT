@@ -79,7 +79,11 @@ async function fixture({ handoff = false, draft = '', path = '/' } = {}) {
         return { ok: true };
       },
     };
-    chrome.storage = { local: {} };
+    window.storageListeners = [];
+    chrome.storage = {
+      local: { get: async defaults => defaults },
+      onChanged: { addListener: listener => storageListeners.push(listener) },
+    };
   }, { handoff, draft });
   for (const file of ['js/core/extension-context.js', 'js/research/research-import-dialog.js', 'js/research/research-launcher.js'])
     await page.addScriptTag({ content: fs.readFileSync(file, 'utf8') });
@@ -210,5 +214,24 @@ test('a recovered popup retries automatically and restores completion without a 
   await p.locator('.ghrc-report-status').evaluate(node => { node.textContent = ''; });
   await p.waitForFunction(() => document.querySelector('.ghrc-report-status').textContent.includes('Already up to date'));
   assert.equal(await p.evaluate(() => attempts), 2);
+  await p.close();
+});
+
+
+test('telescope visibility follows its setting for existing and new writing cards', async () => {
+  const p = await fixture();
+  const button = p.getByRole('button', { name: 'Research and import', exact: true });
+  assert.equal(await button.isVisible(), true);
+  await p.evaluate(() => storageListeners.forEach(listener => listener({ showWritingResearchButton: { newValue: false } }, 'local')));
+  assert.equal(await button.isVisible(), false);
+  await p.evaluate(() => {
+    const block = document.querySelector('[data-oai-writing-block-surface]').cloneNode(true);
+    block.querySelector('.ghrc-research-writing-block').remove();
+    document.body.append(block);
+  });
+  await p.waitForFunction(() => document.querySelectorAll('.ghrc-research-writing-block').length === 2);
+  assert.equal(await p.locator('.ghrc-research-writing-block:visible').count(), 0);
+  await p.evaluate(() => storageListeners.forEach(listener => listener({ showWritingResearchButton: { newValue: true } }, 'local')));
+  assert.equal(await p.locator('.ghrc-research-writing-block:visible').count(), 2);
   await p.close();
 });
