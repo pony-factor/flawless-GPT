@@ -355,3 +355,50 @@ test('legacy jobs pinned to temporary routes recover with and without session st
     assert.equal((await a.send({ type: 'research-launch-job' }, a.report(job.tabId))).job, null);
   }
 });
+
+test('manual first-turn research queues at root, changes folders before import, and survives restart', async () => {
+  const a = app();
+  const sender = { ...a.source, url: 'https://chatgpt.com/c/research',
+    tab: { id: 42, url: 'https://chatgpt.com/c/research', windowId: 7 } };
+  a.tabs.set(42, { id: 42, url: 'https://chatgpt.com/c/research', windowId: 7 });
+  const first = await a.send({ type: 'start-manual-research', title: 'Investigate filing dates' }, sender);
+  assert.equal(first.ok, true);
+  assert.equal(first.job.manual, true);
+  assert.equal(first.job.category, '');
+  assert.equal(a.windows.length, 0);
+  const duplicate = await a.send({ type: 'start-manual-research', title: 'Duplicate' }, sender);
+  assert.equal(duplicate.job.id, first.job.id);
+  const changed = await a.send({ type: 'set-research-launch-category', id: first.job.id, category: 'Markets' }, sender);
+  assert.equal(changed.job.category, 'Markets');
+  delete a.session['researchLaunch:42'];
+  a.restart();
+  assert.equal((await a.send({ type: 'research-launch-job' }, sender)).job.category, 'Markets');
+  assert.equal((await a.send(publish(first.job), a.report(42))).ok, true);
+  const publishes = a.calls.filter(call => call[1]?.action === 'publish');
+  assert.equal(publishes.length, 1);
+  assert.equal(publishes[0][1].category, 'Markets');
+  assert.equal((await a.send({ type: 'set-research-launch-category', id: first.job.id, category: '' }, sender)).ok, false);
+  assert.equal((await a.send(publish(first.job), a.report(42))).ok, false);
+});
+
+test('manual research root import and destination changes use original repository safeguards', async () => {
+  const a = app();
+  const sender = { ...a.source, url: 'https://chatgpt.com/c/research',
+    tab: { id: 43, url: 'https://chatgpt.com/c/research', windowId: 9 } };
+  a.tabs.set(43, { id: 43, url: 'https://chatgpt.com/c/research', windowId: 9 });
+  assert.equal((await a.send({ type: 'start-manual-research', title: '' }, sender)).ok, false);
+  assert.equal((await a.send({ type: 'start-manual-research', title: 'Research' }, { ...sender, frameId: 1 })).ok, false);
+  const { job } = await a.send({ type: 'start-manual-research', title: 'Research' }, sender);
+  assert.equal(job.category, '');
+  assert.equal((await a.send(publish(job), a.report(43))).ok, true);
+  assert.equal(a.calls.find(call => call[1]?.action === 'publish')[1].category, '');
+
+  const changed = app();
+  changed.tabs.set(43, { id: 43, url: 'https://chatgpt.com/c/research', windowId: 9 });
+  const run = await changed.send({ type: 'start-manual-research', title: 'Research' }, sender);
+  changed.changeDestination({ repository: 'other', branch: 'main' });
+  assert.equal((await changed.send({ type: 'set-research-launch-category', id: run.job.id, category: 'Markets' }, sender)).ok, false);
+  assert.equal((await changed.send(publish(run.job), changed.report(43))).ok, false);
+  const disabled = app({ enabled: false });
+  assert.equal((await disabled.send({ type: 'start-manual-research', title: 'Research' }, sender)).ok, false);
+});
