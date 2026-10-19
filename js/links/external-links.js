@@ -2,6 +2,7 @@
   const EXTERNAL_WARNING_SETTING_KEY = "skipExternalSiteWarning";
   const HISTORY_MODAL_SETTING_KEY = "dismissHistoryRateLimitModal";
   const STRIP_UTM_TRACKING_SETTING_KEY = "stripUtmTracking";
+  const USER_MESSAGE_SELECTOR = '[data-message-author-role="user"], [data-author-role="user"], [data-testid="user-message"]';
   const MODAL_ID = "modal-conversation-history-rate-limit";
   const DIALOG_SELECTOR = '[role="dialog"], [role="alertdialog"]';
   const EXTERNAL_DIALOG_TITLE = "External site";
@@ -768,14 +769,25 @@
     group.classList.add('ghrc-link-has-punctuation');
   }
 
+  function isUserMessageContent(element) {
+    return Boolean(element.closest(USER_MESSAGE_SELECTOR));
+  }
+
   function ensureLinkActions(link) {
     const existing = linkActions.get(link);
     const url = externalUrlForLink(link);
+    const userAuthored = isUserMessageContent(link);
+    // ChatGPT's user bubbles contain ordinary external links, not citations to
+    // decorate with beside-chat actions or hidden native link arrows.
+    if (userAuthored) {
+      link.querySelectorAll('[data-ghrc-external-link-arrow]').forEach(arrow =>
+        arrow.removeAttribute('data-ghrc-external-link-arrow'));
+    }
     // Details-panel source chips contain their own logo, label and count.
     // Preserve that layout instead of treating the whole chip as prose.
-    link.classList.toggle('ghrc-source-citation', Boolean(url
+    link.classList.toggle('ghrc-source-citation', Boolean(!userAuthored && url
       && link.matches('[data-testid="chatgpt-citation"]')));
-    if (url && link.closest('main') && link.textContent.trim()
+    if (!userAuthored && url && link.closest('main') && link.textContent.trim()
         && !link.querySelector('img, picture, video, canvas')) {
       // Native text links append their new-tab SVG after the link label.
       const icons = link.querySelectorAll('svg');
@@ -792,7 +804,7 @@
     }
     // Native hover cards repeat the URL in a portal outside the conversation.
     // Only decorate the original chat link, not its popup copy.
-    if (!splitViewEnabled || !url || !link.closest('main')
+    if (!splitViewEnabled || userAuthored || !url || !link.closest('main')
         || link.closest('[role="tooltip"], [data-radix-popper-content-wrapper]')) {
       removeLinkActions(link, existing);
       return;
@@ -825,7 +837,7 @@
   function ensureCitationActions(button) {
     const inline = button.matches('[data-d-component="popover-trigger"]')
       && Boolean(button.closest('main')) && !button.querySelector('a[href]');
-    if (!splitViewEnabled || (!inline && !button.closest('[role="dialog"]'))) {
+    if (!splitViewEnabled || isUserMessageContent(button) || (!inline && !button.closest('[role="dialog"]'))) {
       linkActions.get(button)?.remove();
       button.classList.remove("ghrc-citation-source");
       return;
@@ -964,7 +976,7 @@
       characterData: true,
       subtree: true,
       attributes: true,
-      attributeFilter: ["href"],
+      attributeFilter: ["href", "data-message-author-role", "data-author-role", "data-testid"],
     });
   }
 

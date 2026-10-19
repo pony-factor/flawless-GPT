@@ -11,11 +11,11 @@ before(async () => {
 });
 after(async () => { await browser?.close(); });
 
-async function fixture(settings = {}, githubResponse = null, nativeSplitSupported = false) {
+async function fixture(settings = {}, githubResponse = null, nativeSplitSupported = false, conversationMarkup = '<p><a id="source" href="https://example.org/source?utm_source=chatgpt&keep=1#section">Source reference</a></p><p><a id="internal" href="/c/another">Another chat</a></p>') {
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
   await page.route('https://chatgpt.com/**', route => route.fulfill({
     contentType: 'text/html',
-    body: '<style>body{margin:0}main{width:100%;min-height:1800px;padding-top:500px;box-sizing:border-box}</style><main><p><a id="source" href="https://example.org/source?utm_source=chatgpt&keep=1#section">Source reference</a></p><p><a id="internal" href="/c/another">Another chat</a></p></main>',
+    body: `<style>body{margin:0}main{width:100%;min-height:1800px;padding-top:500px;box-sizing:border-box}</style><main>${conversationMarkup}</main>`,
   }));
   await page.route('https://example.org/**', route => route.fulfill({ contentType: 'text/html', body: '<h1>Source content</h1>' }));
   await page.route('https://preview.test/link-preview.html', route => route.fulfill({
@@ -73,6 +73,43 @@ test('all sidebar buttons prefer the same native split, including GitHub documen
   const requests = await page.evaluate(() => previewRequests);
   assert.equal(requests.length, 4);
   assert.ok(requests.every(message => message.type === 'open-native-split-view' && message.onLeft === true));
+  await page.close();
+});
+
+
+test('own-message links never get sidebar buttons, including after role hydration', async () => {
+  const conversation = [
+    '<article data-testid="conversation-turn-0"><div data-message-author-role="user"><p>',
+    '<a id="own" href="https://www.sec.gov/files/rules/sro/dtc/2009/dtcresponse101509.pdf">SEC PDF</a>',
+    '</p></div></article>',
+    '<article data-testid="conversation-turn-1"><div data-message-author-role="assistant"><p>',
+    '<a id="assistant-source" href="https://example.org/assistant">Assistant source</a>',
+    '</p></div></article>',
+    '<div data-testid="user-message"><a id="other-own" href="https://example.org/own">Own link</a></div>',
+  ].join('');
+  const page = await fixture({ openExternalLinksInSplitView: true }, null, true, conversation);
+  await page.locator('#assistant-source + .ghrc-link-with-actions .ghrc-link-sidebar-button').waitFor();
+  assert.equal(await page.locator('#own + .ghrc-link-with-actions').count(), 0);
+  assert.equal(await page.locator('#other-own + .ghrc-link-with-actions').count(), 0);
+  assert.equal(await page.locator('.ghrc-link-sidebar-button').count(), 1);
+  assert.equal(await page.locator('#own').textContent(), 'SEC PDF');
+  await page.locator('#own').click();
+  assert.deepEqual(await page.evaluate(() => openedLinks),
+    [['https://www.sec.gov/files/rules/sro/dtc/2009/dtcresponse101509.pdf', '_blank', 'noopener,noreferrer']]);
+  assert.equal(await page.evaluate(() => previewRequests.length), 0);
+
+  // Hydration can identify the author after a new link has been decorated.
+  await page.evaluate(() => {
+    const turn = document.createElement('div');
+    turn.id = 'late-turn';
+    turn.innerHTML = '<a id="late-own" href="https://example.org/late">Late user link</a>';
+    document.querySelector('main').append(turn);
+  });
+  await page.locator('#late-own + .ghrc-link-with-actions').waitFor();
+  await page.locator('#late-turn').evaluate(turn => turn.setAttribute('data-message-author-role', 'user'));
+  await page.waitForFunction(() => !document.querySelector('#late-own + .ghrc-link-with-actions'));
+  assert.equal(await page.locator('#late-own').textContent(), 'Late user link');
+  assert.equal(await page.locator('.ghrc-link-sidebar-button').count(), 1);
   await page.close();
 });
 
