@@ -91,21 +91,17 @@ async function fixture({ handoff = false, draft = '', path = '/' } = {}) {
   return page;
 }
 
-test('telescope precedes writing-block Copy, cancellation does not launch, and full wording reaches launch', async () => {
+test('telescope precedes Copy and sends the full research prompt with a root default', async () => {
   const p = await fixture();
   const button = p.getByRole('button', { name: 'Research and import', exact: true });
   assert.equal(await p.locator('.ghrc-research-writing-block').count(), 1);
   assert.equal(await button.evaluate(node => node.nextElementSibling.querySelector('button').getAttribute('aria-label')), 'Copy');
   await button.click();
-  await p.getByRole('button', { name: 'Cancel', exact: true }).click();
-  assert.equal(await p.evaluate(() => calls.filter(message => message.type === 'start-research-launch').length), 0);
-  await button.click();
-  await p.getByRole('textbox', { name: 'Category' }).fill('Markets');
-  await p.getByRole('button', { name: 'Start research', exact: true }).click();
   await p.waitForFunction(() => calls.some(message => message.type === 'start-research-launch'));
+  assert.equal(await p.getByRole('dialog').count(), 0);
   const start = await p.evaluate(() => calls.find(message => message.type === 'start-research-launch'));
   assert.equal(start.prompt, '# Exact wording\n\nInvestigate A & B; preserve every line.');
-  assert.equal(start.category, 'Markets');
+  assert.equal(start.category, '');
   assert.equal(start.title, 'Exact research wording');
   assert.deepEqual(p.errors, []);
   await p.close();
