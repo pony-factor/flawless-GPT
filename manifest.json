@@ -49,6 +49,8 @@
       ],
       "js": [
         "js/sidebar/sidebar-loading-background.js",
+        "vendor/turndown.js",
+        "vendor/turndown-plugin-gfm.js",
         "js/links/clipboard-utm-sanitizer.js",
         "js/links/citation-links-main.js",
         "js/links/image-recovery-main.js",

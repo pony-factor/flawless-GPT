@@ -385,6 +385,26 @@
       return control.hasAttribute("data-ghrc-citation-url");
     });
   }
+  // Writing cards sometimes serialize their HTML document as text/plain.
+  // Convert only that card's Copy action; selections and code copies keep
+  // their native representation.
+  let copyingWritingBlock = false;
+  function writingMarkdown(value, enabled) {
+    if (!enabled || !/^\s*(?:<!doctype html[^>]*>\s*)?<html[\s>]/i.test(value)
+        || typeof TurndownService === "undefined") return value;
+    const root = new DOMParser().parseFromString(value, "text/html").body;
+    const converter = new TurndownService({ headingStyle: "atx", codeBlockStyle: "fenced", bulletListMarker: "-", emDelimiter: "_" });
+    converter.use(turndownPluginGfm.gfm);
+    converter.addRule("writing-task-checkbox", {
+      filter: node => node.nodeName === "INPUT" && node.type === "checkbox",
+      replacement: (_, node) => node.checked || node.hasAttribute("checked") ? "[x] " : "[ ] ",
+    });
+    converter.addRule("writing-github-link", {
+      filter: node => node.nodeName === "A" && /^https?:\/\/github\.com\//i.test(node.getAttribute("href") || ""),
+      replacement: (_, node) => node.getAttribute("href"),
+    });
+    return converter.turndown(root);
+  }
   let copiedCitations = [];
   const nativeCopies = new WeakMap();
   document.addEventListener?.("copy", (event) => {
@@ -405,10 +425,12 @@
   }
   document.addEventListener?.("click", (event) => {
     copiedCitations = [];
+    copyingWritingBlock = false;
     const button = event.target?.closest?.('button, [role="button"], [data-d-component="pressable"]');
     if (!button || !(button.matches('[data-testid="copy-turn-btn"]')
         || /^(?:Copy|Copy response)$/i.test(button.getAttribute("aria-label") || button.textContent.trim()))) return;
     if (button.closest("pre")) return;
+    copyingWritingBlock = Boolean(button.closest("[data-oai-writing-block-surface]"));
     let turn = button.closest('article, [data-testid^="conversation-turn-"], [data-turn="assistant"], [data-dil-message-id]');
     if (!turn || !sourceControls(turn).length) {
       // DIL places the toolbar outside its message element. Find the smallest
@@ -461,7 +483,9 @@
     patchMethod(clipboardPrototype, "writeText", (original) => function writeText(text) {
       const citations = copiedCitations;
       copiedCitations = [];
-      const value = sanitizeCopiedText(String(text), copyFormattingOptions(), citations);
+      const writing = copyingWritingBlock;
+      copyingWritingBlock = false;
+      const value = sanitizeCopiedText(writingMarkdown(String(text), writing), copyFormattingOptions(), citations);
       return original.call(this, value);
     });
 
@@ -471,13 +495,15 @@
           const options = copyFormattingOptions();
           const citations = copiedCitations;
           copiedCitations = [];
+          const writing = copyingWritingBlock;
+          copyingWritingBlock = false;
           const sanitizedItems = Array.from(items, (item) => {
             const data = {};
             for (const type of item.types) {
               const blob = item.getType(type);
               if (type === "text/plain") {
                 data[type] = blob.then(async (value) => new Blob(
-                  [sanitizeCopiedText(await value.text(), options, citations)],
+                  [sanitizeCopiedText(writingMarkdown(await value.text(), writing), options, citations)],
                   { type: value.type || type },
                 ));
               } else if (type === "text/html") {
