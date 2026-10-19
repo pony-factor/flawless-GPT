@@ -61,6 +61,47 @@ async function fixture(settings = {}, githubResponse = null, nativeSplitSupporte
   return page;
 }
 
+test('native split preserves the reading block when a narrow viewport replaces ChatGPT\'s scroller', async () => {
+  const messages = Array.from({ length: 24 }, (_, index) =>
+    `<article data-testid="conversation-turn-${index}"><p id="message-${index}">Message ${index}
+      ${index === 10 ? '<a id="source" href="https://example.org/source">Source reference</a>' : 'with readable text'}
+    </p></article>`).join('');
+  const page = await fixture({ openExternalLinksInSplitView: true }, null, true,
+    `<div id="conversation-scroller" aria-label="Conversation">${messages}</div>`);
+  await page.setViewportSize({ width: 440, height: 600 });
+  await page.addStyleTag({ content: [
+    'main { min-height:0!important; padding-top:0!important; height:100vh; }',
+    '#conversation-scroller { height:360px; width:100%; overflow-y:auto; }',
+    '#conversation-scroller p { box-sizing:border-box; height:70px; margin:0; }',
+  ].join('') });
+  await page.locator('.ghrc-link-sidebar-button').waitFor();
+  await page.locator('#conversation-scroller').evaluate(node => { node.scrollTop = 630; });
+  const before = await page.locator('#message-9').evaluate(node => node.getBoundingClientRect().top);
+  await page.evaluate(() => {
+    const originalSend = chrome.runtime.sendMessage;
+    chrome.runtime.sendMessage = async message => {
+      if (message.type !== 'open-native-split-view') return originalSend(message);
+      setTimeout(() => {
+        const old = document.querySelector('#conversation-scroller');
+        const replacement = old.cloneNode(true);
+        replacement.style.width = '230px';
+        old.replaceWith(replacement);
+        window.dispatchEvent(new Event('resize'));
+      }, 10);
+      return { ok: true };
+    };
+  });
+  await page.locator('.ghrc-link-sidebar-button').evaluate(button => {
+    button.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+  });
+  await page.waitForFunction(() => document.querySelector('#conversation-scroller').style.width === '230px');
+  await page.waitForFunction(top => Math.abs(
+    document.querySelector('#message-9').getBoundingClientRect().top - top) < 2, before);
+  assert.ok(await page.locator('#conversation-scroller').evaluate(node => node.scrollTop > 600));
+  assert.equal(await page.locator('#ghrc-link-preview').count(), 0);
+  await page.close();
+});
+
 test('all sidebar buttons prefer the same native split, including GitHub documentation', async () => {
   const page = await fixture({ openExternalLinksInSplitView: true, openExternalLinksInSplitViewOnLeft: true }, null, true);
   for (const href of ['https://www.random.org/', 'https://en.wikipedia.org/wiki/Special:Random', 'https://github.com/owner/repo/blob/main/README.md', 'https://docs.github.com/en']) {
