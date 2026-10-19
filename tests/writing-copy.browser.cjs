@@ -13,7 +13,10 @@ test('writing Copy converts HTML documents to Markdown and leaves other copies a
       window.payload = '<html><head></head><body><h2>Cycle</h2><ul><li><span><input type="checkbox" checked></span><div><p>Done</p></div></li><li><span><input type="checkbox"></span><div><p>Pending</p></div></li></ul><table><thead><tr><th>Check</th><th>Result</th></tr></thead><tbody><tr><td>Tests</td><td>Passed</td></tr></tbody></table><p><a href="https://github.com/example/repo/pull/1">PR</a></p><p><code>schedule.bell</code></p></body></html>';
       class TestClipboard {
         async writeText(text) { writes.push(text); }
-        async write(items) { writes.push(await (await items[0].getType('text/plain')).text()); }
+        async write(items) {
+          window.lastTypes = items[0].types;
+          writes.push(await (await items[0].getType('text/plain')).text());
+        }
       }
       window.ClipboardItem = class {
         constructor(data) { this.data = data; this.types = Object.keys(data); }
@@ -46,5 +49,38 @@ test('writing Copy converts HTML documents to Markdown and leaves other copies a
     await page.locator('header button').click();
     await page.waitForFunction(() => writes.length === 3);
     assert.equal(await page.evaluate(() => writes[2]), text);
+    assert.deepEqual(await page.evaluate(() => lastTypes), ['text/plain']);
+    await page.evaluate(() => {
+      const editor = document.createElement('div');
+      editor.contentEditable = 'true';
+      editor.innerHTML = '<h2>Latest card</h2><ul><li data-checked="true"><p>Finished</p></li><li data-checked="false"><p>Remaining</p></li></ul>';
+      document.querySelector('[data-oai-writing-block-surface]').append(editor);
+      // The native serializer loses checkbox state and the first heading.
+      document.querySelector('header button').onclick = () => navigator.clipboard.write([new ClipboardItem({
+        'text/plain': new Blob(['Latest card\n- Finished\n- Remaining'], { type: 'text/plain' }),
+        'text/html': new Blob(['<p>Latest card</p><ul><li>Finished</li><li>Remaining</li></ul>'], { type: 'text/html' }),
+      })]);
+    });
+    await page.locator('header button').click();
+    await page.waitForFunction(() => writes.length === 4);
+    const latest = await page.evaluate(() => writes[3]);
+    assert.match(latest, /^## Latest card/);
+    assert.match(latest, /-\s+\[x\] Finished/);
+    assert.match(latest, /-\s+\[ \] Remaining/);
+    assert.deepEqual(await page.evaluate(() => lastTypes), ['text/plain']);
+    await page.evaluate(() => {
+      document.querySelector('header button').onclick = () => {
+        const data = new DataTransfer();
+        data.setData('text/html', '<h2>Wrong native serialization</h2>');
+        const event = new ClipboardEvent('copy', { clipboardData: data, bubbles: true, cancelable: true });
+        document.querySelector('header button').dispatchEvent(event);
+        window.nativeCopy = { types: [...data.types], text: data.getData('text/plain'), prevented: event.defaultPrevented };
+      };
+    });
+    await page.locator('header button').click();
+    const native = await page.evaluate(() => nativeCopy);
+    assert.deepEqual(native.types, ['text/plain']);
+    assert.equal(native.text, latest);
+    assert.equal(native.prevented, true);
   } finally { await browser.close(); }
 });
