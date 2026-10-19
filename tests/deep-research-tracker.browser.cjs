@@ -204,6 +204,12 @@ test('Research options independently control homepage, composer, counts, reset l
     assert.match(await homepage.innerText(), /13 left/);
     assert.doesNotMatch(await homepage.innerText(), /reset/i);
     assert.doesNotMatch(await homepage.getAttribute('aria-label'), /reset/i);
+    assert.equal(await homepage.evaluate(node => node.classList.contains('ghrc-research-near-reset')), false);
+    await page.evaluate(() => window.changeResearchSetting('deepResearchHomepageWindowDays', 14));
+    await page.waitForFunction(() => document.getElementById('ghrc-deep-research-tracker').classList.contains('ghrc-research-near-reset'));
+    assert.equal(await composer.evaluate(node => node.classList.contains('ghrc-research-near-reset')), false);
+    await page.evaluate(() => window.changeResearchSetting('deepResearchHomepageWindowDays', 5));
+    await page.waitForFunction(() => !document.getElementById('ghrc-deep-research-tracker').classList.contains('ghrc-research-near-reset'));
     assert.match(await composer.innerText(), /resets \d+d/);
     assert.doesNotMatch(await composer.innerText(), /13 left/);
 
@@ -211,6 +217,7 @@ test('Research options independently control homepage, composer, counts, reset l
     await page.waitForFunction(() => !document.getElementById('ghrc-deep-research-tracker'));
     await page.evaluate(() => window.changeResearchSetting('deepResearchHomepageWindowDays', 14));
     await homepage.waitFor();
+    assert.equal(await homepage.evaluate(node => node.classList.contains('ghrc-research-near-reset')), true);
     assert.match(await homepage.innerText(), /13 left/);
     await page.evaluate(() => window.changeResearchSetting('showDeepResearchHomepageCount', false));
     await page.waitForFunction(() => document.getElementById('ghrc-deep-research-tracker')?.getAttribute('aria-label') === 'Deep Research');
