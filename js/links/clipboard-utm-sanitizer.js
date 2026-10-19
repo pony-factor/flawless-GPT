@@ -395,9 +395,24 @@
     const root = new DOMParser().parseFromString(value, "text/html").body;
     const converter = new TurndownService({ headingStyle: "atx", codeBlockStyle: "fenced", bulletListMarker: "-", emDelimiter: "_" });
     converter.use(turndownPluginGfm.gfm);
-    converter.addRule("writing-task-checkbox", {
-      filter: node => node.nodeName === "INPUT" && node.type === "checkbox",
-      replacement: (_, node) => node.checked || node.hasAttribute("checked") ? "[x] " : "[ ] ",
+    for (const item of root.querySelectorAll("li")) {
+      const checkbox = item.querySelector('input[type="checkbox"]');
+      if (!checkbox || checkbox.closest("li") !== item) continue;
+      const checked = checkbox.checked || checkbox.hasAttribute("checked");
+      checkbox.remove();
+      for (const span of item.querySelectorAll("span")) {
+        if (!span.textContent.trim() && !span.children.length) span.remove();
+      }
+      const paragraph = item.querySelector("p");
+      const marker = root.ownerDocument.createElement("span");
+      marker.setAttribute("data-ghrc-task-marker", checked ? "x" : " ");
+      marker.textContent = "task";
+      (paragraph || item).prepend(marker);
+      for (const wrapper of item.querySelectorAll("div")) wrapper.replaceWith(...wrapper.childNodes);
+    }
+    converter.addRule("writing-task-marker", {
+      filter: node => node.hasAttribute("data-ghrc-task-marker"),
+      replacement: (_, node) => `[${node.getAttribute("data-ghrc-task-marker")}] `,
     });
     converter.addRule("writing-github-link", {
       filter: node => node.nodeName === "A" && /^https?:\/\/github\.com\//i.test(node.getAttribute("href") || ""),
