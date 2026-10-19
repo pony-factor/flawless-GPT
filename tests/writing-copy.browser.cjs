@@ -15,6 +15,10 @@ test('writing Copy converts HTML documents to Markdown and leaves other copies a
         async writeText(text) { writes.push(text); }
         async write(items) { writes.push(await (await items[0].getType('text/plain')).text()); }
       }
+      window.ClipboardItem = class {
+        constructor(data) { this.data = data; this.types = Object.keys(data); }
+        getType(type) { return Promise.resolve(this.data[type]); }
+      };
       window.Clipboard = TestClipboard;
       Object.defineProperty(navigator, 'clipboard', { value: new TestClipboard(), configurable: true });
       document.querySelectorAll('button').forEach(button => button.onclick = () => navigator.clipboard.writeText(payload));
