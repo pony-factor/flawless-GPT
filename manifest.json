@@ -150,6 +150,7 @@
         "js/launchers/youtube-search.js",
         "js/launchers/wooten-link-zipp-placeholder.js",
         "js/launchers/spellcheck-launcher.js",
+        "js/research/deep-research-spellcheck.js",
         "js/games/2048.js",
         "js/composer/clipboard-send.js",
         "js/composer/message-queue.js",
