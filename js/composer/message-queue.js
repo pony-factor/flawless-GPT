@@ -1911,6 +1911,10 @@
   window.addEventListener("resize", scheduleMount);
   document.addEventListener("visibilitychange", reschedulePumpForVisibility);
   context.onStop(() => {
+    // An extension reload stops observers while React keeps updating the page.
+    // Do not leave an empty/interrupt hat beside a later native Send button.
+    document.getElementById(INTERRUPT_BUTTON_ID)?.remove();
+    document.getElementById(QUEUE_BUTTON_ID)?.remove();
     window.removeEventListener("keydown", handleComposerKeydown, true);
     observer.disconnect();
     queueResizeObserver?.disconnect();

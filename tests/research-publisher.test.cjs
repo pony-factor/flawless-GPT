@@ -107,9 +107,12 @@ test('report links open without a publishing connection and reject unsafe destin
   assert.equal(app.calls.length, 0);
 });
 
-test('settings default off, confirm on enable, and recheck on click', async () => {
+for (const page of ['popup.html', 'options.html']) {
+test(`${page} publisher settings default off, confirm on enable, and recheck on click`, async () => {
   const elements = new Map();
-  for (const id of ['research-publisher-enabled', 'research-publisher-controls', 'check-research-publisher', 'research-publisher-status']) {
+  const html = fs.readFileSync(page, 'utf8');
+  for (const id of ['show-writing-research-button', 'research-publisher-enabled', 'research-publisher-controls', 'check-research-publisher', 'research-publisher-status']) {
+    assert.ok(html.includes(`id="${id}"`), `${page} must supply ${id}`);
     elements.set(id, { listeners: {}, addEventListener(type, fn) { this.listeners[type] = fn; } });
   }
   const checkbox = elements.get('research-publisher-enabled');
@@ -130,6 +133,12 @@ test('settings default off, confirm on enable, and recheck on click', async () =
     chrome, document: { getElementById: (id) => elements.get(id) },
   });
   await new Promise(setImmediate);
+  const researchButton = elements.get('show-writing-research-button');
+  assert.equal(researchButton.checked, true);
+  assert.equal(researchButton.disabled, false);
+  researchButton.checked = false;
+  await researchButton.listeners.change();
+  assert.equal(saved.showWritingResearchButton, false);
   assert.equal(checkbox.checked, false);
   assert.equal(controls.hidden, true);
   assert.equal(sends, 0);
@@ -147,6 +156,7 @@ test('settings default off, confirm on enable, and recheck on click', async () =
   assert.equal(controls.hidden, true);
   assert.equal(launch.disabled, true);
 });
+}
 
 test('import launcher stays available while the enabled publisher is disconnected', () => {
   const source = fs.readFileSync('js/research/research-publisher.js', 'utf8');
