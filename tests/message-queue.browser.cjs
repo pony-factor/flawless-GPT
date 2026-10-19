@@ -970,6 +970,26 @@ test('an empty disabled hat remains visible with voice hidden and yields to nati
   await p.close();
 });
 
+test('extension invalidation removes its empty hat before native Send appears', async () => {
+  const p = await fixture({ voice: true, liveMarkup: true, queueButton: false });
+  await p.addStyleTag({ content: fs.readFileSync(path.join(__dirname, '../css/hide-dictation.css'), 'utf8') });
+  await p.evaluate(() => document.documentElement.setAttribute('data-ghrc-hide-dictation', ''));
+  await p.getByRole('button', { name: 'Send message', exact: true }).waitFor();
+  // Reloading an unpacked extension invalidates scripts in already-open tabs.
+  // React can still turn Voice into Send after those scripts stop observing.
+  await p.evaluate(() => {
+    delete chrome.runtime.id;
+    window.__ghrcExtensionContext.active();
+  });
+  await p.locator('[data-composer-markdown]').fill('Keep this draft');
+  assert.equal(await p.locator('#ghrc-message-interrupt-button').count(), 0);
+  assert.equal(await p.getByRole('button', { name: 'Send', exact: true }).count(), 1);
+  assert.equal(await p.evaluate(() => read()), 'Keep this draft');
+  assert.deepEqual(await p.evaluate(() => sent), []);
+  assert.deepEqual(p.errors, []);
+  await p.close();
+});
+
 test('interrupt waits for Stop to finish and cancels if the draft changes', async () => {
   const p = await fixture({ active: true });
   await p.evaluate(() => { window.deferStop = true; });
