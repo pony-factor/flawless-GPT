@@ -52,7 +52,7 @@
     if (job.state === 'import-retry') return 'Import interrupted. Retrying automatically…';
     if (job.error) return job.error;
     return ({ pending: 'Opening research…', preparing: 'Preparing Deep Research…', sending: 'Submitting research…',
-      submitted: 'Research running. Answer any follow-up questions in the research window.', importing: 'Importing completed report…' })[job.state] || 'Research needs attention in its window.';
+      submitted: `Research running · import queued to ${job.category ? '/' + job.category : 'repository root'}.`, importing: 'Importing completed report…' })[job.state] || 'Research needs attention in its window.';
   }
   function windowStatus(job) {
     let banner = document.getElementById('ghrc-research-run-status');
