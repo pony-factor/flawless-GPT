@@ -1,4 +1,6 @@
 (() => {
+  const researchButton = document.getElementById('show-writing-research-button');
+  const RESEARCH_BUTTON_KEY = 'showWritingResearchButton';
   const CONNECTION_KEY = 'researchPublisherConnection';
   const checkbox = document.getElementById('research-publisher-enabled');
   const controls = document.getElementById('research-publisher-controls');
@@ -45,16 +47,30 @@
     }
   }
 
+  researchButton.disabled = true;
   checkbox.disabled = true;
   chrome.storage.local.get({
     researchPublisherEnabled: false,
+    [RESEARCH_BUTTON_KEY]: true,
     [CONNECTION_KEY]: null,
   }).then((settings) => {
+    researchButton.checked = settings[RESEARCH_BUTTON_KEY] !== false;
+    researchButton.disabled = false;
     render(Boolean(settings.researchPublisherEnabled));
     renderConnection(settings[CONNECTION_KEY]);
     checkbox.disabled = false;
   }).catch(() => {
     status.textContent = 'Could not load publisher settings. Reopen settings to retry.';
+  });
+
+  researchButton.addEventListener('change', async () => {
+    const enabled = researchButton.checked;
+    researchButton.disabled = true;
+    try { await chrome.storage.local.set({ [RESEARCH_BUTTON_KEY]: enabled }); }
+    catch {
+      researchButton.checked = !enabled;
+      status.textContent = 'Could not save research button settings. Try again.';
+    } finally { researchButton.disabled = false; }
   });
 
   checkbox.addEventListener('change', async () => {
@@ -75,6 +91,7 @@
 
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== 'local') return;
+    if (changes[RESEARCH_BUTTON_KEY]) researchButton.checked = changes[RESEARCH_BUTTON_KEY].newValue !== false;
     if (changes.researchPublisherEnabled) {
       render(Boolean(changes.researchPublisherEnabled.newValue));
     }
