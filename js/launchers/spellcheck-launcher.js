@@ -221,6 +221,15 @@
   }
 
   function findSendButton(composer) {
+    // Clipboard/queue controls also start with "Send" but replace the draft,
+    // discarding the plugin mention. Only submit through a native control.
+    const isNativeSend = (button) => (
+      isVisible(button)
+      && !button.id?.startsWith("ghrc-")
+      && !/ghrc-/.test(button.className || "")
+      && !/stop|voice|dictat|speech|search/i.test(button.getAttribute("aria-label") || "")
+      && !/stop|voice|dictat|speech/i.test(button.getAttribute("data-testid") || "")
+    );
     const selectors = [
       'button[data-testid="composer-submit-button"]',
       'button[data-testid="send-button"]',
@@ -229,17 +238,13 @@
     ];
     for (let container = composer.parentElement; container; container = container.parentElement) {
       for (const selector of selectors) {
-        const button = [...container.querySelectorAll(selector)].find((candidate) => (
-          isVisible(candidate)
-          && candidate.getAttribute("data-testid") !== "stop-button"
-          && !/stop|voice/i.test(candidate.getAttribute("aria-label") || "")
-        ));
+        const button = [...container.querySelectorAll(selector)].find(isNativeSend);
         if (button) return button;
       }
       if (container.matches("main, body")) break;
     }
     const form = composer.closest("form");
-    return form?.querySelector('button[type="submit"]') || null;
+    return [...(form?.querySelectorAll('button[type="submit"]') || [])].find(isNativeSend) || null;
   }
 
   function submitWhenReady(composer, text, deadline, shortcutAttempted = false) {
