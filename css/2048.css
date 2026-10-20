@@ -8,20 +8,6 @@
   min-width: 0;
 }
 
-@media (max-width: 560px) {
-  #github-repositories-for-chatgpt .ghrc-2048-footer-left {
-    grid-column: 2;
-    grid-row: 3;
-  }
-}
-
-@container (max-width: 420px) {
-  #github-repositories-for-chatgpt .ghrc-2048-footer-left {
-    grid-column: 1;
-    grid-row: 3;
-  }
-}
-
 #github-repositories-for-chatgpt .ghrc-2048-launcher {
   align-items: center;
   background: var(--ghrc-canvas-subtle);
@@ -360,7 +346,8 @@
 
 @media (max-width: 560px) {
   #github-repositories-for-chatgpt .ghrc-2048-footer-left {
-    grid-column: 1;
+    grid-column: 2;
+    grid-row: 3;
   }
 
   .ghrc-2048-dialog {
@@ -371,6 +358,7 @@
 @container (max-width: 420px) {
   #github-repositories-for-chatgpt .ghrc-2048-footer-left {
     grid-column: 1;
-    grid-row: 1;
+    grid-row: 3;
+    max-width: calc(100% - 58px);
   }
 }

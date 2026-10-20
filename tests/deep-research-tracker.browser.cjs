@@ -12,7 +12,7 @@ test('mounts, reads native usage, excludes messages, and cleans up on extension 
     const page = await browser.newPage();
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
-    await page.setContent('<main>Deep research: 999 full reports remaining</main><section><form><div id="prompt-textarea" contenteditable="true">Keep my draft<span contenteditable="false" data-prompt-link-href="app://connector_openai_deep_research"></span></div><button type="button" aria-label="Add files and more">+</button></form><section id="github-repositories-for-chatgpt">Repositories</section></section>');
+    await page.setContent('<main>Deep research: 999 full reports remaining</main><section><form><div id="prompt-textarea" contenteditable="true">Keep my draft<span contenteditable="false" data-prompt-link-href="app://connector_openai_deep_research"></span></div><button type="button" aria-label="Add files and more">+</button></form><section id="github-repositories-for-chatgpt">Repositories<footer class="ghrc-dashboard-footer"><nav class="ghrc-pagination"><button>←</button><button>→</button></nav></footer></section></section>');
     await page.evaluate(() => {
       window.__ghrcExtensionContext = { active: () => true, onStop: cleanup => { window.cleanup = cleanup; } };
       window.submits = 0;
@@ -43,16 +43,16 @@ test('mounts, reads native usage, excludes messages, and cleans up on extension 
   }
 });
 
-test('dashboard stays above Highlights on the right; plugin selection and settings control the composer copy', async () => {
+test('dashboard counter sits left of the game launcher; plugin selection and settings control the composer copy', async () => {
   const browser = await chromium.launch({ executablePath: '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser', headless: true });
   try {
     const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
-    await page.setContent('<main><section><form><div id="prompt-textarea" contenteditable="true">My draft</div></form><section id="github-repositories-for-chatgpt">Repositories</section></section></main>');
+    await page.setContent('<main><section><form><div id="prompt-textarea" contenteditable="true">My draft</div></form><section id="github-repositories-for-chatgpt">Repositories<footer class="ghrc-dashboard-footer"><nav class="ghrc-pagination"><button>←</button><button>→</button></nav></footer></section></section></main>');
     await page.evaluate(() => {
       window.__ghrcExtensionContext = { active: () => true, onStop() {} };
-      window.settings = { showDeepResearchTracker: true, highlightedPages: [{ url: 'https://example.com/', title: 'Example' }] };
+      window.settings = { show2048Launcher: true, showDeepResearchTracker: true, highlightedPages: [{ url: 'https://example.com/', title: 'Example' }] };
       window.listeners = [];
       window.chrome = { storage: { local: { async get(defaults) { return { ...defaults, ...window.settings }; } }, onChanged: {
         addListener(listener) { window.listeners.push(listener); }, removeListener() {},
@@ -63,10 +63,10 @@ test('dashboard stays above Highlights on the right; plugin selection and settin
       };
       document.documentElement.setAttribute('data-ghrc-deep-research-usage', JSON.stringify({ remaining: 13, resetAt: Date.now() + 40 * 3600_000, observedAt: Date.now() }));
     });
-    for (const file of ['styles.css', 'highlighted-pages.css', 'deep-research-tracker.css']) {
+    for (const file of ['styles.css', '2048.css', 'highlighted-pages.css', 'deep-research-tracker.css']) {
       await page.addStyleTag({ content: fs.readFileSync(path.join(__dirname, '../css', file), 'utf8') });
     }
-    for (const file of ['research/deep-research-tracker.js', 'dashboard/highlighted-pages.js']) {
+    for (const file of ['games/2048.js', 'research/deep-research-tracker.js', 'dashboard/highlighted-pages.js']) {
       await page.addScriptTag({ content: fs.readFileSync(path.join(__dirname, '../js', file), 'utf8') });
     }
     await page.locator('#ghrc-highlighted-pages').waitFor();
@@ -75,14 +75,26 @@ test('dashboard stays above Highlights on the right; plugin selection and settin
       const row = document.getElementById('ghrc-deep-research-dashboard');
       const button = document.getElementById('ghrc-deep-research-tracker');
       const highlights = document.getElementById('ghrc-highlighted-pages');
+      const game = document.getElementById('ghrc-2048-launcher');
       return {
-        order: repo.nextElementSibling === row && row.nextElementSibling === highlights,
-        right: Math.abs(button.getBoundingClientRect().right - repo.getBoundingClientRect().right) < 1,
-        between: button.getBoundingClientRect().top >= repo.getBoundingClientRect().bottom && button.getBoundingClientRect().bottom <= highlights.getBoundingClientRect().top,
+        order: repo.nextElementSibling === highlights && row.nextElementSibling === game,
+        right: button.getBoundingClientRect().right < game.getBoundingClientRect().left,
+        between: repo.contains(button) && Math.abs(button.getBoundingClientRect().top + button.getBoundingClientRect().height / 2 - game.getBoundingClientRect().top - game.getBoundingClientRect().height / 2) < 1,
         composerCopy: !!document.getElementById('ghrc-deep-research-tracker-composer'),
       };
     });
     assert.deepEqual(layout, { order: true, right: true, between: true, composerCopy: false });
+    for (const width of [500, 400]) {
+      await page.setViewportSize({ width, height: 800 });
+      const positions = await page.evaluate(() => {
+        const counter = document.getElementById('ghrc-deep-research-tracker').getBoundingClientRect();
+        const game = document.getElementById('ghrc-2048-launcher').getBoundingClientRect();
+        const arrows = document.querySelector('.ghrc-pagination').getBoundingClientRect();
+        return { counterBeforeGame: counter.right < game.left, arrowsBeforeCounter: arrows.right <= counter.left,
+          sameRow: Math.abs(counter.top + counter.height / 2 - game.top - game.height / 2) < 1 };
+      });
+      assert.deepEqual(positions, { counterBeforeGame: true, arrowsBeforeCounter: true, sameRow: true });
+    }
     await page.evaluate(() => {
       const mention = document.createElement('span');
       mention.contentEditable = 'false';
@@ -111,7 +123,7 @@ test('homepage only shows the Deep Research embed in the final five days', async
   const browser = await chromium.launch({ executablePath: '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser', headless: true });
   try {
     const page = await browser.newPage();
-    await page.setContent('<section><form><div id="prompt-textarea" contenteditable="true"><span contenteditable="false" data-prompt-link-href="app://connector_openai_deep_research">Deep research</span></div></form><section id="github-repositories-for-chatgpt">Repositories</section></section>');
+    await page.setContent('<section><form><div id="prompt-textarea" contenteditable="true"><span contenteditable="false" data-prompt-link-href="app://connector_openai_deep_research">Deep research</span></div></form><section id="github-repositories-for-chatgpt">Repositories<footer class="ghrc-dashboard-footer"><nav class="ghrc-pagination"><button>←</button><button>→</button></nav></footer></section></section>');
     await page.evaluate(() => {
       window.__ghrcExtensionContext = { active: () => true, onStop() {} };
       const now = Date.now();
@@ -147,7 +159,7 @@ test('native initialization fills the tracker automatically and clicking refresh
           unrelated_private_field: 'must stay in page response',
         }) });
       }
-      return route.fulfill({ contentType: 'text/html', body: '<section><form><div id="prompt-textarea" contenteditable="true">My draft<span contenteditable="false" data-prompt-link-href="app://connector_openai_deep_research"></span></div></form><section id="github-repositories-for-chatgpt">Repositories</section></section>' });
+      return route.fulfill({ contentType: 'text/html', body: '<section><form><div id="prompt-textarea" contenteditable="true">My draft<span contenteditable="false" data-prompt-link-href="app://connector_openai_deep_research"></span></div></form><section id="github-repositories-for-chatgpt">Repositories<footer class="ghrc-dashboard-footer"><nav class="ghrc-pagination"><button>←</button><button>→</button></nav></footer></section></section>' });
     });
     await page.goto('https://research.test/');
     await page.evaluate(() => { window.__ghrcExtensionContext = { active: () => true, onStop() {} }; });
@@ -177,7 +189,7 @@ test('Research settings show the composer only when homepage allowance details a
     const page = await browser.newPage();
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
-    await page.setContent('<main><section><form><div id="prompt-textarea" contenteditable="true"><span contenteditable="false" data-prompt-link-href="app://connector_openai_deep_research">Research</span></div></form><section id="github-repositories-for-chatgpt">Repositories</section></section></main>');
+    await page.setContent('<main><section><form><div id="prompt-textarea" contenteditable="true"><span contenteditable="false" data-prompt-link-href="app://connector_openai_deep_research">Research</span></div></form><section id="github-repositories-for-chatgpt">Repositories<footer class="ghrc-dashboard-footer"><nav class="ghrc-pagination"><button>←</button><button>→</button></nav></footer></section></section></main>');
     await page.evaluate(() => {
       window.__ghrcExtensionContext = { active: () => true, onStop() {} };
       window.settings = {
@@ -257,7 +269,7 @@ test('composer allowance returns when the homepage dashboard is hidden or remove
     const page = await browser.newPage();
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
-    await page.setContent('<section><form><div id="prompt-textarea" contenteditable="true">Draft<span contenteditable="false" data-prompt-link-href="app://connector_openai_deep_research"></span></div></form><section id="github-repositories-for-chatgpt">Repositories</section></section>');
+    await page.setContent('<section><form><div id="prompt-textarea" contenteditable="true">Draft<span contenteditable="false" data-prompt-link-href="app://connector_openai_deep_research"></span></div></form><section id="github-repositories-for-chatgpt">Repositories<footer class="ghrc-dashboard-footer"><nav class="ghrc-pagination"><button>←</button><button>→</button></nav></footer></section></section>');
     await page.evaluate(() => {
       window.__ghrcExtensionContext = { active: () => true, onStop() {} };
       window.chrome = { storage: { local: { async get(defaults) {

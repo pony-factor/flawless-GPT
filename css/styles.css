@@ -461,7 +461,7 @@ html.dark #github-repositories-for-chatgpt {
   align-items: center;
   border-top: 1px solid var(--ghrc-border);
   display: grid;
-  grid-template-columns: 50px minmax(0, 1fr) 32px;
+  grid-template-columns: 50px minmax(0, 1fr) auto;
   min-height: 50px;
   padding: 8px 16px;
 }

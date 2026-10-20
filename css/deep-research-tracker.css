@@ -33,12 +33,8 @@
   box-sizing: border-box;
   display: flex;
   justify-content: flex-end;
-  position: relative;
-  left: calc(50% + var(--ghrc-center-offset, 0px));
-  transform: translateX(-50%);
-  width: 1120px;
-  max-width: var(--ghrc-available-width, calc(100vw - 40px));
-  margin: -24px 0 24px;
+  min-width: 0;
+  margin: 0;
 }
 
 #ghrc-deep-research-dashboard .ghrc-deep-research-tracker {
