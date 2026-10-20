@@ -91,21 +91,17 @@ async function fixture({ handoff = false, draft = '', path = '/' } = {}) {
   return page;
 }
 
-test('telescope precedes writing-block Copy, cancellation does not launch, and full wording reaches launch', async () => {
+test('telescope precedes Copy and sends the full research prompt with a root default', async () => {
   const p = await fixture();
   const button = p.getByRole('button', { name: 'Research and import', exact: true });
   assert.equal(await p.locator('.ghrc-research-writing-block').count(), 1);
   assert.equal(await button.evaluate(node => node.nextElementSibling.querySelector('button').getAttribute('aria-label')), 'Copy');
   await button.click();
-  await p.getByRole('button', { name: 'Cancel', exact: true }).click();
-  assert.equal(await p.evaluate(() => calls.filter(message => message.type === 'start-research-launch').length), 0);
-  await button.click();
-  await p.getByRole('textbox', { name: 'Category' }).fill('Markets');
-  await p.getByRole('button', { name: 'Start research', exact: true }).click();
   await p.waitForFunction(() => calls.some(message => message.type === 'start-research-launch'));
+  assert.equal(await p.getByRole('dialog').count(), 0);
   const start = await p.evaluate(() => calls.find(message => message.type === 'start-research-launch'));
   assert.equal(start.prompt, '# Exact wording\n\nInvestigate A & B; preserve every line.');
-  assert.equal(start.category, 'Markets');
+  assert.equal(start.category, '');
   assert.equal(start.title, 'Exact research wording');
   assert.deepEqual(p.errors, []);
   await p.close();
@@ -234,4 +230,89 @@ test('telescope visibility follows its setting for existing and new writing card
   await p.evaluate(() => storageListeners.forEach(listener => listener({ showWritingResearchButton: { newValue: true } }, 'local')));
   assert.equal(await p.locator('.ghrc-research-writing-block:visible').count(), 2);
   await p.close();
+});
+
+test('new-chat Deep Research first turn automatically queues root with an optional folder change', async () => {
+  const page = await browser.newPage();
+  const errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.route('https://chatgpt.com/**', route => route.fulfill({ contentType: 'text/html',
+    body: '<main></main><form><div data-composer-markdown contenteditable="true"></div><button id="send" type="button">Send</button></form>' }));
+  await page.goto('https://chatgpt.com/');
+  await page.evaluate(() => {
+    window.calls = [];
+    window.job = null;
+    window.chrome = {
+      runtime: { id: 'fixture', sendMessage: async message => {
+        calls.push(message);
+        if (message.type === 'research-launch-job') return { ok: true, job };
+        if (message.type === 'start-manual-research') {
+          job = { id: 'manual', manual: true, state: 'submitted', category: '',
+            repository: 'research', branch: 'main' };
+          return { ok: true, job };
+        }
+        if (message.type === 'research-publisher-status')
+          return { ok: true, repository: 'research', branch: 'main', categories: ['Markets'] };
+        if (message.type === 'set-research-launch-category') {
+          job.category = message.category;
+          return { ok: true, job };
+        }
+        return { ok: false, error: 'Unexpected message' };
+      } },
+      storage: { local: { get: async defaults => ({ ...defaults, researchPublisherEnabled: true }) },
+        onChanged: { addListener() {} } },
+    };
+    const editor = document.querySelector('[data-composer-markdown]');
+    const mention = document.createElement('span');
+    mention.setAttribute('app-mention-path', 'app://connector_openai_deep_research');
+    mention.textContent = 'Deep research';
+    editor.append(mention, document.createTextNode(' Investigate clearing history'));
+    document.getElementById('send').addEventListener('click', () => {
+      editor.textContent = '';
+      document.querySelector('main').innerHTML = '<div data-message-author-role="user">Deep research Investigate clearing history</div>';
+      history.replaceState({}, '', '/c/manual');
+    });
+  });
+  for (const file of ['js/core/extension-context.js', 'js/research/research-import-dialog.js',
+    'js/research/research-manual-import.js'])
+    await page.addScriptTag({ content: fs.readFileSync(file, 'utf8') });
+  await page.waitForFunction(() => sessionStorage.getItem('ghrc-manual-deep-research-first-turn'));
+  await page.locator('#send').click();
+  const bar = page.locator('#ghrc-manual-research-import-status');
+  await bar.waitFor();
+  assert.match(await bar.innerText(), /repository root/);
+  assert.equal(await page.evaluate(() => calls.filter(x => x.type === 'start-manual-research').length), 1);
+  await bar.getByRole('button', { name: 'Change research import folder' }).click();
+  await page.getByRole('textbox', { name: 'Category' }).fill('Markets');
+  await page.getByRole('button', { name: 'Save destination' }).click();
+  await page.waitForFunction(() => job?.category === 'Markets');
+  assert.match(await bar.innerText(), /Markets/);
+  assert.deepEqual(errors, []);
+  await page.close();
+});
+
+test('ordinary first messages on a new chat do not queue research imports', async () => {
+  const page = await browser.newPage();
+  await page.route('https://chatgpt.com/**', route => route.fulfill({ contentType: 'text/html',
+    body: '<main></main><form><div data-composer-markdown contenteditable="true">Normal question</div></form>' }));
+  await page.goto('https://chatgpt.com/');
+  await page.evaluate(() => {
+    window.calls = [];
+    window.chrome = { runtime: { id: 'fixture', sendMessage: async message => {
+      calls.push(message);
+      return { ok: true, job: null };
+    } }, storage: { local: { get: async d => ({ ...d, researchPublisherEnabled: true }) },
+      onChanged: { addListener() {} } } };
+  });
+  for (const file of ['js/core/extension-context.js', 'js/research/research-manual-import.js'])
+    await page.addScriptTag({ content: fs.readFileSync(file, 'utf8') });
+  await page.evaluate(() => {
+    document.querySelector('main').innerHTML = '<div data-message-author-role="user">Normal question</div>';
+    document.querySelector('[data-composer-markdown]').textContent = '';
+    history.replaceState({}, '', '/c/normal');
+  });
+  await page.waitForTimeout(1800);
+  assert.equal(await page.locator('#ghrc-manual-research-import-status').count(), 0);
+  assert.equal(await page.evaluate(() => calls.some(x => x.type === 'start-manual-research')), false);
+  await page.close();
 });

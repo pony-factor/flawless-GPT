@@ -37,7 +37,7 @@
     update();
   });
   const style = document.createElement('style');
-  style.textContent = `html[${ATTRIBUTE}] :is(form:has(#prompt-textarea), form:has([data-composer-markdown]), [data-type="unified-composer"], [data-composer-surface-variant], #ghrc-deep-research-tracker-composer, #ghrc-message-queue){visibility:hidden!important;pointer-events:none!important}`;
+  style.textContent = `html[${ATTRIBUTE}] :is(form:has(#prompt-textarea), form:has([data-composer-markdown]), [data-type="unified-composer"], [data-composer-surface-variant], #ghrc-deep-research-tracker-composer, #ghrc-message-queue, #ghrc-research-run-status, #ghrc-manual-research-import-status){visibility:hidden!important;pointer-events:none!important}`;
   (document.head || document.documentElement).append(style);
   new MutationObserver(update).observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ['style', 'class'] });
   window.addEventListener('resize', update);
