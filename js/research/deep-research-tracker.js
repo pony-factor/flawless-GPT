@@ -188,7 +188,9 @@
     readServerQuota();
     readAllowance();
     const repositories = document.getElementById('github-repositories-for-chatgpt');
-    if (enabled && preferences.showDeepResearchHomepage !== false && repositories && visible(repositories) && dashboardVisible()) {
+    const homepageRowVisible = enabled && preferences.showDeepResearchHomepage !== false
+      && repositories && visible(repositories) && dashboardVisible();
+    if (homepageRowVisible) {
       let row = document.getElementById(DASHBOARD_ID);
       if (!row) {
         row = document.createElement('div');
@@ -211,7 +213,13 @@
       '[data-prompt-link-label="$deep-research"]',
     ].join(',')));
     const composer = researchPrompt?.closest('form, [data-type="unified-composer"]');
-    if (enabled && preferences.showDeepResearchComposer !== false && composer?.parentElement) {
+    // Avoid a duplicate composer counter when the homepage row shows at least
+    // one allowance field. Otherwise the composer remains a useful fallback.
+    const homepageShowsAllowance = homepageRowVisible
+      && (preferences.showDeepResearchHomepageCount !== false
+        || preferences.showDeepResearchHomepageReset !== false);
+    if (enabled && preferences.showDeepResearchComposer !== false && composer?.parentElement
+      && !homepageShowsAllowance) {
       const widget = renderWidget(COMPOSER_ID);
       if (widget.nextElementSibling !== composer) composer.before(widget);
     } else document.getElementById(COMPOSER_ID)?.remove();
@@ -223,7 +231,7 @@
     requestAnimationFrame(update);
   }
   const observer = new MutationObserver(schedule);
-  observer.observe(document.documentElement, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['aria-describedby', 'aria-label', 'data-state', 'data-prompt-link-href', 'data-prompt-link-label', 'style', USAGE_ATTRIBUTE] });
+  observer.observe(document.documentElement, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['aria-describedby', 'aria-label', 'data-state', 'data-prompt-link-href', 'data-prompt-link-label', 'data-ghrc-hide-repository-dashboard', 'style', USAGE_ATTRIBUTE] });
   document.addEventListener('pointerover', schedule);
   document.addEventListener('focusin', schedule);
   window.addEventListener('resize', schedule);
