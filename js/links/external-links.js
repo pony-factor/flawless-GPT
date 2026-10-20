@@ -212,6 +212,96 @@
     });
   }
 
+  // Browser-native split view narrows the *tab* rather than our page panel.
+  // ChatGPT can reflow messages or replace its scroll pane at that breakpoint.
+  // Keep the first visible reading block in place across that brief transition.
+  function preserveConversationScrollForNativeSplit(link) {
+    const blocksSelector = "p, li, pre, h1, h2, h3, h4, h5, h6";
+    const conversationRoot = () => document.querySelector('[aria-label="Conversation"]')
+      || link?.closest?.("main") || document.querySelector("main");
+    const scrollContainer = element => {
+      for (let node = element; node; node = node.parentElement) {
+        if (node === document.scrollingElement) return node;
+        const overflow = getComputedStyle(node).overflowY;
+        if (/^(auto|scroll|overlay)$/.test(overflow) && node.scrollHeight > node.clientHeight + 1) {
+          return node;
+        }
+      }
+      return document.scrollingElement;
+    };
+    const root = conversationRoot();
+    if (!root) return { restore() {}, stop() {} };
+    const originalContainer = scrollContainer(link?.closest?.("main") ? link : root);
+    const viewport = originalContainer === document.scrollingElement
+      ? { top: 0, bottom: innerHeight } : originalContainer.getBoundingClientRect();
+    const blocks = [...root.querySelectorAll(blocksSelector)];
+    const anchor = blocks.find(block => {
+      const rect = block.getBoundingClientRect();
+      return rect.height > 0 && rect.bottom > viewport.top + 8 && rect.top < viewport.bottom - 8;
+    }) || (link?.isConnected ? link : null);
+    if (!anchor) return { restore() {}, stop() {} };
+
+    const originalTop = anchor.getBoundingClientRect().top;
+    const originalScrollTop = originalContainer.scrollTop;
+    const path = location.pathname;
+    const turn = anchor.closest('[data-testid^="conversation-turn-"]');
+    const turnId = turn?.getAttribute("data-testid");
+    const turnIndex = turn ? [...turn.querySelectorAll(blocksSelector)].indexOf(anchor) : -1;
+    const blockIndex = blocks.indexOf(anchor);
+    const currentAnchor = () => {
+      if (anchor.isConnected) return anchor;
+      if (turnId && turnIndex >= 0) {
+        const matchingTurn = [...document.querySelectorAll('[data-testid^="conversation-turn-"]')]
+          .find(node => node.getAttribute("data-testid") === turnId);
+        const matchingBlock = matchingTurn?.querySelectorAll(blocksSelector)[turnIndex];
+        if (matchingBlock) return matchingBlock;
+      }
+      return conversationRoot()?.querySelectorAll(blocksSelector)[blockIndex] || null;
+    };
+
+    let stopped = false;
+    let scheduled = false;
+    const abort = new AbortController();
+    let observer;
+    let timeout;
+    function stop() {
+      if (stopped) return;
+      stopped = true;
+      abort.abort();
+      observer?.disconnect();
+      clearTimeout(timeout);
+    }
+    function apply() {
+      if (stopped) return;
+      if (location.pathname !== path) { stop(); return; }
+      const block = currentAnchor();
+      const container = scrollContainer(block || conversationRoot());
+      if (!container) return;
+      if (!block) {
+        if (container !== originalContainer) container.scrollTop = originalScrollTop;
+        return;
+      }
+      const delta = block.getBoundingClientRect().top - originalTop;
+      if (Math.abs(delta) > 1) container.scrollTop += delta / (container.currentCSSZoom || 1);
+    }
+    function restore() {
+      if (stopped || scheduled) return;
+      scheduled = true;
+      requestAnimationFrame(() => { scheduled = false; apply(); });
+    }
+    window.addEventListener("resize", restore, { signal: abort.signal });
+    for (const type of ["wheel", "touchstart", "pointerdown", "keydown"]) {
+      window.addEventListener(type, stop, { capture: true, signal: abort.signal });
+    }
+    // Observe replacement of the conversation DOM as well as resize. The
+    // bounded timeout prevents a delayed split from pinning subsequent reads.
+    observer = new MutationObserver(restore);
+    observer.observe(document.body, { childList: true, subtree: true });
+    timeout = setTimeout(stop, 1600);
+    for (const delay of [0, 80, 250, 600, 1100]) setTimeout(restore, delay);
+    return { restore, stop };
+  }
+
   function previewWidthBounds() {
     const min = Math.min(360, Math.max(260, window.innerWidth * 0.35));
     const max = Math.max(min, window.innerWidth - Math.min(420, window.innerWidth * 0.35));
@@ -623,15 +713,17 @@
     href = stripTrackingFromUrl(new URL(href)).href;
     closeLinkPreview(false);
     const request = ++nativeSplitRequest;
+    const readingPosition = preserveConversationScrollForNativeSplit(link);
     try {
       const result = await chrome.runtime.sendMessage({
         type: "open-native-split-view", url: href, onLeft: splitViewOnLeft,
       });
-      if (request !== nativeSplitRequest) return;
-      if (result?.ok) return;
+      if (request !== nativeSplitRequest) { readingPosition.stop(); return; }
+      if (result?.ok) { readingPosition.restore(); return; }
     } catch {
       // Older browsers cannot create a native split through the extension API.
     }
+    readingPosition.stop();
     if (request === nativeSplitRequest) showLinkPreview(href, link, nativeGuide);
   }
 
