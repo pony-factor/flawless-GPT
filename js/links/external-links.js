@@ -2,7 +2,7 @@
   const EXTERNAL_WARNING_SETTING_KEY = "skipExternalSiteWarning";
   const HISTORY_MODAL_SETTING_KEY = "dismissHistoryRateLimitModal";
   const STRIP_UTM_TRACKING_SETTING_KEY = "stripUtmTracking";
-  const USER_MESSAGE_SELECTOR = '[data-message-author-role="user"], [data-author-role="user"], [data-testid="user-message"]';
+  const USER_MESSAGE_SELECTOR = '[data-message-author-role="user"], [data-author-role="user"], [data-testid="user-message"], [data-markdown-text-tone="user-message"]';
   const MODAL_ID = "modal-conversation-history-rate-limit";
   const DIALOG_SELECTOR = '[role="dialog"], [role="alertdialog"]';
   const EXTERNAL_DIALOG_TITLE = "External site";
@@ -976,7 +976,7 @@
       characterData: true,
       subtree: true,
       attributes: true,
-      attributeFilter: ["href", "data-message-author-role", "data-author-role", "data-testid"],
+      attributeFilter: ["href", "data-message-author-role", "data-author-role", "data-testid", "data-markdown-text-tone"],
     });
   }
 

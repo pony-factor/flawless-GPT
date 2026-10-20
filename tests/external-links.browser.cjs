@@ -86,11 +86,13 @@ test('own-message links never get sidebar buttons, including after role hydratio
     '<a id="assistant-source" href="https://example.org/assistant">Assistant source</a>',
     '</p></div></article>',
     '<div data-testid="user-message"><a id="other-own" href="https://example.org/own">Own link</a></div>',
+    '<div data-markdown-text-tone="user-message"><a id="markdown-own" href="https://example.org/markdown-own">Own Markdown link</a></div>',
   ].join('');
   const page = await fixture({ openExternalLinksInSplitView: true }, null, true, conversation);
   await page.locator('#assistant-source + .ghrc-link-with-actions .ghrc-link-sidebar-button').waitFor();
   assert.equal(await page.locator('#own + .ghrc-link-with-actions').count(), 0);
   assert.equal(await page.locator('#other-own + .ghrc-link-with-actions').count(), 0);
+  assert.equal(await page.locator('#markdown-own + .ghrc-link-with-actions').count(), 0);
   assert.equal(await page.locator('.ghrc-link-sidebar-button').count(), 1);
   assert.equal(await page.locator('#own').textContent(), 'SEC PDF');
   await page.locator('#own').click();
@@ -109,6 +111,13 @@ test('own-message links never get sidebar buttons, including after role hydratio
   await page.locator('#late-turn').evaluate(turn => turn.setAttribute('data-message-author-role', 'user'));
   await page.waitForFunction(() => !document.querySelector('#late-own + .ghrc-link-with-actions'));
   assert.equal(await page.locator('#late-own').textContent(), 'Late user link');
+  await page.locator('#late-turn').evaluate(turn => {
+    turn.removeAttribute('data-message-author-role');
+    turn.setAttribute('data-markdown-text-tone', 'assistant');
+  });
+  await page.locator('#late-own + .ghrc-link-with-actions').waitFor();
+  await page.locator('#late-turn').evaluate(turn => turn.setAttribute('data-markdown-text-tone', 'user-message'));
+  await page.waitForFunction(() => !document.querySelector('#late-own + .ghrc-link-with-actions'));
   assert.equal(await page.locator('.ghrc-link-sidebar-button').count(), 1);
   await page.close();
 });
