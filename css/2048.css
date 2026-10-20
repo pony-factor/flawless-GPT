@@ -2,9 +2,24 @@
   align-items: center;
   display: flex;
   gap: 8px;
-  grid-column: 1;
-  justify-self: start;
+  grid-column: 3;
+  grid-row: 1;
+  justify-self: end;
   min-width: 0;
+}
+
+@media (max-width: 560px) {
+  #github-repositories-for-chatgpt .ghrc-2048-footer-left {
+    grid-column: 2;
+    grid-row: 3;
+  }
+}
+
+@container (max-width: 420px) {
+  #github-repositories-for-chatgpt .ghrc-2048-footer-left {
+    grid-column: 1;
+    grid-row: 3;
+  }
 }
 
 #github-repositories-for-chatgpt .ghrc-2048-launcher {
