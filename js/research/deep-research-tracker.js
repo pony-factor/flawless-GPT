@@ -188,8 +188,9 @@
     readServerQuota();
     readAllowance();
     const repositories = document.getElementById('github-repositories-for-chatgpt');
+    const footer = repositories?.querySelector('.ghrc-dashboard-footer');
     const homepageRowVisible = enabled && preferences.showDeepResearchHomepage !== false
-      && repositories && visible(repositories) && dashboardVisible();
+      && footer && visible(repositories) && dashboardVisible();
     if (homepageRowVisible) {
       let row = document.getElementById(DASHBOARD_ID);
       if (!row) {
@@ -197,13 +198,13 @@
         row.id = DASHBOARD_ID;
         row.append(renderWidget(ID));
       } else renderWidget(ID);
-      for (const property of ['--ghrc-available-width', '--ghrc-center-offset']) {
-        const value = repositories.style.getPropertyValue(property);
-        if (row.style.getPropertyValue(property) === value) continue;
-        if (value) row.style.setProperty(property, value);
-        else row.style.removeProperty(property);
+      let actions = footer.querySelector('.ghrc-2048-footer-left');
+      if (!actions) {
+        actions = document.createElement('div');
+        actions.className = 'ghrc-2048-footer-left';
+        footer.append(actions);
       }
-      if (repositories.nextElementSibling !== row) repositories.after(row);
+      if (row.parentElement !== actions || actions.firstElementChild !== row) actions.prepend(row);
     } else document.getElementById(DASHBOARD_ID)?.remove();
 
     const prompts = [...document.querySelectorAll('#prompt-textarea, [data-composer-markdown][contenteditable="true"]')].filter(visible);
