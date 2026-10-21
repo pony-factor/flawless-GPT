@@ -24,6 +24,19 @@
   flex-shrink: 0;
 }
 
+.ghrc-deep-research-tracker .ghrc-research-usage-pie {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  flex: none;
+  border-radius: 50%;
+  vertical-align: -1px;
+}
+
+.ghrc-deep-research-tracker .ghrc-research-usage-pie[hidden] {
+  display: none;
+}
+
 .ghrc-deep-research-tracker:hover,
 .ghrc-deep-research-tracker:focus-visible {
   background: var(--main-surface-secondary, color-mix(in srgb, currentColor 8%, transparent));

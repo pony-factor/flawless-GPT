@@ -20,8 +20,16 @@
     return { remaining, full, reset };
   }
 
+  // Mirrors Sweetiebot's usage pie, with the 25-report full-research allowance
+  // as the reference. Larger or unknown allowances must not be misrepresented.
+  function usagePiePercent(remaining, total = 25) {
+    if (!Number.isSafeInteger(remaining) || remaining < 0 ||
+        !Number.isSafeInteger(total) || total <= 0 || remaining > total) return null;
+    return Math.round(remaining * 100 / total);
+  }
+
   if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { parseAllowance };
+    module.exports = { parseAllowance, usagePiePercent };
     return;
   }
   const context = globalThis.__ghrcExtensionContext;
@@ -39,6 +47,7 @@
     showDeepResearchHomepageReset: true,
     showDeepResearchComposerCount: true,
     showDeepResearchComposerReset: true,
+    showDeepResearchUsagePie: false,
     deepResearchHomepageVisibility: 'near-reset',
     deepResearchHomepageWindowDays: 5,
   });
@@ -150,9 +159,13 @@
       icon.src = globalThis.chrome?.runtime?.getURL?.('artwork/research-telescope.png') || 'artwork/research-telescope.png';
       icon.alt = '';
       icon.setAttribute('aria-hidden', 'true');
+      const pie = document.createElement('span');
+      pie.className = 'ghrc-research-usage-pie';
+      pie.setAttribute('aria-hidden', 'true');
+      pie.hidden = true;
       const label = document.createElement('span');
       label.className = 'ghrc-research-allowance';
-      widget.append(icon, label);
+      widget.append(icon, pie, label);
       widget.addEventListener('click', checkAllowance);
     }
     // An old observation is not a live balance; require another native check.
@@ -174,8 +187,31 @@
       : preferences.showDeepResearchComposerReset !== false;
     const text = serverText(includeCount, includeReset)
       || ['Deep Research', ...(includeCount ? [count] : []), ...(includeReset ? [reset] : [])].join(' · ');
+    const pie = widget.querySelector('.ghrc-research-usage-pie');
+    const freshServer = serverQuota && Date.now() - serverQuota.observedAt <= 10 * 60_000
+      && (serverQuota.resetAt === null || serverQuota.resetAt > Date.now());
+    const pieRemaining = serverQuota ? (freshServer ? serverQuota.remaining : null)
+      : (fresh ? allowance.remaining : null);
+    const percent = preferences.showDeepResearchUsagePie && includeCount
+      ? usagePiePercent(pieRemaining) : null;
+    const showPie = percent !== null;
+    if (pie.hidden !== !showPie) pie.hidden = !showPie;
+    if (showPie) {
+      const foreground = percent <= 10 ? 'var(--ghrc-research-pie-accent, #ffb900)' : 'currentColor';
+      const degrees = (100 - percent) * 3.6;
+      // Same 12 o'clock orientation and muted used slice as Sweetiebot's Codex pie.
+      const background = `conic-gradient(from 0deg, color-mix(in srgb, currentColor 20%, transparent) 0 ${degrees}deg, ${foreground} ${degrees}deg 360deg)`;
+      if (pie.dataset.pieBackground !== background) {
+        pie.style.background = background;
+        pie.dataset.pieBackground = background;
+      }
+    }
+    // Keep the exact remaining count in the button's accessible label. Only
+    // replace the visible number when the fraction is known and within 25.
+    const visibleParts = text.split(' · ').slice(1);
+    if (showPie) visibleParts.shift();
+    const visibleText = visibleParts.join(' · ');
     const label = widget.querySelector('.ghrc-research-allowance');
-    const visibleText = text === 'Deep Research' ? '' : text.replace(/^Deep Research · /, '');
     if (label.textContent !== visibleText) label.textContent = visibleText;
     if (widget.getAttribute('aria-label') !== text) widget.setAttribute('aria-label', text);
     widget.title = 'Deep Research allowance. Click to refresh or open the native tools menu. Lightweight allowances are excluded.';

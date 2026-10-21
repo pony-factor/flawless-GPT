@@ -1,7 +1,18 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { parseAllowance } = require('../js/research/deep-research-tracker.js');
+const { parseAllowance, usagePiePercent } = require('../js/research/deep-research-tracker.js');
 const { quotaFromResponse } = require('../js/research/deep-research-usage.js');
+
+test('research usage pie uses the known 25-report allowance without guessing other quotas', () => {
+  assert.equal(usagePiePercent(25), 100);
+  assert.equal(usagePiePercent(13), 52);
+  assert.equal(usagePiePercent(2), 8);
+  assert.equal(usagePiePercent(0), 0);
+  for (const remaining of [null, undefined, -1, 26, 1.2, '13']) {
+    assert.equal(usagePiePercent(remaining), null);
+  }
+  assert.equal(usagePiePercent(5, 0), null);
+});
 
 test('reads the server report bucket and timestamp while excluding lightweight reports', () => {
   assert.deepEqual(quotaFromResponse({ limits_progress: [
