@@ -16,8 +16,15 @@
     // only the remaining number. Never combine full and mini quotas.
     const reportedTotal = [quota.total, quota.limit, quota.max]
       .find(value => Number.isSafeInteger(value) && value > 0 && value >= quota.remaining);
+    const mini = data?.limits_progress?.find(item => item.feature_name === 'deep_research_mini');
+    const miniRemaining = Number.isSafeInteger(mini?.remaining) && mini.remaining >= 0
+      ? mini.remaining : null;
+    const miniTotal = miniRemaining === null ? undefined : [mini.total, mini.limit, mini.max]
+      .find(value => Number.isSafeInteger(value) && value > 0 && value >= miniRemaining);
     return { remaining: quota.remaining, resetAt: Number.isFinite(resetAt) ? resetAt : null,
-      observedAt: now, ...(reportedTotal === undefined ? {} : { total: reportedTotal }) };
+      observedAt: now, ...(reportedTotal === undefined ? {} : { total: reportedTotal }),
+      ...(miniRemaining === null ? {} : { miniRemaining }),
+      ...(miniTotal === undefined ? {} : { miniTotal }) };
   }
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = { quotaFromResponse };

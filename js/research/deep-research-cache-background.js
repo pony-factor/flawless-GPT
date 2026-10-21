@@ -35,7 +35,11 @@
   function snapshot(value) {
     return value ? { remaining: value.remaining, resetAt: value.resetAt, observedAt: value.observedAt,
       ...(Number.isSafeInteger(value.total) && value.total >= value.remaining && value.total > 0
-        ? { total: value.total } : {}) } : null;
+        ? { total: value.total } : {}),
+      ...(Number.isSafeInteger(value.miniRemaining) && value.miniRemaining >= 0
+        ? { miniRemaining: value.miniRemaining } : {}),
+      ...(Number.isSafeInteger(value.miniTotal) && value.miniTotal > 0
+        && value.miniTotal >= value.miniRemaining ? { miniTotal: value.miniTotal } : {}) } : null;
   }
   function observed(state, quota, force, now = Date.now()) {
     if (!validQuota(quota, now)) return state;
@@ -55,10 +59,18 @@
     // Keep the last verified plan allowance for the current server reset window.
     if (samePeriod && next.total == null && state.quota.total != null)
       next.total = state.quota.total;
+    if (samePeriod && next.miniRemaining == null && state.quota.miniRemaining != null)
+      next.miniRemaining = state.quota.miniRemaining;
+    if (samePeriod && next.miniTotal == null && state.quota.miniTotal != null)
+      next.miniTotal = state.quota.miniTotal;
     // A lagging server snapshot must not restore locally spent credits, even
     // after the expected reset timestamp. Only a confirmed new reset window
     // (or the user's explicit Refresh) can increase the allowance.
-    if (!force && samePeriod) next.remaining = Math.min(state.quota.remaining, next.remaining);
+    if (!force && samePeriod) {
+      next.remaining = Math.min(state.quota.remaining, next.remaining);
+      if (next.miniRemaining != null && state.quota.miniRemaining != null)
+        next.miniRemaining = Math.min(state.quota.miniRemaining, next.miniRemaining);
+    }
     return { ...state, quota: next,
       spent: !force && samePeriod ? state.spent : [],
       lastRefreshAttempt: state.lastRefreshAttempt };
@@ -66,9 +78,15 @@
   function spent(state, id, now = Date.now()) {
     if (typeof id !== 'string' || !id || id.length > 128
       || !validQuota(state.quota, now) || state.spent?.includes(id)) return state;
-    return { ...state,
-      quota: { ...state.quota, remaining: Math.max(0, state.quota.remaining - 1) },
-      spent: [...(state.spent || []), id].slice(-64) };
+    const full = state.quota.remaining > 0;
+    const lightweight = !full && Number.isSafeInteger(state.quota.miniRemaining)
+      && state.quota.miniRemaining > 0;
+    // Once full reports run out, research may consume a lightweight report.
+    // Do not deduct from both pools or manufacture a missing lightweight count.
+    const quota = full ? { ...state.quota, remaining: state.quota.remaining - 1 }
+      : lightweight ? { ...state.quota, miniRemaining: state.quota.miniRemaining - 1 }
+        : state.quota;
+    return { ...state, quota, spent: [...(state.spent || []), id].slice(-64) };
   }
   function claimRefresh(state, now = Date.now()) {
     // A near-reset observation uses a short polling window. An overdue reset
