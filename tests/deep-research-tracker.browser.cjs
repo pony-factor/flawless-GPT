@@ -332,3 +332,26 @@ test('eight-hour quota cache does not poll after five minutes and sends are coun
     assert.equal(await page.evaluate(() => window.writes.filter(m => m.type === 'deep-research-quota-refresh-claim').length), 0);
   } finally { await browser.close(); }
 });
+
+test('expected reset countdown stays visible until native quota confirms renewal', async () => {
+  const browser = await chromium.launch({ executablePath: '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser', headless: true });
+  try {
+    const page = await browser.newPage();
+    await page.setContent('<section><form><div id="prompt-textarea" contenteditable="true"><span data-prompt-link-href="app://connector_openai_deep_research">Research</span></div></form><section id="github-repositories-for-chatgpt"><footer class="ghrc-dashboard-footer"></footer></section></section>');
+    await page.evaluate(() => {
+      window.__ghrcExtensionContext = { active: () => true, onStop() {} };
+      document.documentElement.setAttribute('data-ghrc-deep-research-usage', JSON.stringify({
+        remaining: 0, observedAt: Date.now() - 6 * 60_000, resetAt: Date.now() - 30_000,
+      }));
+    });
+    await page.addScriptTag({ content: fs.readFileSync(path.join(__dirname, '../js/research/deep-research-tracker.js'), 'utf8') });
+    // An overdue reset estimate keeps the homepage tracker visible; it must
+    // not imply that the server has actually replenished the allowance.
+    const widget = page.locator('#ghrc-deep-research-tracker');
+    await widget.waitFor();
+    assert.match(await widget.innerText(), /0 last checked/);
+    assert.match(await widget.innerText(), /reset expected · awaiting confirmation/);
+    const marker = await widget.getAttribute('aria-label');
+    assert.doesNotMatch(marker, /resets 1d|reset completed/i);
+  } finally { await browser.close(); }
+});

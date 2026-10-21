@@ -32,6 +32,8 @@
   const USAGE_ATTRIBUTE = 'data-ghrc-deep-research-usage';
   const DAY_MS = 24 * 60 * 60_000;
   const CACHE_MS = 8 * 60 * 60_000;
+  const NEAR_RESET_MS = DAY_MS;
+  const LIVE_REFRESH_MS = 5 * 60_000;
   const CACHE_KEY = 'deepResearchQuotaStateV1';
   const USER_TURNS = '[data-message-author-role="user"], [data-conversation-role="user"], [data-content-search-unit-key$=":user"]';
   const RESEARCH_MENTION = '[data-prompt-link-href="app://connector_openai_deep_research"], [app-mention-path="app://connector_openai_deep_research"], [data-prompt-link-href="app://connector_openai_deep_research_work"], [app-mention-path="app://connector_openai_deep_research_work"]';
@@ -86,10 +88,19 @@
     } catch { /* Keep the last valid observation. */ }
   }
 
+  function nearReset() {
+    return serverQuota && Number.isFinite(serverQuota.resetAt)
+      && serverQuota.resetAt - Date.now() <= NEAR_RESET_MS;
+  }
+
+  function quotaRefreshInterval() {
+    return nearReset() ? LIVE_REFRESH_MS : CACHE_MS;
+  }
+
   function withinResetWindow() {
     if (!serverQuota || serverQuota.resetAt === null) return false;
     const remainingMs = serverQuota.resetAt - Date.now();
-    return remainingMs >= 0 && remainingMs <= preferences.deepResearchHomepageWindowDays * DAY_MS;
+    return remainingMs <= preferences.deepResearchHomepageWindowDays * DAY_MS;
   }
 
   function dashboardVisible() {
@@ -98,14 +109,13 @@
 
   function serverText(includeCount, includeReset) {
     if (!serverQuota) return null;
-    const stale = Date.now() - serverQuota.observedAt >= CACHE_MS
-      || (serverQuota.resetAt !== null && serverQuota.resetAt <= Date.now());
+    const stale = Date.now() - serverQuota.observedAt >= quotaRefreshInterval();
     const count = stale ? `${serverQuota.remaining} last checked · Refresh allowance`
       : `${serverQuota.remaining} left`;
     const remainingMs = serverQuota.resetAt === null ? null : serverQuota.resetAt - Date.now();
     let reset = 'reset unknown';
     if (remainingMs !== null) {
-      if (remainingMs <= 0) reset = 'reset due';
+      if (remainingMs <= 0) reset = 'reset expected · awaiting confirmation';
       else {
         const days = remainingMs > 36 * 60 * 60_000;
         const hours = remainingMs >= 60 * 60_000;
@@ -327,8 +337,7 @@
   void quotaMessage({ type: 'deep-research-quota-read' });
   const automaticRefresh = async () => {
     if (!enabled || document.visibilityState !== 'visible') return;
-    const due = !serverQuota || Date.now() - serverQuota.observedAt >= CACHE_MS
-      || (serverQuota.resetAt !== null && Date.now() >= serverQuota.resetAt);
+    const due = !serverQuota || Date.now() - serverQuota.observedAt >= quotaRefreshInterval();
     if (!due || refreshPending) return;
     refreshPending = true;
     try {
