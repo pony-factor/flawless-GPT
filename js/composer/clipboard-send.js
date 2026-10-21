@@ -58,14 +58,33 @@
     button.setAttribute("aria-label", message);
   }
 
+
+  function parseClipboardUrl(text) {
+    const value = text.trim();
+    // Ignore punctuation copied with a citation, not surrounding prose.
+    const scheme = /(?:https?:\/\/|file:\/\/\/)\s*/i.exec(value);
+    if (!scheme || !/^[\s"'“”‘’(\[{,;:.!?—–-]*$/.test(value.slice(0, scheme.index))) return null;
+    const remainder = value.slice(scheme.index + scheme[0].length);
+    const token = /^[^\s<>"'“”‘’\x60]+/.exec(remainder);
+    if (!token || !/^[\s<>"'“”‘’\x60)\]},;:.!?—–-]*$/.test(remainder.slice(token[0].length))) return null;
+
+    let candidate = scheme[0].trimEnd() + token[0];
+    // Keep balanced closing brackets in genuine paths, but drop sentence punctuation.
+    while (/[.,;:!?)}\]]$/.test(candidate)) {
+      const last = candidate.at(-1);
+      if (last === ")" && (candidate.match(/\)/g) || []).length <= (candidate.match(/\(/g) || []).length) break;
+      if (last === "]" && (candidate.match(/\]/g) || []).length <= (candidate.match(/\[/g) || []).length) break;
+      if (last === "}" && (candidate.match(/\}/g) || []).length <= (candidate.match(/\{/g) || []).length) break;
+      candidate = candidate.slice(0, -1);
+    }
+    try { return new URL(candidate); } catch { return null; }
+  }
+
   async function openClipboardUrl(button) {
     setButtonBusy(button, true);
     try {
-      const text = (await readClipboardText()).trim();
-      let url;
-      try {
-        url = new URL(text);
-      } catch {
+      const url = parseClipboardUrl(await readClipboardText());
+      if (!url) {
         setButtonMessage(button, "Clipboard does not contain a valid URL");
         return;
       }
