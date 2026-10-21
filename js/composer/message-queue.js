@@ -872,6 +872,36 @@
     schedulePump();
   }
 
+  function updateAttachmentThumbnails(row, item) {
+    const images = (item.attachments || []).filter(file =>
+      /^data:image\//i.test(file.dataUrl || "")
+    );
+    let previews = row.querySelector(".ghrc-message-queue-thumbnails");
+    row.classList.toggle("ghrc-message-queue-has-images", images.length > 0);
+    if (!images.length) {
+      previews?.remove();
+      return;
+    }
+    if (!previews) {
+      previews = document.createElement("div");
+      previews.className = "ghrc-message-queue-thumbnails";
+      row.querySelector(".ghrc-message-queue-index").after(previews);
+    }
+    // Keep loaded previews mounted during text edits and queue reordering.
+    if (previews.children.length === images.length && images.every((file, index) =>
+      previews.children[index].getAttribute("src") === file.dataUrl
+      && previews.children[index].alt === file.name
+    )) return;
+    previews.replaceChildren(...images.map(file => {
+      const image = document.createElement("img");
+      image.src = file.dataUrl;
+      image.alt = file.name;
+      image.title = file.name;
+      image.draggable = false;
+      return image;
+    }));
+  }
+
   function createItemRow(item, index) {
     const row = document.createElement("article");
     row.className = "ghrc-message-queue-item";
@@ -1063,6 +1093,7 @@
       if (names) editor.setAttribute("aria-description", `Attachments: ${names}`);
       else editor.removeAttribute("aria-description");
       row.title = names ? `Attachments: ${names}` : "";
+      updateAttachmentThumbnails(row, item);
       const [up, down] = row.querySelectorAll(".ghrc-message-queue-move-controls button");
       up.disabled = index === 0 || sending;
       down.disabled = index === queue.length - 1 || sending;
@@ -1419,16 +1450,38 @@
     }
     field.style.color = appearance.color;
     field.style.backgroundColor = sendingDraftSurface(composer);
+    const sizingProperties = ["box-sizing", "height", "min-height", "max-height", "overflow-y"];
+    const originalSizing = sizingProperties.map(property => [property,
+      composer.style.getPropertyValue(property), composer.style.getPropertyPriority(property)]);
+    const minimumHeight = Math.max(parseFloat(appearance.minHeight) || 0,
+      (parseFloat(appearance.lineHeight) || parseFloat(appearance.fontSize) * 1.5)
+      + (parseFloat(appearance.paddingTop) || 0) + (parseFloat(appearance.paddingBottom) || 0));
+    const originalMaximumHeight = appearance.maxHeight.endsWith("px") ? parseFloat(appearance.maxHeight) : 240;
     const position = () => {
       if (!composer.isConnected) return;
       const rect = composer.getBoundingClientRect();
-      field.style.left = `${rect.left}px`;
-      field.style.top = `${rect.top}px`;
       field.style.width = `${rect.width}px`;
-      field.style.height = `${rect.height}px`;
+      // The native editor temporarily contains the queued payload. Reserve
+      // space for the independent draft instead, including as the user types.
+      const scrollTop = field.scrollTop;
+      field.style.height = "0px";
+      const maximumHeight = Math.max(minimumHeight,
+        Math.min(originalMaximumHeight, window.innerHeight * 0.4));
+      const height = `${Math.min(maximumHeight, Math.max(minimumHeight, field.scrollHeight))}px`;
+      field.style.height = height;
+      field.scrollTop = scrollTop;
+      composer.style.setProperty("box-sizing", "border-box");
+      for (const property of ["height", "min-height", "max-height"]) {
+        if (composer.style.getPropertyValue(property) !== height) composer.style.setProperty(property, height);
+      }
+      composer.style.setProperty("overflow-y", "hidden");
+      const positioned = composer.getBoundingClientRect();
+      field.style.left = `${positioned.left}px`;
+      field.style.top = `${positioned.top}px`;
     };
     document.body.append(field);
     position();
+    field.addEventListener("input", position);
     const resize = typeof ResizeObserver === "function" ? new ResizeObserver(position) : null;
     resize?.observe(composer);
     window.addEventListener("resize", position);
@@ -1462,13 +1515,18 @@
       // Reset immediately so subsequent typing is a distinct message, but
       // recover the text if persistence fails before this overlay is closed.
       field.value = "";
+      position();
       const request = Promise.resolve().then(() => context.run(() => enqueueText(entered)))
         .then(saved => {
           if (!saved && field.isConnected) {
             field.value = entered + (field.value ? `\n${field.value}` : "");
+            position();
           }
         }, () => {
-          if (field.isConnected) field.value = entered + (field.value ? `\n${field.value}` : "");
+          if (field.isConnected) {
+            field.value = entered + (field.value ? `\n${field.value}` : "");
+            position();
+          }
         });
       pendingEntries.add(request);
       void request.finally(() => pendingEntries.delete(request));
@@ -1486,6 +1544,10 @@
         resize?.disconnect();
         window.removeEventListener("resize", position);
         window.removeEventListener("scroll", position, true);
+        for (const [property, value, priority] of originalSizing) {
+          if (value) composer.style.setProperty(property, value, priority);
+          else composer.style.removeProperty(property);
+        }
         field.remove();
       },
     };
