@@ -213,10 +213,14 @@
     const showPie = percent !== null;
     if (pie.hidden !== !showPie) pie.hidden = !showPie;
     if (showPie) {
-      const foreground = percent <= 10 ? 'var(--ghrc-research-pie-accent, #ffb900)' : 'currentColor';
+      // The existing Chat bar color preferences update root variables live;
+      // CSS variable resolution handles them without remounting the widget.
+      const regular = 'var(--ghrc-research-pie-color, var(--ghrc-composer-toolbar-icon, var(--ghrc-composer-text, currentColor)))';
+      const warning = 'var(--ghrc-research-pie-accent, var(--ghrc-composer-send-hover, var(--ghrc-composer-focus-ring, var(--theme-submit-btn-bg, #ffb900))))';
+      const foreground = percent <= 10 ? warning : regular;
       const degrees = (100 - percent) * 3.6;
-      // Same 12 o'clock orientation and muted used slice as Sweetiebot's Codex pie.
-      const background = `conic-gradient(from 0deg, color-mix(in srgb, currentColor 20%, transparent) 0 ${degrees}deg, ${foreground} ${degrees}deg 360deg)`;
+      // Retain Sweetiebot's 12 o'clock origin and muted consumed segment.
+      const background = `conic-gradient(from 0deg, color-mix(in srgb, ${regular} 20%, transparent) 0 ${degrees}deg, ${foreground} ${degrees}deg 360deg)`;
       if (pie.dataset.pieBackground !== background) {
         pie.style.background = background;
         pie.dataset.pieBackground = background;

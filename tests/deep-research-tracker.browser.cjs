@@ -225,13 +225,30 @@ test('Research settings show the composer only when homepage allowance details a
     assert.match(await homepage.getAttribute('aria-label'), /13 left/);
     assert.match(await pie.evaluate(node => node.style.background), /conic-gradient\(from 0deg/i);
     assert.match(await pie.evaluate(node => node.style.background), /172\.8deg.*360deg/i);
+    assert.match(await pie.evaluate(node => node.style.background), /--ghrc-composer-toolbar-icon/);
+    // Existing toolbar colors take effect without remounting the tracker.
+    const regularBefore = await pie.evaluate(node => getComputedStyle(node).backgroundImage);
+    await page.evaluate(() => document.documentElement.style.setProperty('--ghrc-composer-toolbar-icon', '#376ac8'));
+    const regularAfter = await pie.evaluate(node => getComputedStyle(node).backgroundImage);
+    assert.notEqual(regularAfter, regularBefore, 'pie follows the toolbar icon preference');
     await page.evaluate(() => {
       document.documentElement.setAttribute('data-ghrc-deep-research-usage', JSON.stringify({
         remaining: 2, resetAt: Date.now() + 10 * 24 * 3600_000, observedAt: Date.now(),
       }));
     });
     await page.waitForFunction(() => document.querySelector('#ghrc-deep-research-tracker')?.getAttribute('aria-label')?.includes('2 left'));
-    assert.match(await pie.evaluate(node => node.style.background), /var\(--ghrc-research-pie-accent, #ffb900\)/);
+    assert.match(await pie.evaluate(node => node.style.background), /--ghrc-composer-send-hover/);
+    const warningBefore = await pie.evaluate(node => getComputedStyle(node).backgroundImage);
+    await page.evaluate(() => document.documentElement.style.setProperty('--ghrc-composer-send-hover', '#b24bdf'));
+    const warningAfter = await pie.evaluate(node => getComputedStyle(node).backgroundImage);
+    assert.notEqual(warningAfter, warningBefore, 'low balance follows send hover preference');
+    await page.evaluate(() => {
+      document.documentElement.style.removeProperty('--ghrc-composer-send-hover');
+      document.documentElement.style.setProperty('--ghrc-composer-focus-ring', '#0c9b7a');
+    });
+    const warningFocus = await pie.evaluate(node => getComputedStyle(node).backgroundImage);
+    assert.notEqual(warningFocus, warningBefore, 'focus-ring setting supplies the low-balance fallback');
+    assert.notEqual(warningFocus, warningAfter, 'warning colors update the pie live');
     await page.evaluate(() => {
       document.documentElement.setAttribute('data-ghrc-deep-research-usage', JSON.stringify({
         remaining: 26, resetAt: Date.now() + 10 * 24 * 3600_000, observedAt: Date.now(),
