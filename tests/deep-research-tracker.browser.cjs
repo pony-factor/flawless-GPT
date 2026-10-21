@@ -367,3 +367,60 @@ test('composer allowance returns when the homepage dashboard is hidden or remove
     assert.deepEqual(errors, []);
   } finally { await browser.close(); }
 });
+
+test('eight-hour quota cache does not poll after five minutes and sends are counted only on confirmed turns', async () => {
+  const browser = await chromium.launch({ executablePath: '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser', headless: true });
+  try {
+    const page = await browser.newPage();
+    await page.setContent('<form><div id="prompt-textarea" contenteditable="true"><span data-prompt-link-href="app://connector_openai_deep_research">Deep research</span></div><button data-testid="send-button" type="button">Send</button></form><section id="github-repositories-for-chatgpt"><footer class="ghrc-dashboard-footer"></footer></section>');
+    await page.evaluate(() => {
+      window.__ghrcExtensionContext = { active: () => true, onStop() {} };
+      window.writes = [];
+      window.chrome = { storage: { local: { async get() { return {}; } }, onChanged: { addListener() {}, removeListener() {} } },
+        runtime: { async sendMessage(message) {
+          window.writes.push(message);
+          if (message.type === 'deep-research-quota-read') return { ok: true, quota: { remaining: 4, observedAt: Date.now() - 6 * 60_000, resetAt: Date.now() + 20 * 24 * 3600_000 } };
+          if (message.type === 'deep-research-quota-spent') return { ok: true, quota: { remaining: 3, observedAt: Date.now() - 6 * 60_000, resetAt: Date.now() + 20 * 24 * 3600_000 } };
+          return { ok: true, quota: null, refresh: false };
+        } } };
+    });
+    await page.addScriptTag({ content: fs.readFileSync(path.join(__dirname, '../js/research/deep-research-tracker.js'), 'utf8') });
+    await page.waitForFunction(() => document.getElementById('ghrc-deep-research-tracker-composer')?.textContent.includes('4 left'));
+    // A native Send click alone is not a successful research run.
+    await page.locator('[data-testid="send-button"]').click();
+    assert.equal(await page.evaluate(() => window.writes.filter(m => m.type === 'deep-research-quota-spent').length), 0);
+    await page.evaluate(() => {
+      const turn = document.createElement('div');
+      turn.dataset.messageAuthorRole = 'user';
+      turn.textContent = 'Research started';
+      document.body.append(turn);
+    });
+    await page.waitForFunction(() => document.getElementById('ghrc-deep-research-tracker-composer')?.textContent.includes('3 left'));
+    assert.equal(await page.evaluate(() => window.writes.filter(m => m.type === 'deep-research-quota-spent').length), 1);
+    await page.waitForTimeout(50);
+    assert.equal(await page.evaluate(() => window.writes.filter(m => m.type === 'deep-research-quota-refresh-claim').length), 0);
+  } finally { await browser.close(); }
+});
+
+test('expected reset countdown stays visible until native quota confirms renewal', async () => {
+  const browser = await chromium.launch({ executablePath: '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser', headless: true });
+  try {
+    const page = await browser.newPage();
+    await page.setContent('<section><form><div id="prompt-textarea" contenteditable="true"><span data-prompt-link-href="app://connector_openai_deep_research">Research</span></div></form><section id="github-repositories-for-chatgpt"><footer class="ghrc-dashboard-footer"></footer></section></section>');
+    await page.evaluate(() => {
+      window.__ghrcExtensionContext = { active: () => true, onStop() {} };
+      document.documentElement.setAttribute('data-ghrc-deep-research-usage', JSON.stringify({
+        remaining: 0, observedAt: Date.now() - 6 * 60_000, resetAt: Date.now() - 30_000,
+      }));
+    });
+    await page.addScriptTag({ content: fs.readFileSync(path.join(__dirname, '../js/research/deep-research-tracker.js'), 'utf8') });
+    // An overdue reset estimate keeps the homepage tracker visible; it must
+    // not imply that the server has actually replenished the allowance.
+    const widget = page.locator('#ghrc-deep-research-tracker');
+    await widget.waitFor();
+    assert.match(await widget.innerText(), /0 last checked/);
+    assert.match(await widget.innerText(), /reset expected · awaiting confirmation/);
+    const marker = await widget.getAttribute('aria-label');
+    assert.doesNotMatch(marker, /resets 1d|reset completed/i);
+  } finally { await browser.close(); }
+});
