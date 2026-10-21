@@ -34,6 +34,19 @@
     return null;
   }
 
+  // The server's deep_research bucket counts full research; deep_research_mini
+  // is a distinct lightweight pool. Never use combined counts as full counts.
+  function selectedResearchQuota(quota, mode = 'full') {
+    if (!quota || !Number.isSafeInteger(quota.remaining) || quota.remaining < 0) return null;
+    if (mode !== 'all') return { remaining: quota.remaining, total: quota.total ?? null };
+    if (!Number.isSafeInteger(quota.miniRemaining) || quota.miniRemaining < 0)
+      return { remaining: null, total: null };
+    const remaining = quota.remaining + quota.miniRemaining;
+    const total = Number.isSafeInteger(quota.total) && Number.isSafeInteger(quota.miniTotal)
+      ? quota.total + quota.miniTotal : null;
+    return { remaining, total };
+  }
+
   function usagePiePercent(remaining, total) {
     if (!Number.isSafeInteger(remaining) || remaining < 0 ||
         !Number.isSafeInteger(total) || total <= 0 || remaining > total) return null;
@@ -41,7 +54,7 @@
   }
 
   if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { parseAllowance, usagePieTotal, usagePiePercent };
+    module.exports = { parseAllowance, selectedResearchQuota, usagePieTotal, usagePiePercent };
     return;
   }
   const context = globalThis.__ghrcExtensionContext;
@@ -67,6 +80,7 @@
     showDeepResearchComposerReset: true,
     showDeepResearchUsagePie: false,
     deepResearchUsagePieTotal: null,
+    deepResearchAllowanceMode: 'full',
     deepResearchHomepageVisibility: 'near-reset',
     deepResearchHomepageWindowDays: 5,
   });
@@ -106,7 +120,12 @@
       if (cacheBridge) void quotaMessage({ type: 'deep-research-quota-observed',
         quota: { remaining: value.remaining, resetAt: value.resetAt, observedAt: value.observedAt,
           ...(Number.isSafeInteger(value.total) && value.total >= value.remaining && value.total > 0
-            ? { total: value.total } : {}) },
+            ? { total: value.total } : {}),
+          ...(Number.isSafeInteger(value.miniRemaining) && value.miniRemaining >= 0
+            ? { miniRemaining: value.miniRemaining } : {}),
+          ...(Number.isSafeInteger(value.miniTotal) && value.miniTotal > 0
+            && value.miniTotal >= value.miniRemaining
+            ? { miniTotal: value.miniTotal } : {}) },
         force: value.force === true });
       else serverQuota = value;
     } catch { /* Keep the last valid observation. */ }
@@ -134,8 +153,13 @@
   function serverText(includeCount, includeReset) {
     if (!serverQuota) return null;
     const stale = Date.now() - serverQuota.observedAt >= quotaRefreshInterval();
-    const count = stale ? `${serverQuota.remaining} last checked · Refresh allowance`
-      : `${serverQuota.remaining} left`;
+    const quota = selectedResearchQuota(serverQuota, preferences.deepResearchAllowanceMode);
+    const amount = quota?.remaining;
+    const mode = preferences.deepResearchAllowanceMode === 'all' ? 'full + lightweight' : 'full';
+    const count = amount === null || amount === undefined
+      ? 'full + lightweight balance unavailable'
+      : stale ? `${amount} last checked (${mode}) · Refresh allowance`
+      : `${amount} left (${mode})`;
     const remainingMs = serverQuota.resetAt === null ? null : serverQuota.resetAt - Date.now();
     let reset = 'reset unknown';
     if (remainingMs !== null) {
@@ -223,9 +247,10 @@
     }
     // An old observation is not a live balance; require another native check.
     const fresh = Date.now() - observedAt < 5 * 60_000;
-    const count = fresh && allowance.remaining !== null
-      ? `${allowance.remaining} left`
-      : 'Check allowance';
+    // Native unlabeled counts may combine pools. Do not present them as full.
+    const count = fresh && allowance.remaining !== null && allowance.full
+      && preferences.deepResearchAllowanceMode === 'full'
+      ? `${allowance.remaining} left (full)` : 'Check allowance';
     const reset = fresh && allowance.reset ? allowance.reset : 'Reset unknown';
     const homepage = id === ID;
     const nearReset = homepage && withinResetWindow();
@@ -244,13 +269,19 @@
     // Match the cache's eight-hour or near-reset five-minute lifetime.
     const freshServer = serverQuota && Date.now() - serverQuota.observedAt < quotaRefreshInterval()
       && (serverQuota.resetAt === null || serverQuota.resetAt > Date.now());
-    const pieRemaining = serverQuota ? (freshServer ? serverQuota.remaining : null)
-      : (fresh ? allowance.remaining : null);
+    const selected = freshServer ? selectedResearchQuota(serverQuota, preferences.deepResearchAllowanceMode) : null;
+    const pieRemaining = serverQuota ? selected?.remaining : (
+      fresh && allowance.full && preferences.deepResearchAllowanceMode === 'full'
+        ? allowance.remaining : null);
     const preferredTotal = preferences.deepResearchUsagePieTotal;
-    const reportedTotal = freshServer ? serverQuota.total : null;
+    const reportedTotal = selected?.total ?? null;
+    // 25/250 were historically the combined allowance, not the full pool.
+    // Never auto-scale a full-only pie from those combined totals.
     const total = usagePieTotal(pieRemaining, reportedTotal, preferredTotal);
+    const safeTotal = preferences.deepResearchAllowanceMode === 'full'
+      && reportedTotal == null && preferredTotal == null ? null : total;
     const percent = preferences.showDeepResearchUsagePie && includeCount
-      ? usagePiePercent(pieRemaining, total) : null;
+      ? usagePiePercent(pieRemaining, safeTotal) : null;
     const showPie = percent !== null;
     if (pie.hidden !== !showPie) pie.hidden = !showPie;
     if (showPie) {
@@ -275,10 +306,12 @@
     const label = widget.querySelector('.ghrc-research-allowance');
     if (label.textContent !== visibleText) label.textContent = visibleText;
     if (widget.getAttribute('aria-label') !== text) widget.setAttribute('aria-label', text);
+    const combined = preferences.deepResearchAllowanceMode === 'all';
     const autoEstimate = showPie && preferredTotal == null && reportedTotal == null;
     widget.title = showPie
-      ? `Deep Research: ${pieRemaining} of ${total} full reports remaining${autoEstimate ? ' (estimated allowance)' : ''}. Click to refresh. Lightweight allowances are excluded.`
-      : 'Deep Research allowance. Click to refresh or open the native tools menu. Lightweight allowances are excluded.';
+      ? `Deep Research: ${pieRemaining} of ${safeTotal} ${combined ? 'full + lightweight' : 'full'} reports remaining${autoEstimate ? ' (estimated allowance)' : ''}. Click to refresh.`
+      : combined ? 'Combined full + lightweight allowance; requires both quotas from ChatGPT. Click to refresh.'
+        : 'Full Deep Research only; lightweight requests excluded. Click to refresh.';
     return widget;
   }
 
@@ -378,6 +411,7 @@
     preferences.deepResearchUsagePieTotal =
       Number.isSafeInteger(selectedTotal) && selectedTotal > 0 && selectedTotal <= 10000
         ? selectedTotal : null;
+    preferences.deepResearchAllowanceMode = preferences.deepResearchAllowanceMode === 'all' ? 'all' : 'full';
     enabled = preferences.showDeepResearchTracker !== false;
     schedule();
   }

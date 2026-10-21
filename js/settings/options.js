@@ -80,6 +80,7 @@ const showDeepResearchComposerCountInput = document.getElementById("show-deep-re
 const showDeepResearchComposerResetInput = document.getElementById("show-deep-research-composer-reset");
 const showDeepResearchUsagePieInput = document.getElementById("show-deep-research-usage-pie");
 const deepResearchUsagePieTotalInput = document.getElementById("deep-research-usage-pie-total");
+const deepResearchAllowanceModeInput = document.getElementById("deep-research-allowance-mode");
 const deepResearchHomepageVisibilityInput = document.getElementById("deep-research-homepage-visibility");
 const deepResearchHomepageWindowDaysInput = document.getElementById("deep-research-homepage-window-days");
 const stripUtmTrackingInput = document.getElementById("strip-utm-tracking");
@@ -240,6 +241,7 @@ function updateResearchSettingsControls() {
   showDeepResearchComposerCountInput.disabled = !composer;
   showDeepResearchComposerResetInput.disabled = !composer;
   showDeepResearchUsagePieInput.disabled = !enabled;
+  deepResearchAllowanceModeInput.disabled = !enabled;
   deepResearchUsagePieTotalInput.disabled = !enabled || !showDeepResearchUsagePieInput.checked;
 }
 
@@ -419,6 +421,7 @@ async function loadSettings() {
     showDeepResearchComposerReset: true,
     showDeepResearchUsagePie: false,
     deepResearchUsagePieTotal: null,
+    deepResearchAllowanceMode: "full",
     deepResearchHomepageVisibility: "near-reset",
     deepResearchHomepageWindowDays: 5,
     stripUtmTracking: true,
@@ -483,6 +486,7 @@ async function loadSettings() {
   showDeepResearchComposerCountInput.checked = settings.showDeepResearchComposerCount !== false;
   showDeepResearchComposerResetInput.checked = settings.showDeepResearchComposerReset !== false;
   showDeepResearchUsagePieInput.checked = settings.showDeepResearchUsagePie === true;
+  deepResearchAllowanceModeInput.value = settings.deepResearchAllowanceMode === "all" ? "all" : "full";
   deepResearchUsagePieTotalInput.value = Number.isSafeInteger(settings.deepResearchUsagePieTotal)
     && settings.deepResearchUsagePieTotal > 0 && settings.deepResearchUsagePieTotal <= 10000
     ? String(settings.deepResearchUsagePieTotal) : "";
@@ -598,6 +602,7 @@ async function saveSettings() {
       showDeepResearchComposerCount: showDeepResearchComposerCountInput.checked,
       showDeepResearchComposerReset: showDeepResearchComposerResetInput.checked,
       showDeepResearchUsagePie: showDeepResearchUsagePieInput.checked,
+      deepResearchAllowanceMode: deepResearchAllowanceModeInput.value,
       deepResearchUsagePieTotal: /^\d+$/.test(deepResearchUsagePieTotalInput.value.trim())
         && Number(deepResearchUsagePieTotalInput.value) >= 1
         && Number(deepResearchUsagePieTotalInput.value) <= 10000

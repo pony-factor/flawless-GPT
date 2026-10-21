@@ -1,6 +1,6 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { parseAllowance, usagePieTotal, usagePiePercent } = require('../js/research/deep-research-tracker.js');
+const { parseAllowance, selectedResearchQuota, usagePieTotal, usagePiePercent } = require('../js/research/deep-research-tracker.js');
 const { quotaFromResponse } = require('../js/research/deep-research-usage.js');
 
 test('usage pie accepts reported or custom totals and estimates common tiers', () => {
@@ -24,6 +24,46 @@ test('usage pie accepts reported or custom totals and estimates common tiers', (
   assert.equal(usagePiePercent(0, 250), 0);
   assert.equal(usagePiePercent(5, 0), null);
   assert.equal(usagePiePercent(201, 200), null);
+});
+
+test('both settings views default to full-only counter and share the same preference', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  for (const file of ['options.html', 'popup.html']) {
+    const html = fs.readFileSync(path.join(__dirname, '..', file), 'utf8');
+    assert.match(html, /id="deep-research-allowance-mode"/);
+    assert.match(html, /<option value="full" selected>Full research only<\/option>/);
+    assert.match(html, /<option value="all">Full \+ lightweight<\/option>/);
+  }
+  const settings = fs.readFileSync(path.join(__dirname, '../js/settings/options.js'), 'utf8');
+  assert.match(settings, /deepResearchAllowanceMode: "full"/);
+  assert.match(settings, /deepResearchAllowanceMode: deepResearchAllowanceModeInput\.value/);
+});
+
+test('full-only default and combined selection keep research pools distinct', () => {
+  const buckets = { remaining: 6, total: 10, miniRemaining: 13, miniTotal: 15 };
+  assert.deepEqual(selectedResearchQuota(buckets), { remaining: 6, total: 10 });
+  assert.deepEqual(selectedResearchQuota(buckets, 'full'), { remaining: 6, total: 10 });
+  assert.deepEqual(selectedResearchQuota(buckets, 'all'), { remaining: 19, total: 25 });
+  assert.deepEqual(selectedResearchQuota({ remaining: 6 }, 'all'), { remaining: null, total: null });
+  assert.deepEqual(selectedResearchQuota({ remaining: 0, miniRemaining: 0 }, 'all'),
+    { remaining: 0, total: null });
+  assert.equal(usagePiePercent(6, selectedResearchQuota(buckets).total), 60);
+  assert.equal(usagePiePercent(19, selectedResearchQuota(buckets, 'all').total), 76);
+});
+
+test('reads separate full and lightweight quota fields without combining them', () => {
+  assert.deepEqual(quotaFromResponse({ limits_progress: [
+    { feature_name: 'deep_research', remaining: 6, total: 10, reset_after: '2026-11-01T00:00:00Z' },
+    { feature_name: 'deep_research_mini', remaining: 13, total: 15 },
+  ] }, 1000), {
+    remaining: 6, total: 10, miniRemaining: 13, miniTotal: 15,
+    resetAt: Date.parse('2026-11-01T00:00:00Z'), observedAt: 1000,
+  });
+  assert.equal(quotaFromResponse({ limits_progress: [
+    { feature_name: 'deep_research', remaining: 8 },
+    { feature_name: 'deep_research_mini', remaining: -4 },
+  ] }).miniRemaining, undefined);
 });
 
 test('reads the server report bucket and timestamp while excluding lightweight reports', () => {
@@ -182,6 +222,27 @@ test('apparent early renewal cannot raise credits before the old reset deadline'
   assert.equal(observed(original, { ...premature, observedAt: now + 30 * 60_000 },
     false, now + 30 * 60_000).quota.remaining, 10,
     'after the old deadline the new server window can confirm renewal');
+});
+
+test('cache preserves the separate lightweight bucket and spends full reports first', () => {
+  const now = 100_000_000;
+  const resetAt = now + 60 * 60_000;
+  const original = observed({ quota: null, spent: [], lastRefreshAttempt: 0 },
+    { remaining: 1, total: 10, miniRemaining: 3, miniTotal: 15, resetAt, observedAt: now },
+    false, now);
+  const first = spent(original, 'full-send', now + 1);
+  assert.equal(first.quota.remaining, 0);
+  assert.equal(first.quota.miniRemaining, 3);
+  const second = spent(first, 'lightweight-send', now + 2);
+  assert.equal(second.quota.remaining, 0);
+  assert.equal(second.quota.miniRemaining, 2);
+  assert.equal(spent(second, 'lightweight-send', now + 3), second);
+  const sameWindow = observed(second,
+    { remaining: 1, resetAt, observedAt: now + 5 }, false, now + 5);
+  assert.equal(sameWindow.quota.remaining, 0);
+  assert.equal(sameWindow.quota.miniRemaining, 2);
+  assert.equal(sameWindow.quota.miniTotal, 15);
+  assert.equal(selectedResearchQuota(sameWindow.quota, 'all').remaining, 2);
 });
 
 // Integration: a reported account maximum must survive the shared quota cache.

@@ -245,9 +245,15 @@
                 <small>Use a Sweetiebot-style pie scaled to your Deep Research allowance. The exact remaining count remains accessible.</small>
               </span>
             </label>
+            <label for="deep-research-allowance-mode">Counter allowance</label>
+            <select id="deep-research-allowance-mode">
+              <option value="full" selected>Full research only</option>
+              <option value="all">Full + lightweight</option>
+            </select>
+            <p class="help">Default: full research only. Combined mode appears only when ChatGPT provides both counts; missing lightweight counts are never guessed.</p>
             <label for="deep-research-usage-pie-total">Pie allowance total (optional)</label>
             <input id="deep-research-usage-pie-total" type="number" min="1" max="10000" step="1" placeholder="Auto" />
-            <p class="help">Auto reads a reported total when available; otherwise it estimates 25 or 250 from the remaining count. For Pro or a different allowance, enter the actual maximum (for example, 200 or 250). This matters especially when a Pro balance drops below 25.</p>
+            <p class="help">For full research, Auto uses only a server-reported full maximum; enter your actual full allowance if it is absent (for example, historical Plus 10 or Pro 125). In combined mode, Auto can estimate 25 or 250 when no total is reported. Current limits vary by plan.</p>
             <h3>Homepage</h3>
             <label class="preference">
               <input id="show-deep-research-homepage" type="checkbox" checked />
