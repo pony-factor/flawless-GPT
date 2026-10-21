@@ -18,9 +18,10 @@ html[data-ghrc-link-preview="left"] {
 }
 
 .ghrc-link-with-actions {
+  /* Keep one text baseline; nested inline boxes otherwise shift the button. */
   display: inline-block;
   max-width: 100%;
-  vertical-align: text-bottom;
+  vertical-align: baseline;
 }
 
 /* ChatGPT's link wrapper can reserve only one line even after the URL wraps. */
@@ -59,7 +60,6 @@ a.ghrc-source-citation:has(+ .ghrc-link-with-actions) {
 
 a.ghrc-source-citation + .ghrc-link-with-actions {
   margin-inline: 0;
-  vertical-align: middle;
 }
 
 .ghrc-link-with-actions {
@@ -92,8 +92,9 @@ a:has(+ .ghrc-link-has-punctuation) {
   display: inline-flex;
   align-items: stretch;
   height: 20px;
+  box-sizing: border-box;
   margin-inline: 3px 1px;
-  vertical-align: text-bottom;
+  vertical-align: middle;
   overflow: hidden;
   border: 1px solid color-mix(in srgb, currentColor 24%, transparent);
   border-radius: 5px;
@@ -105,7 +106,7 @@ a:has(+ .ghrc-link-has-punctuation) {
   align-items: center;
   justify-content: center;
   min-width: 20px;
-  height: 20px;
+  height: 100%;
   box-sizing: border-box;
 }
 
