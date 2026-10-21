@@ -1046,6 +1046,30 @@ test('details source chips retain their layout with the sidebar action on the sa
   await page.close();
 });
 
+test('sidebar buttons share a vertical center beside prose, punctuation and citation pills', async () => {
+  const page = await fixture({ openExternalLinksInSplitView: true }, null, true, `
+    <p style="font:16px/26px sans-serif">
+      <a href="https://example.org/plain">Plain link</a>
+      <a href="https://example.org/punctuation">Link with punctuation</a>.
+      <a data-testid="chatgpt-citation" href="https://example.org/citation"
+        style="display:inline-flex;align-items:center;height:20px;font:9px/9px sans-serif">govinfo.gov</a>
+    </p>`);
+  await page.locator('.ghrc-link-sidebar-button').first().waitFor();
+  await page.waitForFunction(() => document.querySelectorAll('.ghrc-link-actions').length === 3);
+  const boxes = await page.locator('.ghrc-link-actions').evaluateAll(actions => actions.map(action => {
+    const rect = action.getBoundingClientRect();
+    const icon = action.querySelector('svg').getBoundingClientRect();
+    return { center: rect.y + rect.height / 2, height: rect.height,
+      iconCenter: icon.y + icon.height / 2 };
+  }));
+  for (const box of boxes) {
+    assert.ok(Math.abs(box.center - boxes[0].center) <= 0.5, JSON.stringify(boxes));
+    assert.equal(box.height, 20);
+    assert.ok(Math.abs(box.iconCenter - box.center) <= 0.5, JSON.stringify(boxes));
+  }
+  await page.close();
+});
+
 test('trailing link punctuation shares the surrounding text baseline', async () => {
   const page = await fixture({ openExternalLinksInSplitView: true });
   await page.locator('.ghrc-link-with-actions').waitFor();
