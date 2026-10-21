@@ -21,7 +21,7 @@ The dashboard:
 - can skip ChatGPT's external-site warning and dismiss its history rate-limit
   modal independently;
 - hides ChatGPT's usage remaining / credits card by default;
-- offers an opt-in, Sweetiebot-style 12px pie for the Deep Research remaining count, using 25 full reports as the reference and falling back to text if the allowance cannot be scaled safely;
+- offers an opt-in, Sweetiebot-style 12px pie for the Deep Research remaining count; it uses the server-reported total when available, otherwise estimates a 25- or 250-report allowance, with an optional user-configured maximum (such as 200) and a text fallback for unsupported balances;
 - hides promotional ChatGPT plan-upgrade banners such as the Astra Pro upsell by default, without removing conversation content;
 - queues follow-up messages locally while ChatGPT is responding, keeps them editable and reorderable, and sends them FIFO only after the active response fully completes;
 - adds columns for any other GitHub accounts the connected tokens can access;

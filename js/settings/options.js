@@ -79,6 +79,7 @@ const showDeepResearchHomepageResetInput = document.getElementById("show-deep-re
 const showDeepResearchComposerCountInput = document.getElementById("show-deep-research-composer-count");
 const showDeepResearchComposerResetInput = document.getElementById("show-deep-research-composer-reset");
 const showDeepResearchUsagePieInput = document.getElementById("show-deep-research-usage-pie");
+const deepResearchUsagePieTotalInput = document.getElementById("deep-research-usage-pie-total");
 const deepResearchHomepageVisibilityInput = document.getElementById("deep-research-homepage-visibility");
 const deepResearchHomepageWindowDaysInput = document.getElementById("deep-research-homepage-window-days");
 const stripUtmTrackingInput = document.getElementById("strip-utm-tracking");
@@ -239,6 +240,7 @@ function updateResearchSettingsControls() {
   showDeepResearchComposerCountInput.disabled = !composer;
   showDeepResearchComposerResetInput.disabled = !composer;
   showDeepResearchUsagePieInput.disabled = !enabled;
+  deepResearchUsagePieTotalInput.disabled = !enabled || !showDeepResearchUsagePieInput.checked;
 }
 
 function normalizedOwnerGroupsPerPage(value) {
@@ -416,6 +418,7 @@ async function loadSettings() {
     showDeepResearchComposerCount: true,
     showDeepResearchComposerReset: true,
     showDeepResearchUsagePie: false,
+    deepResearchUsagePieTotal: null,
     deepResearchHomepageVisibility: "near-reset",
     deepResearchHomepageWindowDays: 5,
     stripUtmTracking: true,
@@ -480,6 +483,9 @@ async function loadSettings() {
   showDeepResearchComposerCountInput.checked = settings.showDeepResearchComposerCount !== false;
   showDeepResearchComposerResetInput.checked = settings.showDeepResearchComposerReset !== false;
   showDeepResearchUsagePieInput.checked = settings.showDeepResearchUsagePie === true;
+  deepResearchUsagePieTotalInput.value = Number.isSafeInteger(settings.deepResearchUsagePieTotal)
+    && settings.deepResearchUsagePieTotal > 0 && settings.deepResearchUsagePieTotal <= 10000
+    ? String(settings.deepResearchUsagePieTotal) : "";
   deepResearchHomepageVisibilityInput.value =
     settings.deepResearchHomepageVisibility === "always" ? "always" : "near-reset";
   deepResearchHomepageWindowDaysInput.value = normalizedResearchWindowDays(settings.deepResearchHomepageWindowDays);
@@ -592,6 +598,10 @@ async function saveSettings() {
       showDeepResearchComposerCount: showDeepResearchComposerCountInput.checked,
       showDeepResearchComposerReset: showDeepResearchComposerResetInput.checked,
       showDeepResearchUsagePie: showDeepResearchUsagePieInput.checked,
+      deepResearchUsagePieTotal: /^\d+$/.test(deepResearchUsagePieTotalInput.value.trim())
+        && Number(deepResearchUsagePieTotalInput.value) >= 1
+        && Number(deepResearchUsagePieTotalInput.value) <= 10000
+        ? Number(deepResearchUsagePieTotalInput.value) : null,
       deepResearchHomepageVisibility: deepResearchHomepageVisibilityInput.value,
       deepResearchHomepageWindowDays: normalizedResearchWindowDays(deepResearchHomepageWindowDaysInput.value),
       stripUtmTracking: stripUtmTrackingInput.checked,

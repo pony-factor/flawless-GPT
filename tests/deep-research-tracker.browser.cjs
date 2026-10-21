@@ -237,8 +237,31 @@ test('Research settings show the composer only when homepage allowance details a
         remaining: 26, resetAt: Date.now() + 10 * 24 * 3600_000, observedAt: Date.now(),
       }));
     });
-    await page.waitForFunction(() => document.querySelector('#ghrc-deep-research-tracker')?.textContent.includes('26 left'));
-    assert.equal(await pie.isVisible(), false, 'do not misrepresent more than 25 reports');
+    await page.waitForFunction(() => document.querySelector('#ghrc-deep-research-tracker')?.getAttribute('aria-label')?.includes('26 left'));
+    assert.equal(await pie.isVisible(), true, 'balances above 25 use a higher scale');
+    assert.match(await homepage.getAttribute('title'), /26 of 250.*estimated allowance/);
+    await page.evaluate(() => {
+      window.changeResearchSetting('deepResearchUsagePieTotal', 200);
+      document.documentElement.setAttribute('data-ghrc-deep-research-usage', JSON.stringify({
+        remaining: 100, resetAt: Date.now() + 10 * 24 * 3600_000, observedAt: Date.now(),
+      }));
+    });
+    await page.waitForFunction(() => document.querySelector('#ghrc-deep-research-tracker')?.getAttribute('title')?.includes('100 of 200'));
+    assert.match(await pie.evaluate(node => node.style.background), /180deg.*360deg/i);
+    await page.evaluate(() => {
+      window.changeResearchSetting('deepResearchUsagePieTotal', null);
+      document.documentElement.setAttribute('data-ghrc-deep-research-usage', JSON.stringify({
+        remaining: 90, total: 100, resetAt: Date.now() + 10 * 24 * 3600_000, observedAt: Date.now(),
+      }));
+    });
+    await page.waitForFunction(() => document.querySelector('#ghrc-deep-research-tracker')?.getAttribute('title')?.includes('90 of 100'));
+    await page.evaluate(() => {
+      document.documentElement.setAttribute('data-ghrc-deep-research-usage', JSON.stringify({
+        remaining: 251, resetAt: Date.now() + 10 * 24 * 3600_000, observedAt: Date.now(),
+      }));
+    });
+    await page.waitForFunction(() => document.querySelector('#ghrc-deep-research-tracker')?.textContent.includes('251 left'));
+    assert.equal(await pie.isVisible(), false, 'unknown high allowances keep their exact text');
     await page.evaluate(() => {
       document.documentElement.setAttribute('data-ghrc-deep-research-usage', JSON.stringify({
         remaining: 13, resetAt: Date.now() + 10 * 24 * 3600_000, observedAt: Date.now(),
