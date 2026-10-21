@@ -44,3 +44,39 @@ test('handles tooltip text laid out on a single line', () => {
     remaining: 0, full: true, reset: 'Resets on October 20',
   });
 });
+
+const { TTL_MS, fresh, observed, spent, claimRefresh } = require('../js/research/deep-research-cache-background.js');
+const quotaState = (remaining = 13) => ({ quota: { remaining, observedAt: 1000, resetAt: 1000 + 30 * 24 * 60 * 60_000 }, spent: [], lastRefreshAttempt: 0 });
+
+test('eight-hour cache ignores repeated native initialization while keeping local spends', () => {
+  const first = quotaState();
+  const afterSpend = spent(first, 'tab-1:send-1', 1100);
+  assert.equal(afterSpend.quota.remaining, 12);
+  assert.equal(afterSpend.quota.observedAt, 1000, 'spending does not extend the refresh deadline');
+  assert.equal(observed(afterSpend, { remaining: 13, resetAt: first.quota.resetAt, observedAt: 2000 }, false, 2000), afterSpend);
+  assert.equal(spent(afterSpend, 'tab-1:send-1', 1200), afterSpend, 'duplicate sends are idempotent');
+  assert.equal(spent(spent(afterSpend, 'tab-2:send-2', 1200), 'tab-3:send-3', 1300).quota.remaining, 10);
+  assert.equal(observed(afterSpend, { remaining: 9, resetAt: first.quota.resetAt, observedAt: 3000 }, true, 3000).quota.remaining, 9);
+  assert.equal(observed(afterSpend, { remaining: 9, resetAt: first.quota.resetAt, observedAt: TTL_MS + 1001 }, false, TTL_MS + 1001).quota.remaining, 9);
+});
+
+test('refresh after eight hours, throttle failed attempts, and invalidate expired reset', () => {
+  const initial = quotaState(0);
+  assert.equal(fresh(initial.quota, 1000 + TTL_MS - 1), true);
+  assert.equal(fresh(initial.quota, 1000 + TTL_MS), false);
+  assert.equal(claimRefresh(initial, 1100)[1], false);
+  const [claimed, firstClaim] = claimRefresh(initial, 1000 + TTL_MS);
+  assert.equal(firstClaim, true);
+  assert.equal(claimRefresh(claimed, 1000 + TTL_MS + 1000)[1], false);
+  assert.equal(claimRefresh(claimed, 1000 + TTL_MS + 5 * 60_000)[1], true);
+  const expired = { ...initial, quota: { ...initial.quota, resetAt: 1400 } };
+  assert.equal(fresh(expired.quota, 1400), false);
+  assert.equal(spent(expired, 'late', 1400), expired);
+  assert.equal(spent(initial, 'zero', 1200).quota.remaining, 0);
+});
+
+test('unknown quotas are never invented or decremented', () => {
+  const empty = { quota: null, spent: [], lastRefreshAttempt: 0 };
+  assert.equal(spent(empty, 'no-quota', 1200), empty);
+  assert.equal(observed(empty, { remaining: -1, observedAt: 1100, resetAt: null }, true, 1200), empty);
+});

@@ -31,6 +31,10 @@
   const COMPOSER_ID = `${ID}-composer`;
   const USAGE_ATTRIBUTE = 'data-ghrc-deep-research-usage';
   const DAY_MS = 24 * 60 * 60_000;
+  const CACHE_MS = 8 * 60 * 60_000;
+  const CACHE_KEY = 'deepResearchQuotaStateV1';
+  const USER_TURNS = '[data-message-author-role="user"], [data-conversation-role="user"], [data-content-search-unit-key$=":user"]';
+  const RESEARCH_MENTION = '[data-prompt-link-href="app://connector_openai_deep_research"], [app-mention-path="app://connector_openai_deep_research"], [data-prompt-link-href="app://connector_openai_deep_research_work"], [app-mention-path="app://connector_openai_deep_research_work"]';
   const SETTINGS_DEFAULTS = Object.freeze({
     showDeepResearchTracker: true,
     showDeepResearchHomepage: true,
@@ -48,14 +52,38 @@
   let observedAt = 0;
   let pending = false;
   let serverQuota = null;
+  let lastRawQuota = null;
+  let refreshPending = false;
+  let lastStandaloneRefresh = 0;
+  let researchAttempt = null;
+  const cacheBridge = typeof globalThis.chrome?.runtime?.sendMessage === 'function';
+
+  async function quotaMessage(message) {
+    if (!cacheBridge) return;
+    try {
+      const result = await chrome.runtime.sendMessage(message);
+      if (result?.ok) {
+        serverQuota = result.quota;
+        schedule();
+      }
+      return result;
+    } catch { /* The cached observation remains available if the worker restarts. */ }
+  }
 
   function readServerQuota() {
+    const raw = document.documentElement.getAttribute(USAGE_ATTRIBUTE);
+    if (raw === lastRawQuota) return;
+    lastRawQuota = raw;
     try {
-      const value = JSON.parse(document.documentElement.getAttribute(USAGE_ATTRIBUTE));
-      serverQuota = value && Number.isSafeInteger(value.remaining) && value.remaining >= 0
+      const value = JSON.parse(raw);
+      if (!(value && Number.isSafeInteger(value.remaining) && value.remaining >= 0
         && Number.isFinite(value.observedAt) && value.observedAt <= Date.now()
-        && (value.resetAt === null || Number.isFinite(value.resetAt)) ? value : null;
-    } catch { serverQuota = null; }
+        && (value.resetAt === null || Number.isFinite(value.resetAt)))) return;
+      if (cacheBridge) void quotaMessage({ type: 'deep-research-quota-observed',
+        quota: { remaining: value.remaining, resetAt: value.resetAt, observedAt: value.observedAt },
+        force: value.force === true });
+      else serverQuota = value;
+    } catch { /* Keep the last valid observation. */ }
   }
 
   function withinResetWindow() {
@@ -70,7 +98,7 @@
 
   function serverText(includeCount, includeReset) {
     if (!serverQuota) return null;
-    const stale = Date.now() - serverQuota.observedAt > 10 * 60_000
+    const stale = Date.now() - serverQuota.observedAt >= CACHE_MS
       || (serverQuota.resetAt !== null && serverQuota.resetAt <= Date.now());
     const count = stale ? `${serverQuota.remaining} last checked · Refresh allowance`
       : `${serverQuota.remaining} left`;
@@ -122,7 +150,7 @@
   }
 
   function checkAllowance() {
-    window.dispatchEvent(new Event('ghrc-refresh-deep-research-usage'));
+    window.dispatchEvent(new CustomEvent('ghrc-refresh-deep-research-usage', { detail: { manual: true } }));
     if (serverQuota) return;
     const research = [...document.querySelectorAll('[role="menuitem"], [role="option"], button[data-list-navigation-item]')]
       .find(element => visible(element) && /\bdeep research\b/i.test(element.innerText));
@@ -182,10 +210,40 @@
     return widget;
   }
 
+  function checkResearchAttempt() {
+    if (!researchAttempt) return;
+    const now = Date.now();
+    if (now - researchAttempt.started > 15_000) {
+      researchAttempt = null;
+      return;
+    }
+    const turns = document.querySelectorAll(USER_TURNS).length;
+    if (turns <= researchAttempt.turns
+      && !(location.pathname !== researchAttempt.path && turns > 0)) return;
+    const id = researchAttempt.id;
+    researchAttempt = null;
+    void quotaMessage({ type: 'deep-research-quota-spent', id });
+  }
+
+  function watchResearchSend(event) {
+    if (researchAttempt || event.defaultPrevented) return;
+    if (event.type === 'keydown') {
+      if (event.key !== 'Enter' || event.shiftKey || event.isComposing || event.ctrlKey || event.metaKey || event.altKey
+        || !event.target.closest?.('#prompt-textarea, [data-composer-markdown][contenteditable="true"]')) return;
+    } else if (event.type === 'click') {
+      if (!event.target.closest?.('button[data-testid="send-button"], button[data-testid="composer-submit-button"], button#composer-submit-button, button[aria-label^="Send" i], button[type="submit"]')) return;
+    }
+    const composer = event.target.closest?.('form, [data-type="unified-composer"]');
+    if (!composer?.querySelector(RESEARCH_MENTION)) return;
+    researchAttempt = { turns: document.querySelectorAll(USER_TURNS).length,
+      path: location.pathname, started: Date.now(), id: globalThis.crypto?.randomUUID?.() || `${Date.now()}:${Math.random()}` };
+  }
+
   function update() {
     pending = false;
     if (!context.active()) return;
     readServerQuota();
+    checkResearchAttempt();
     readAllowance();
     const repositories = document.getElementById('github-repositories-for-chatgpt');
     const footer = repositories?.querySelector('.ghrc-dashboard-footer');
@@ -250,6 +308,10 @@
 
   function settingsChanged(changes, area) {
     if (area !== 'local') return;
+    if (cacheBridge && changes[CACHE_KEY]) {
+      serverQuota = changes[CACHE_KEY].newValue?.quota || null;
+      schedule();
+    }
     const keys = Object.keys(SETTINGS_DEFAULTS).filter(key => changes[key]);
     if (!keys.length) return;
     const next = { ...preferences };
@@ -261,15 +323,34 @@
     void chrome.storage.local.get(SETTINGS_DEFAULTS).then(applySettings)
       .catch(error => context.handleError?.(error));
   }
-  const timer = setInterval(() => {
-    if (enabled && document.visibilityState === 'visible' && serverQuota && Date.now() - serverQuota.observedAt > 5 * 60_000) {
-      window.dispatchEvent(new Event('ghrc-refresh-deep-research-usage'));
-    }
-    schedule();
-  }, 30_000);
+  // One initial cache read per tab; all later changes propagate via storage.
+  void quotaMessage({ type: 'deep-research-quota-read' });
+  const automaticRefresh = async () => {
+    if (!enabled || document.visibilityState !== 'visible') return;
+    const due = !serverQuota || Date.now() - serverQuota.observedAt >= CACHE_MS
+      || (serverQuota.resetAt !== null && Date.now() >= serverQuota.resetAt);
+    if (!due || refreshPending) return;
+    refreshPending = true;
+    try {
+      if (cacheBridge) {
+        const result = await quotaMessage({ type: 'deep-research-quota-refresh-claim' });
+        if (result?.refresh) window.dispatchEvent(new Event('ghrc-refresh-deep-research-usage'));
+      } else if (Date.now() - lastStandaloneRefresh >= 5 * 60_000) {
+        lastStandaloneRefresh = Date.now();
+        window.dispatchEvent(new Event('ghrc-refresh-deep-research-usage'));
+      }
+    } finally { refreshPending = false; }
+  };
+  const timer = setInterval(() => { void automaticRefresh(); schedule(); }, 30_000);
+  document.addEventListener('click', watchResearchSend, true);
+  document.addEventListener('submit', watchResearchSend, true);
+  document.addEventListener('keydown', watchResearchSend, true);
   context.onStop(() => {
     observer.disconnect();
     clearInterval(timer);
+    document.removeEventListener('click', watchResearchSend, true);
+    document.removeEventListener('submit', watchResearchSend, true);
+    document.removeEventListener('keydown', watchResearchSend, true);
     document.removeEventListener('pointerover', schedule);
     document.removeEventListener('focusin', schedule);
     window.removeEventListener('resize', schedule);

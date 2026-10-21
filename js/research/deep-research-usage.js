@@ -20,12 +20,12 @@
   }
   const nativeFetch = window.fetch;
 
-  async function publish(response, requestGeneration) {
+  async function publish(response, requestGeneration, force = false) {
     if (!response.ok || generation !== requestGeneration) return;
     try {
       const quota = quotaFromResponse(await response.json());
       if (generation !== requestGeneration) return;
-      if (quota) document.documentElement.setAttribute(ATTRIBUTE, JSON.stringify(quota));
+      if (quota) document.documentElement.setAttribute(ATTRIBUTE, JSON.stringify(force ? { ...quota, force: true } : quota));
       else document.documentElement.removeAttribute(ATTRIBUTE);
     } catch { /* Leave the native response and last successful observation alone. */ }
   }
@@ -51,7 +51,7 @@
     return result;
   };
 
-  window.addEventListener(REFRESH_EVENT, async () => {
+  window.addEventListener(REFRESH_EVENT, async event => {
     if (!latestRequest || refreshing || Date.now() - lastRefresh < 30_000) return;
     refreshing = true;
     lastRefresh = Date.now();
@@ -61,7 +61,7 @@
       const response = await nativeFetch.call(window, new Request(latestRequest.clone(), {
         signal: AbortSignal.timeout(10_000),
       }));
-      await publish(response, currentGeneration);
+      await publish(response, currentGeneration, event.detail?.manual === true);
     } catch { /* Failed refreshes must not become a fabricated balance. */ }
     finally { refreshing = false; }
   });
