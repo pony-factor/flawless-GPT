@@ -33,7 +33,9 @@
       && now - quota.observedAt < TTL_MS;
   }
   function snapshot(value) {
-    return value ? { remaining: value.remaining, resetAt: value.resetAt, observedAt: value.observedAt } : null;
+    return value ? { remaining: value.remaining, resetAt: value.resetAt, observedAt: value.observedAt,
+      ...(Number.isSafeInteger(value.total) && value.total >= value.remaining && value.total > 0
+        ? { total: value.total } : {}) } : null;
   }
   function observed(state, quota, force, now = Date.now()) {
     if (!validQuota(quota, now)) return state;
@@ -50,6 +52,9 @@
       && now < state.quota.resetAt && next.resetAt !== null
       && next.resetAt > state.quota.resetAt && next.remaining > state.quota.remaining) return state;
     const samePeriod = validQuota(state.quota, now) && state.quota.resetAt === next.resetAt;
+    // Keep the last verified plan allowance for the current server reset window.
+    if (samePeriod && next.total == null && state.quota.total != null)
+      next.total = state.quota.total;
     // A lagging server snapshot must not restore locally spent credits, even
     // after the expected reset timestamp. Only a confirmed new reset window
     // (or the user's explicit Refresh) can increase the allowance.

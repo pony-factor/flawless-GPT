@@ -12,7 +12,12 @@
     const quota = data?.limits_progress?.find(item => item.feature_name === 'deep_research');
     if (!Number.isSafeInteger(quota?.remaining) || quota.remaining < 0) return null;
     const resetAt = typeof quota.reset_after === 'string' ? Date.parse(quota.reset_after) : NaN;
-    return { remaining: quota.remaining, resetAt: Number.isFinite(resetAt) ? resetAt : null, observedAt: now };
+    // Some account responses may include a total/limit, while others publish
+    // only the remaining number. Never combine full and mini quotas.
+    const reportedTotal = [quota.total, quota.limit, quota.max]
+      .find(value => Number.isSafeInteger(value) && value > 0 && value >= quota.remaining);
+    return { remaining: quota.remaining, resetAt: Number.isFinite(resetAt) ? resetAt : null,
+      observedAt: now, ...(reportedTotal === undefined ? {} : { total: reportedTotal }) };
   }
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = { quotaFromResponse };

@@ -20,8 +20,28 @@
     return { remaining, full, reset };
   }
 
+  // ChatGPT doesn't always expose a quota maximum. Accept an explicit user
+  // preference or a server-provided total; otherwise approximate common
+  // 25/250 report allowances from the observed remaining count.
+  function usagePieTotal(remaining, reportedTotal = null, preferredTotal = null) {
+    if (!Number.isSafeInteger(remaining) || remaining < 0) return null;
+    if (Number.isSafeInteger(preferredTotal) && preferredTotal > 0)
+      return remaining <= preferredTotal ? preferredTotal : null;
+    if (Number.isSafeInteger(reportedTotal) && reportedTotal > 0)
+      return remaining <= reportedTotal ? reportedTotal : null;
+    if (remaining <= 25) return 25;
+    if (remaining <= 250) return 250;
+    return null;
+  }
+
+  function usagePiePercent(remaining, total) {
+    if (!Number.isSafeInteger(remaining) || remaining < 0 ||
+        !Number.isSafeInteger(total) || total <= 0 || remaining > total) return null;
+    return Math.round(remaining * 100 / total);
+  }
+
   if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { parseAllowance };
+    module.exports = { parseAllowance, usagePieTotal, usagePiePercent };
     return;
   }
   const context = globalThis.__ghrcExtensionContext;
@@ -45,6 +65,8 @@
     showDeepResearchHomepageReset: true,
     showDeepResearchComposerCount: true,
     showDeepResearchComposerReset: true,
+    showDeepResearchUsagePie: false,
+    deepResearchUsagePieTotal: null,
     deepResearchHomepageVisibility: 'near-reset',
     deepResearchHomepageWindowDays: 5,
   });
@@ -82,7 +104,9 @@
         && Number.isFinite(value.observedAt) && value.observedAt <= Date.now()
         && (value.resetAt === null || Number.isFinite(value.resetAt)))) return;
       if (cacheBridge) void quotaMessage({ type: 'deep-research-quota-observed',
-        quota: { remaining: value.remaining, resetAt: value.resetAt, observedAt: value.observedAt },
+        quota: { remaining: value.remaining, resetAt: value.resetAt, observedAt: value.observedAt,
+          ...(Number.isSafeInteger(value.total) && value.total >= value.remaining && value.total > 0
+            ? { total: value.total } : {}) },
         force: value.force === true });
       else serverQuota = value;
     } catch { /* Keep the last valid observation. */ }
@@ -188,9 +212,13 @@
       icon.src = globalThis.chrome?.runtime?.getURL?.('artwork/research-telescope.png') || 'artwork/research-telescope.png';
       icon.alt = '';
       icon.setAttribute('aria-hidden', 'true');
+      const pie = document.createElement('span');
+      pie.className = 'ghrc-research-usage-pie';
+      pie.setAttribute('aria-hidden', 'true');
+      pie.hidden = true;
       const label = document.createElement('span');
       label.className = 'ghrc-research-allowance';
-      widget.append(icon, label);
+      widget.append(icon, pie, label);
       widget.addEventListener('click', checkAllowance);
     }
     // An old observation is not a live balance; require another native check.
@@ -212,11 +240,45 @@
       : preferences.showDeepResearchComposerReset !== false;
     const text = serverText(includeCount, includeReset)
       || ['Deep Research', ...(includeCount ? [count] : []), ...(includeReset ? [reset] : [])].join(' · ');
+    const pie = widget.querySelector('.ghrc-research-usage-pie');
+    // Match the cache's eight-hour or near-reset five-minute lifetime.
+    const freshServer = serverQuota && Date.now() - serverQuota.observedAt < quotaRefreshInterval()
+      && (serverQuota.resetAt === null || serverQuota.resetAt > Date.now());
+    const pieRemaining = serverQuota ? (freshServer ? serverQuota.remaining : null)
+      : (fresh ? allowance.remaining : null);
+    const preferredTotal = preferences.deepResearchUsagePieTotal;
+    const reportedTotal = freshServer ? serverQuota.total : null;
+    const total = usagePieTotal(pieRemaining, reportedTotal, preferredTotal);
+    const percent = preferences.showDeepResearchUsagePie && includeCount
+      ? usagePiePercent(pieRemaining, total) : null;
+    const showPie = percent !== null;
+    if (pie.hidden !== !showPie) pie.hidden = !showPie;
+    if (showPie) {
+      // The existing Chat bar color preferences update root variables live;
+      // CSS variable resolution handles them without remounting the widget.
+      const regular = 'var(--ghrc-research-pie-color, var(--ghrc-composer-toolbar-icon, var(--ghrc-composer-text, currentColor)))';
+      const warning = 'var(--ghrc-research-pie-accent, var(--ghrc-composer-send-hover, var(--ghrc-composer-focus-ring, var(--theme-submit-btn-bg, #ffb900))))';
+      const foreground = percent <= 10 ? warning : regular;
+      const degrees = (100 - percent) * 3.6;
+      // Retain Sweetiebot's 12 o'clock origin and muted consumed segment.
+      const background = `conic-gradient(from 0deg, color-mix(in srgb, ${regular} 20%, transparent) 0 ${degrees}deg, ${foreground} ${degrees}deg 360deg)`;
+      if (pie.dataset.pieBackground !== background) {
+        pie.style.background = background;
+        pie.dataset.pieBackground = background;
+      }
+    }
+    // Keep the exact remaining count in the button's accessible label. Only
+    // replace the visible number when a valid scale can be determined.
+    const visibleParts = text.split(' · ').slice(1);
+    if (showPie) visibleParts.shift();
+    const visibleText = visibleParts.join(' · ');
     const label = widget.querySelector('.ghrc-research-allowance');
-    const visibleText = text === 'Deep Research' ? '' : text.replace(/^Deep Research · /, '');
     if (label.textContent !== visibleText) label.textContent = visibleText;
     if (widget.getAttribute('aria-label') !== text) widget.setAttribute('aria-label', text);
-    widget.title = 'Deep Research allowance. Click to refresh or open the native tools menu. Lightweight allowances are excluded.';
+    const autoEstimate = showPie && preferredTotal == null && reportedTotal == null;
+    widget.title = showPie
+      ? `Deep Research: ${pieRemaining} of ${total} full reports remaining${autoEstimate ? ' (estimated allowance)' : ''}. Click to refresh. Lightweight allowances are excluded.`
+      : 'Deep Research allowance. Click to refresh or open the native tools menu. Lightweight allowances are excluded.';
     return widget;
   }
 
@@ -312,6 +374,10 @@
     const days = preferences.deepResearchHomepageWindowDays;
     preferences.deepResearchHomepageWindowDays =
       Number.isInteger(days) && days >= 1 && days <= 365 ? days : 5;
+    const selectedTotal = preferences.deepResearchUsagePieTotal;
+    preferences.deepResearchUsagePieTotal =
+      Number.isSafeInteger(selectedTotal) && selectedTotal > 0 && selectedTotal <= 10000
+        ? selectedTotal : null;
     enabled = preferences.showDeepResearchTracker !== false;
     schedule();
   }

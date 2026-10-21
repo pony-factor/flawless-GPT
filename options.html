@@ -220,6 +220,16 @@
                 <small>Master switch for the homepage and active research composer trackers.</small>
               </span>
             </label>
+            <label class="preference">
+              <input id="show-deep-research-usage-pie" type="checkbox" />
+              <span>
+                <strong>Show remaining reports as a usage pie</strong>
+                <small>Use a Sweetiebot-style pie scaled to your Deep Research allowance. The exact remaining count remains accessible.</small>
+              </span>
+            </label>
+            <label for="deep-research-usage-pie-total">Pie allowance total (optional)</label>
+            <input id="deep-research-usage-pie-total" type="number" min="1" max="10000" step="1" placeholder="Auto" />
+            <p class="help">Auto reads a reported total when available; otherwise it estimates 25 or 250 from the remaining count. For Pro or a different allowance, enter the actual maximum (for example, 200 or 250). This matters especially when a Pro balance drops below 25.</p>
             <h3>Homepage</h3>
             <label class="preference">
               <input id="show-deep-research-homepage" type="checkbox" checked />

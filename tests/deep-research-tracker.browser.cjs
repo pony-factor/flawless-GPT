@@ -217,6 +217,75 @@ test('Research settings show the composer only when homepage allowance details a
     assert.equal(await composer.count(), 0);
     assert.match(await homepage.innerText(), /13 left/);
     assert.doesNotMatch(await homepage.innerText(), /reset/i);
+    const pie = homepage.locator('.ghrc-research-usage-pie');
+    assert.equal(await pie.isVisible(), false, 'pie is opt-in by default');
+    await page.evaluate(() => window.changeResearchSetting('showDeepResearchUsagePie', true));
+    await page.waitForFunction(() => !document.querySelector('#ghrc-deep-research-tracker .ghrc-research-usage-pie').hidden);
+    assert.equal(await homepage.innerText(), '', 'pie replaces only the visible report count');
+    assert.match(await homepage.getAttribute('aria-label'), /13 left/);
+    assert.match(await pie.evaluate(node => node.style.background), /conic-gradient\(from 0deg/i);
+    assert.match(await pie.evaluate(node => node.style.background), /172\.8deg.*360deg/i);
+    assert.match(await pie.evaluate(node => node.style.background), /--ghrc-composer-toolbar-icon/);
+    // Existing toolbar colors take effect without remounting the tracker.
+    const regularBefore = await pie.evaluate(node => getComputedStyle(node).backgroundImage);
+    await page.evaluate(() => document.documentElement.style.setProperty('--ghrc-composer-toolbar-icon', '#376ac8'));
+    const regularAfter = await pie.evaluate(node => getComputedStyle(node).backgroundImage);
+    assert.notEqual(regularAfter, regularBefore, 'pie follows the toolbar icon preference');
+    await page.evaluate(() => {
+      document.documentElement.setAttribute('data-ghrc-deep-research-usage', JSON.stringify({
+        remaining: 2, resetAt: Date.now() + 10 * 24 * 3600_000, observedAt: Date.now(),
+      }));
+    });
+    await page.waitForFunction(() => document.querySelector('#ghrc-deep-research-tracker')?.getAttribute('aria-label')?.includes('2 left'));
+    assert.match(await pie.evaluate(node => node.style.background), /--ghrc-composer-send-hover/);
+    const warningBefore = await pie.evaluate(node => getComputedStyle(node).backgroundImage);
+    await page.evaluate(() => document.documentElement.style.setProperty('--ghrc-composer-send-hover', '#b24bdf'));
+    const warningAfter = await pie.evaluate(node => getComputedStyle(node).backgroundImage);
+    assert.notEqual(warningAfter, warningBefore, 'low balance follows send hover preference');
+    await page.evaluate(() => {
+      document.documentElement.style.removeProperty('--ghrc-composer-send-hover');
+      document.documentElement.style.setProperty('--ghrc-composer-focus-ring', '#0c9b7a');
+    });
+    const warningFocus = await pie.evaluate(node => getComputedStyle(node).backgroundImage);
+    assert.notEqual(warningFocus, warningBefore, 'focus-ring setting supplies the low-balance fallback');
+    assert.notEqual(warningFocus, warningAfter, 'warning colors update the pie live');
+    await page.evaluate(() => {
+      document.documentElement.setAttribute('data-ghrc-deep-research-usage', JSON.stringify({
+        remaining: 26, resetAt: Date.now() + 10 * 24 * 3600_000, observedAt: Date.now(),
+      }));
+    });
+    await page.waitForFunction(() => document.querySelector('#ghrc-deep-research-tracker')?.getAttribute('aria-label')?.includes('26 left'));
+    assert.equal(await pie.isVisible(), true, 'balances above 25 use a higher scale');
+    assert.match(await homepage.getAttribute('title'), /26 of 250.*estimated allowance/);
+    await page.evaluate(() => {
+      window.changeResearchSetting('deepResearchUsagePieTotal', 200);
+      document.documentElement.setAttribute('data-ghrc-deep-research-usage', JSON.stringify({
+        remaining: 100, resetAt: Date.now() + 10 * 24 * 3600_000, observedAt: Date.now(),
+      }));
+    });
+    await page.waitForFunction(() => document.querySelector('#ghrc-deep-research-tracker')?.getAttribute('title')?.includes('100 of 200'));
+    assert.match(await pie.evaluate(node => node.style.background), /180deg.*360deg/i);
+    await page.evaluate(() => {
+      window.changeResearchSetting('deepResearchUsagePieTotal', null);
+      document.documentElement.setAttribute('data-ghrc-deep-research-usage', JSON.stringify({
+        remaining: 90, total: 100, resetAt: Date.now() + 10 * 24 * 3600_000, observedAt: Date.now(),
+      }));
+    });
+    await page.waitForFunction(() => document.querySelector('#ghrc-deep-research-tracker')?.getAttribute('title')?.includes('90 of 100'));
+    await page.evaluate(() => {
+      document.documentElement.setAttribute('data-ghrc-deep-research-usage', JSON.stringify({
+        remaining: 251, resetAt: Date.now() + 10 * 24 * 3600_000, observedAt: Date.now(),
+      }));
+    });
+    await page.waitForFunction(() => document.querySelector('#ghrc-deep-research-tracker')?.textContent.includes('251 left'));
+    assert.equal(await pie.isVisible(), false, 'unknown high allowances keep their exact text');
+    await page.evaluate(() => {
+      document.documentElement.setAttribute('data-ghrc-deep-research-usage', JSON.stringify({
+        remaining: 13, resetAt: Date.now() + 10 * 24 * 3600_000, observedAt: Date.now(),
+      }));
+      window.changeResearchSetting('showDeepResearchUsagePie', false);
+    });
+    await page.waitForFunction(() => document.getElementById('ghrc-deep-research-tracker')?.textContent.includes('13 left'));
     assert.doesNotMatch(await homepage.getAttribute('aria-label'), /reset/i);
     assert.equal(await homepage.evaluate(node => node.classList.contains('ghrc-research-near-reset')), false);
 
