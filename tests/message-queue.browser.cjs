@@ -2247,11 +2247,11 @@ test('queued sends preserve typing in an independent draft overlay', async () =>
       if (window.active) return;
       event.stopImmediatePropagation();
       const payload = read().trim();
-      window.setTimeout(() => {
+      window.acknowledgeQueuedSend = () => {
         sent.push(payload);
         addTurn('user'); addTurn('assistant');
         clear(); window.active = true; update();
-      }, 800);
+      };
     }, true);
     finish();
   });
@@ -2260,12 +2260,40 @@ test('queued sends preserve typing in an independent draft overlay', async () =>
   await overlay.waitFor({ timeout: 7000 });
   assert.equal(await overlay.inputValue(), 'Unsent draft');
   assert.equal(await overlay.evaluate(el => document.activeElement === el), true);
+  const initialHeight = (await overlay.boundingBox()).height;
+  await overlay.fill(Array.from({ length: 8 }, (_, index) => `Draft line ${index + 1}`).join('\n'));
+  const expandedHeight = (await overlay.boundingBox()).height;
+  assert.ok(expandedHeight > initialHeight, 'the overlay grows with the draft');
+  assert.equal((await composer.boundingBox()).height, expandedHeight, 'the composer reserves the same space');
+  await overlay.fill('Short draft');
+  assert.equal((await overlay.boundingBox()).height, initialHeight, 'deleting text shrinks the overlay');
+  await overlay.fill('A wrapping draft with enough words to span several lines in a narrow composer. '.repeat(4));
+  const wideHeight = (await overlay.boundingBox()).height;
+  await composer.evaluate(el => { el.style.width = '180px'; });
+  await p.waitForFunction(() => {
+    const draft = document.querySelector('.ghrc-queue-live-draft');
+    return Math.abs(draft.getBoundingClientRect().width - editor.getBoundingClientRect().width) < 1;
+  });
+  assert.ok((await overlay.boundingBox()).height > wideHeight, 'width changes reflow the draft');
+  const scrollTop = await overlay.evaluate(async el => {
+    el.scrollTop = 30;
+    const expected = el.scrollTop;
+    el.dispatchEvent(new Event('scroll'));
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    return expected;
+  });
+  assert.ok(scrollTop > 0);
+  assert.equal(await overlay.evaluate(el => el.scrollTop), scrollTop, 'resizing preserves draft scrolling');
   await overlay.fill('This remains an independent draft while sending');
+  await p.evaluate(() => acknowledgeQueuedSend());
   await sentCount(p, 1);
   await p.waitForFunction(() => read() === 'This remains an independent draft while sending');
+  await overlay.waitFor({ state: 'detached' });
   assert.deepEqual(await p.evaluate(() => sent), ['Send queued payload']);
   assert.equal(await overlay.count(), 0);
   assert.equal(await composer.evaluate(el => document.activeElement === el), true);
+  assert.equal(await composer.evaluate(el => el.style.height), '', 'temporary height is cleared');
+  assert.equal(await composer.evaluate(el => el.style.minHeight), '', 'temporary minimum height is cleared');
   assert.deepEqual(p.errors, []);
   await p.close();
 });
@@ -2316,6 +2344,7 @@ test('Enter during queued delivery queues the overlay text without losing newer 
   await overlay.fill('New unfinished draft');
   await sentCount(p, 1);
   await p.waitForFunction(() => read() === 'New unfinished draft');
+  await overlay.waitFor({ state: 'detached' });
   await p.waitForFunction(() => storage.queuedChatMessages?.['conversation:test']?.some(item => item.text === 'Queue me second'));
   assert.deepEqual(await p.evaluate(() => sent), ['Send first']);
   assert.equal(await p.locator('.ghrc-message-queue-editor').inputValue(), 'Queue me second');
