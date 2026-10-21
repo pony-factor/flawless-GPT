@@ -13,6 +13,8 @@ after(async () => { await browser?.close(); });
 
 async function fixture(settings = {}, githubResponse = null, nativeSplitSupported = false, conversationMarkup = '<p><a id="source" href="https://example.org/source?utm_source=chatgpt&keep=1#section">Source reference</a></p><p><a id="internal" href="/c/another">Another chat</a></p>') {
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+  page.errors = [];
+  page.on('pageerror', error => page.errors.push(error.message));
   await page.route('https://chatgpt.com/**', route => route.fulfill({
     contentType: 'text/html',
     body: `<style>body{margin:0}main{width:100%;min-height:1800px;padding-top:500px;box-sizing:border-box}</style><main>${conversationMarkup}</main>`,
@@ -560,7 +562,11 @@ test('source card copy controls appear on hover, copy each card URL, and preserv
         },
       };
       source.addEventListener('click', () => { window.nativeSourceClicks++; });
-      popup.append(source);
+      const card = document.createElement('div');
+      card.id = id + '-container';
+      card.style.cssText = 'padding:12px';
+      card.append(source);
+      popup.append(card);
     }
     window.nativeSourceClicks = 0;
     document.body.append(popup);
@@ -578,6 +584,10 @@ test('source card copy controls appear on hover, copy each card URL, and preserv
   assert.equal(await page.locator('main .ghrc-link-copy-button').count(), 0);
 
   const originalWidth = await popup.evaluate(element => element.getBoundingClientRect().width);
+  // Card padding is outside the source entry's own hover target.
+  await page.locator('#first-card-container').hover({ position: { x: 2, y: 2 } });
+  assert.equal(await firstCopy.isVisible(), true);
+  assert.equal(await secondCopy.isVisible(), false);
   await page.locator('#first-card').hover();
   assert.equal(await firstCopy.isVisible(), true);
   assert.equal(await secondCopy.isVisible(), false);

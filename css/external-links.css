@@ -153,6 +153,8 @@ a:has(+ .ghrc-link-has-punctuation) {
   visibility: hidden;
 }
 
+.ghrc-citation-sources:hover > .ghrc-citation-actions .ghrc-link-copy-button,
+.ghrc-citation-sources:focus-within > .ghrc-citation-actions .ghrc-link-copy-button,
 .ghrc-citation-source:hover + .ghrc-citation-actions .ghrc-link-copy-button,
 .ghrc-citation-source:focus + .ghrc-citation-actions .ghrc-link-copy-button,
 .ghrc-citation-actions:hover .ghrc-link-copy-button,
