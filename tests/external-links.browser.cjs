@@ -44,7 +44,6 @@ async function fixture(settings = {}, githubResponse = null, nativeSplitSupporte
         sendMessage: async message => {
           previewRequests.push(message);
           if (message.type === 'load-github-link-preview') return githubResponse;
-          if (message.type === 'load-website-link-preview') return window.websitePreviewResponse;
           if (message.type === 'open-native-split-view') return { ok: window.nativeSplitSupported };
           return { ok: true };
         },
@@ -64,20 +63,62 @@ async function fixture(settings = {}, githubResponse = null, nativeSplitSupporte
   return page;
 }
 
-test('sidebar buttons use the isolated panel even when native splits are supported', async () => {
-  const page = await fixture({ openExternalLinksInSplitView: true, openExternalLinksInSplitViewOnLeft: true }, { ok: true, title: 'Repository preview' }, true);
+test('native split preserves the reading block when a narrow viewport replaces ChatGPT\'s scroller', async () => {
+  const messages = Array.from({ length: 24 }, (_, index) =>
+    `<article data-testid="conversation-turn-${index}"><p id="message-${index}">Message ${index}
+      ${index === 10 ? '<a id="source" href="https://example.org/source">Source reference</a>' : 'with readable text'}
+    </p></article>`).join('');
+  const page = await fixture({ openExternalLinksInSplitView: true }, null, true,
+    `<div id="conversation-scroller" aria-label="Conversation">${messages}</div>`);
+  await page.setViewportSize({ width: 440, height: 600 });
+  await page.addStyleTag({ content: [
+    'main { min-height:0!important; padding-top:0!important; height:100vh; }',
+    '#conversation-scroller { height:360px; width:100%; overflow-y:auto; }',
+    '#conversation-scroller p { box-sizing:border-box; height:70px; margin:0; }',
+  ].join('') });
+  await page.locator('.ghrc-link-sidebar-button').waitFor();
+  await page.locator('#conversation-scroller').evaluate(node => { node.scrollTop = 630; });
+  const before = await page.locator('#message-9').evaluate(node => node.getBoundingClientRect().top);
+  await page.evaluate(() => {
+    const originalSend = chrome.runtime.sendMessage;
+    chrome.runtime.sendMessage = async message => {
+      if (message.type !== 'open-native-split-view') return originalSend(message);
+      setTimeout(() => {
+        const old = document.querySelector('#conversation-scroller');
+        const replacement = old.cloneNode(true);
+        replacement.style.width = '230px';
+        old.replaceWith(replacement);
+        window.dispatchEvent(new Event('resize'));
+      }, 10);
+      return { ok: true };
+    };
+  });
+  await page.locator('.ghrc-link-sidebar-button').evaluate(button => {
+    button.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+  });
+  await page.waitForFunction(() => document.querySelector('#conversation-scroller').style.width === '230px');
+  await page.waitForFunction(top => Math.abs(
+    document.querySelector('#message-9').getBoundingClientRect().top - top) < 2, before);
+  assert.ok(await page.locator('#conversation-scroller').evaluate(node => node.scrollTop > 600));
+  assert.equal(await page.locator('#ghrc-link-preview').count(), 0);
+  await page.close();
+});
+
+test('all sidebar buttons prefer the same native split, including GitHub documentation', async () => {
+  const page = await fixture({ openExternalLinksInSplitView: true, openExternalLinksInSplitViewOnLeft: true }, null, true);
   for (const href of ['https://www.random.org/', 'https://en.wikipedia.org/wiki/Special:Random', 'https://github.com/owner/repo/blob/main/README.md', 'https://docs.github.com/en']) {
     await page.locator('#source').evaluate((link, href) => { link.href = href; }, href);
     await page.waitForFunction(href => document.querySelector('.ghrc-link-sidebar-button')?.dataset.href === href, href);
     await page.locator('.ghrc-link-sidebar-button').click();
-    await page.locator('#ghrc-link-preview').waitFor();
-    assert.equal(await page.locator('#ghrc-link-preview .ghrc-preview-destination').getAttribute('href'), href);
-    assert.equal(await page.locator('html').getAttribute('data-ghrc-link-preview'), 'left');
+    await page.waitForFunction(href => previewRequests.some(message => message.type === 'open-native-split-view' && message.url === href), href);
+    assert.equal(await page.locator('#ghrc-link-preview').count(), 0);
   }
-  assert.equal((await page.evaluate(() => previewRequests)).filter(message => message.type === 'open-native-split-view').length, 0);
-  assert.deepEqual(await page.evaluate(() => openedLinks), []);
+  const requests = await page.evaluate(() => previewRequests);
+  assert.equal(requests.length, 4);
+  assert.ok(requests.every(message => message.type === 'open-native-split-view' && message.onLeft === true));
   await page.close();
 });
+
 
 test('own-message links never get sidebar buttons, including after role hydration', async () => {
   const conversation = [
@@ -788,53 +829,53 @@ test('the vertical divider resizes the sidebar and persists the allocation', asy
   await page.close();
 });
 
-test('blocked archive pages render safe text inside the isolated sidebar without opening Brave tabs', async () => {
-  const page = await fixture({ openExternalLinksInSplitView: true }, null, true);
-  await page.evaluate(() => {
-    window.websitePreviewResponse = { ok: true, html: `<title>School of Law Papers</title><nav>Navigation noise</nav><main><h1>School of Law Papers</h1><p>Collection is open for research.</p><script>window.websiteScriptRan = true</script><img src=x onerror="window.websiteScriptRan = true"><form>Private form</form></main>` };
-  });
+test('only failed embeds fall back to a separate tab without adding another sidebar', async () => {
+  const page = await fixture({ openExternalLinksInSplitView: true });
   await page.locator('.ghrc-link-sidebar-button').click();
   await page.frameLocator('#ghrc-link-preview iframe').frameLocator('iframe').locator('h1').waitFor();
-  const watch = (await page.evaluate(() => previewRequests)).find(message => message.type === 'watch-link-preview');
-  await page.evaluate(watch => runtimeListeners.forEach(fn => fn({
-    type: 'link-preview-navigation-error', previewId: watch.previewId, url: watch.url,
-    error: 'net::ERR_BLOCKED_BY_RESPONSE',
-  })), watch);
-  await page.locator('#ghrc-link-preview .ghrc-preview-content').getByText('Collection is open for research.', { exact: true }).waitFor();
-  assert.equal(await page.locator('#ghrc-link-preview iframe').count(), 0);
-  const text = await page.locator('#ghrc-link-preview').textContent();
-  assert.ok(!text.includes('Navigation noise') && !text.includes('Private form'));
-  assert.equal(await page.locator('#ghrc-link-preview script, #ghrc-link-preview [onerror]').count(), 0);
-  assert.equal(await page.evaluate(() => window.websiteScriptRan), undefined);
-  assert.equal((await page.evaluate(() => previewRequests)).filter(message => message.type === 'open-native-split-view').length, 0);
-  assert.deepEqual(await page.evaluate(() => openedLinks), []);
+  assert.equal((await page.evaluate(() => previewRequests)).filter(msg => msg.type === 'open-blocked-link-preview').length, 0);
+  assert.equal(await page.getByRole('button', { name: 'Verify website', exact: true }).count(), 0);
+  await page.evaluate(() => {
+    const watch = previewRequests.find(msg => msg.type === 'watch-link-preview');
+    const error = { type: 'link-preview-navigation-error', previewId: watch.previewId, url: watch.url, error: 'net::ERR_BLOCKED_BY_RESPONSE' };
+    runtimeListeners.forEach(fn => { fn(error); fn(error); });
+  });
+  await page.waitForFunction(() => !document.querySelector('#ghrc-link-preview'));
+  const requests = await page.evaluate(() => previewRequests);
+  assert.equal(requests.filter(msg => msg.type === 'open-blocked-link-preview').length, 1);
+  assert.equal(requests.filter(msg => msg.type === 'open-native-split-view').length, 1);
   await page.close();
 });
 
-test('DOI verification remains interactive through a user-opened isolated window and preview retry', async () => {
-  const href = 'https://doi.org/10.15779/Z38D795C24';
-  const page = await fixture({ openExternalLinksInSplitView: true }, null, true,
-    `<p><a id="source" href="${href}">Schultz article</a></p>`);
-  await page.evaluate(() => {
-    window.websitePreviewResponse = { ok: true, html: '<title>Just a moment...</title><form id="challenge-form">Verify you are human</form>' };
-  });
+test('a failed fallback tab leaves a usable manual open control', async () => {
+  const page = await fixture({ openExternalLinksInSplitView: true });
   await page.locator('.ghrc-link-sidebar-button').click();
-  await page.waitForFunction(() => previewRequests.some(msg => msg.type === 'watch-link-preview'));
+  await page.frameLocator('#ghrc-link-preview iframe').frameLocator('iframe').locator('h1').waitFor();
   await page.evaluate(() => {
+    const original = chrome.runtime.sendMessage;
+    chrome.runtime.sendMessage = msg => msg.type === 'open-blocked-link-preview' ? Promise.resolve({ ok: false }) : original(msg);
     const watch = previewRequests.find(msg => msg.type === 'watch-link-preview');
-    runtimeListeners.forEach(fn => fn({ type: 'link-preview-navigation-error', previewId: watch.previewId, url: watch.url, error: 'net::ERR_BLOCKED_BY_RESPONSE' }));
+    runtimeListeners.forEach(fn => fn({ type: 'link-preview-navigation-error', previewId: watch.previewId, url: watch.url, destinationUrl: 'https://doi.org/10.15779/Z38D795C24', error: 'net::ERR_BLOCKED_BY_RESPONSE' }));
   });
-  await page.locator('.ghrc-preview-content').getByText(/This website requires verification/).waitFor();
-  assert.equal((await page.evaluate(() => previewRequests)).filter(msg => msg.type === 'open-website-verification').length, 0);
-  await page.getByRole('button', { name: 'Verify website', exact: true }).click();
-  assert.equal((await page.evaluate(() => previewRequests)).find(msg => msg.type === 'open-website-verification').url, href);
-  await page.getByRole('status').getByText(/Complete verification in the website window/).waitFor();
+  await page.getByRole('status').getByText(/cannot load in the sidebar/).waitFor();
+  assert.equal(await page.getByRole('link', { name: 'Open this link in a new tab', exact: true }).getAttribute('href'), 'https://doi.org/10.15779/Z38D795C24');
+  await page.getByRole('link', { name: 'Open in new tab', exact: true }).click();
+  assert.equal((await page.evaluate(() => openedLinks)).length, 1);
+  assert.equal(await page.locator('#ghrc-link-preview').count(), 0);
+  await page.close();
+});
+
+test('clicking a working website link navigates inside the sidebar without opening a tab', async () => {
+  const page = await fixture({ openExternalLinksInSplitView: true });
+  await page.route('https://example.org/**', route => route.fulfill({ contentType: 'text/html', body:
+    route.request().url().includes('/next') ? '<h1>Next page</h1>' : '<a href="https://example.org/next">Read next page</a>' }));
+  await page.locator('.ghrc-link-sidebar-button').click();
+  const website = page.frameLocator('#ghrc-link-preview iframe').frameLocator('iframe');
+  await website.getByRole('link', { name: 'Read next page' }).click();
+  await website.getByRole('heading', { name: 'Next page' }).waitFor();
   assert.equal(await page.locator('#ghrc-link-preview').count(), 1);
-  assert.equal(await page.locator('#ghrc-link-preview form').count(), 0);
+  assert.equal((await page.evaluate(() => previewRequests)).filter(msg => msg.type === 'open-blocked-link-preview').length, 0);
   assert.deepEqual(await page.evaluate(() => openedLinks), []);
-  await page.getByRole('button', { name: 'Retry preview', exact: true }).click();
-  await page.waitForFunction(() => previewRequests.filter(msg => msg.type === 'watch-link-preview').length === 2);
-  assert.equal(await page.locator('#ghrc-link-preview iframe').count(), 1);
   await page.close();
 });
 

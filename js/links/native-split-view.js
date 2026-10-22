@@ -61,15 +61,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       if (saved[key]?.id !== message.previewId || saved[key]?.url !== url) {
         throw new Error("This website preview is no longer active.");
       }
+      const destinationUrl = nativeSplitURL(saved[key].failedUrl || url);
       const source = await chrome.tabs.get(tabId);
       const windows = await chrome.windows.getAll({ windowTypes: ["normal"] });
       const destination = windows.find(window => window.id === source.windowId)
         || windows.find(window => window.focused) || windows[0];
       if (destination) {
-        await chrome.tabs.create({ url, windowId: destination.id, active: true });
+        await chrome.tabs.create({ url: destinationUrl, windowId: destination.id, active: true });
         await chrome.windows.update(destination.id, { focused: true });
       } else {
-        await chrome.windows.create({ url, type: "normal", focused: true });
+        await chrome.windows.create({ url: destinationUrl, type: "normal", focused: true });
       }
       return { ok: true };
     })().then(sendResponse).catch(error => sendResponse({ ok: false, error: error.message }));
@@ -119,8 +120,11 @@ chrome.webNavigation.onErrorOccurred.addListener(details => {
     const saved = await chrome.storage.session.get(key);
     const watch = saved[key];
     if (!watch || (watch.frameId !== details.frameId && watch.url !== details.url)) return;
+    const failedUrl = nativeSplitURL(details.url);
+    await chrome.storage.session.set({ [key]: { ...watch, failedUrl } });
     await chrome.tabs.sendMessage(details.tabId, {
-      type: "link-preview-navigation-error", previewId: watch.id, url: watch.url, error: details.error,
+      type: "link-preview-navigation-error", previewId: watch.id, url: watch.url,
+      destinationUrl: failedUrl, error: details.error,
     }, { frameId: 0 });
   })().catch(() => {});
 });

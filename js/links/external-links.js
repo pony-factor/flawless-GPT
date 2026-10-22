@@ -541,7 +541,7 @@
     });
   }
 
-  function handleBlockedPreview(error) {
+  function handleBlockedPreview(error, destinationUrl) {
     if (!previewWatch) return;
     const { href, panel } = previewWatch;
     const hostname = new URL(href).hostname;
@@ -562,6 +562,19 @@
           content.className = "ghrc-preview-content";
           content.setAttribute("role", "status");
           content.textContent = "This website cannot load in the sidebar. Use Open in new tab to complete verification or view the page.";
+          try {
+            const target = new URL(destinationUrl || href);
+            if (["https:", "http:"].includes(target.protocol) && !target.username && !target.password) {
+              const open = document.createElement("a");
+              open.href = target.href;
+              open.target = "_blank";
+              open.rel = "noopener noreferrer";
+              open.textContent = "Open this link in a new tab";
+              content.append(document.createElement("br"), open);
+            }
+          } catch {
+            // The existing header control remains usable for the original URL.
+          }
           panel.append(content);
         } finally {
           void unwatchLinkPreview(watch.id);
@@ -1001,7 +1014,7 @@
   chrome.runtime.onMessage.addListener(message => {
     if (message?.type !== "link-preview-navigation-error" || !previewWatch
         || message.previewId !== previewWatch.id || message.url !== previewWatch.href) return;
-    handleBlockedPreview(message.error);
+    handleBlockedPreview(message.error, message.destinationUrl);
   });
 
   function preserveNativeScroll(event) {
