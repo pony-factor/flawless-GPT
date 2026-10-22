@@ -542,10 +542,18 @@
 
   function handleBlockedPreview(error) {
     if (!previewWatch) return;
-    const { href, link, panel } = previewWatch;
+    const { href, panel } = previewWatch;
     const hostname = new URL(href).hostname;
     if (hostname !== "github.com" && hostname !== "www.github.com") {
-      void openNativeSplitView(href, link);
+      void unwatchLinkPreview(previewWatch.id);
+      previewWatch = null;
+      panel.querySelector("iframe")?.remove();
+      const content = document.createElement("div");
+      content.className = "ghrc-preview-content";
+      content.setAttribute("aria-live", "polite");
+      content.textContent = "Loading text preview…";
+      panel.append(content);
+      void loadWebsitePreview(href, content);
       return;
     }
     if (!["net::ERR_BLOCKED_BY_RESPONSE", "net::ERR_BLOCKED_BY_CSP"].includes(error)) return;
@@ -559,6 +567,39 @@
     content.textContent = "Loading GitHub preview…";
     panel.append(content);
     void loadGitHubPreview(href, content);
+  }
+
+  async function loadWebsitePreview(href, content) {
+    try {
+      const result = await chrome.runtime.sendMessage({ type: "load-website-link-preview", url: href });
+      if (!content.isConnected) return;
+      if (!result?.ok) throw new Error(result?.error || "Website preview is unavailable.");
+      const page = new DOMParser().parseFromString(result.html, "text/html");
+      page.querySelectorAll('script, style, noscript, template, nav, header, footer, aside, form, iframe, object, embed, [hidden], [aria-hidden="true"]').forEach(node => node.remove());
+      const main = page.querySelector('main, article, [role="main"]') || page.body;
+      const fragment = document.createDocumentFragment();
+      const note = document.createElement("p");
+      note.className = "ghrc-preview-meta";
+      note.textContent = "Text preview · This website does not allow embedded pages.";
+      fragment.append(note);
+      const title = document.createElement("h2");
+      title.textContent = page.title || new URL(href).hostname;
+      fragment.append(title);
+      const blocks = [...main.querySelectorAll("h1, h2, h3, h4, p, li, dt, dd, tr, pre, blockquote")];
+      const leaves = blocks.filter(node => !node.querySelector("h1, h2, h3, h4, p, li, dt, dd, tr, pre, blockquote"));
+      for (const source of (leaves.length ? leaves.slice(0, 500) : [main])) {
+        const text = source.textContent.replace(/\s+/g, " ").trim();
+        if (!text) continue;
+        const block = document.createElement(/^H[1-4]$/.test(source.tagName) ? "h3" : "p");
+        // Never insert website markup or run its scripts in the chat document.
+        block.textContent = text.slice(0, 20000);
+        fragment.append(block);
+      }
+      if (fragment.childNodes.length === 2) throw new Error("This page has no readable text preview.");
+      content.replaceChildren(fragment);
+    } catch (error) {
+      if (content.isConnected) content.textContent = error.message || "Website preview is unavailable.";
+    }
   }
 
   function githubPreviewLink(parent, title, href, navigate) {
@@ -1162,7 +1203,7 @@
       event.stopImmediatePropagation();
       const href = sidebar.dataset.href;
       const source = actionSources.get(sidebar.closest(".ghrc-link-actions"));
-      if (href) void openNativeSplitView(href, source, false);
+      if (href) showLinkPreview(stripTrackingFromUrl(new URL(href)).href, source);
       return;
     }
     const link = event.target.closest?.("a[href]");
