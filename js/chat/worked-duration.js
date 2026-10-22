@@ -13,7 +13,7 @@
   const artworkURL = `url("${chrome.runtime.getURL("artwork/searching-complete.png")}")`;
   const PREFIX = /^Worked\s+for\s+(.+)$/i;
   const PART = /(\d+)\s*(hours?|hrs?|h|minutes?|mins?|m|seconds?|secs?|s)\s*/gi;
-  const EXCLUDED = 'pre, code, blockquote, textarea, input, [contenteditable="true"], [data-message-author-role="user"], .markdown, .prose';
+  const EXCLUDED = 'pre, code, blockquote, textarea, input, [contenteditable="true"], [data-message-author-role="user"], [data-conversation-role="user"], .markdown, .prose';
   let scheduled = false;
   let dotMode = false;
   let preferenceUpdated = false;
@@ -87,30 +87,56 @@
     }
   }
 
-  function scan() {
-    scheduled = false;
-    if (!context.active()) return;
-    const root = document.querySelector("main");
-    if (!root) return;
-
-    for (const element of root.querySelectorAll(`[${BADGE}]`)) {
-      const parsed = durationFrom(element.textContent);
+  function scanRegion(root, includeRoot = false) {
+    const badged = Array.from(root.querySelectorAll(`[${BADGE}]`));
+    if (includeRoot && root.hasAttribute(BADGE)) badged.unshift(root);
+    for (const element of badged) {
+      const parsed = durationFrom(element.textContent) ||
+        durationFrom(element.getAttribute("aria-label"));
       if (!parsed) restore(element);
       else annotate(element, parsed);
     }
 
-    // Match only a complete native label, never the same words in a
-    // conversation, code block, input, or longer textual paragraph.
+    // Live durations may be split over nested text nodes rather than held in
+    // the single text node that ChatGPT uses after a response completes.
     const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
     let node;
     while ((node = walker.nextNode())) {
-      if (!/^\s*Worked\s+for\s+/i.test(node.nodeValue || "")) continue;
-      const element = node.parentElement;
-      if (!element || element.closest(EXCLUDED)) continue;
-      const raw = (node.nodeValue || "").replace(/\s+/g, " ").trim();
-      if ((element.textContent || "").replace(/\s+/g, " ").trim() !== raw) continue;
-      const parsed = durationFrom(raw);
+      if (!/^\s*Worked\b/i.test(node.nodeValue || "")) continue;
+      let element = node.parentElement;
+      while (element && (element !== root || includeRoot)) {
+        if (element.closest(EXCLUDED)) break;
+        const parsed = durationFrom(element.textContent);
+        if (parsed) {
+          annotate(element, parsed);
+          break;
+        }
+        if (element === root) break;
+        element = element.parentElement;
+      }
+    }
+
+    // Some running status widgets update only their accessible name.
+    const labelled = Array.from(root.querySelectorAll("[aria-label]"));
+    if (includeRoot && root.hasAttribute("aria-label")) labelled.unshift(root);
+    for (const element of labelled) {
+      if (element.closest(EXCLUDED)) continue;
+      const parsed = durationFrom(element.getAttribute("aria-label"));
       if (parsed) annotate(element, parsed);
+    }
+  }
+
+  function scan() {
+    scheduled = false;
+    if (!context.active()) return;
+    const main = document.querySelector("main");
+    if (main) scanRegion(main);
+
+    // Live activity may be mounted in a portal outside the chat's <main>.
+    // Search only narrow status regions rather than scanning the whole page.
+    for (const region of document.querySelectorAll('[role="status"], [aria-live="polite"], [aria-live="assertive"]')) {
+      if (region === main || main?.contains(region) || region.closest("nav, aside, header, footer")) continue;
+      scanRegion(region, true);
     }
   }
 
@@ -138,7 +164,10 @@
   }).catch(() => { /* Keep the default counter if storage is unavailable. */ });
 
   const observer = new MutationObserver(scheduleScan);
-  observer.observe(document, { childList: true, subtree: true, characterData: true });
+  observer.observe(document, {
+    childList: true, subtree: true, characterData: true,
+    attributes: true, attributeFilter: ["aria-label"],
+  });
   context.onStop(() => {
     stopped = true;
     observer.disconnect();
