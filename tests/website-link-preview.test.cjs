@@ -5,12 +5,16 @@ const vm = require('node:vm');
 
 function fixture(fetch) {
   let listener;
+  const windows = [];
   const context = vm.createContext({
     URL, TextDecoder, AbortSignal, fetch,
-    chrome: { runtime: { id: 'extension', onMessage: { addListener(fn) { listener = fn; } } } },
+    chrome: {
+      runtime: { id: 'extension', onMessage: { addListener(fn) { listener = fn; } } },
+      windows: { create: async options => { windows.push(options); return { id: 20 }; } },
+    },
   });
   vm.runInContext(fs.readFileSync(require.resolve('../js/links/website-link-preview.js'), 'utf8'), context);
-  return { context, listener };
+  return { context, listener, windows };
 }
 
 test('fetches public archive HTML without cookies or referrer', async () => {
@@ -46,4 +50,31 @@ test('only ChatGPT callers from this extension can request a preview', () => {
     assert.equal(f.listener({ type: 'load-website-link-preview', url: 'https://example.org' }, sender, value => { response = value; }), false);
     assert.equal(response.ok, false);
   }
+});
+
+test('manual verification opens the DOI in a popup with the normal browser session', async () => {
+  const f = fixture(() => { throw new Error('Verification must navigate the site, not fetch it'); });
+  const url = 'https://doi.org/10.15779/Z38D795C24';
+  const result = await new Promise(resolve => f.listener({ type: 'open-website-verification', url },
+    { id: 'extension', url: 'https://chatgpt.com/c/summary' }, resolve));
+  assert.equal(result.ok, true);
+  assert.equal(f.windows.length, 1);
+  assert.equal(f.windows[0].url, url);
+  assert.equal(f.windows[0].type, 'popup');
+  assert.equal(f.windows[0].focused, true);
+  assert.equal(f.windows[0].incognito, undefined);
+});
+
+test('verification rejects unsupported destinations and foreign callers without opening a window', async () => {
+  const f = fixture(() => {});
+  for (const url of ['javascript:alert(1)', 'file:///tmp/file', 'https://user:pass@example.org']) {
+    const result = await new Promise(resolve => f.listener({ type: 'open-website-verification', url },
+      { id: 'extension', url: 'https://chatgpt.com/c/summary' }, resolve));
+    assert.equal(result.ok, false);
+  }
+  let result;
+  assert.equal(f.listener({ type: 'open-website-verification', url: 'https://doi.org/' },
+    { id: 'foreign', url: 'https://chatgpt.com/' }, value => { result = value; }), false);
+  assert.equal(result.ok, false);
+  assert.equal(f.windows.length, 0);
 });

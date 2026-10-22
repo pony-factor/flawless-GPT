@@ -31,10 +31,23 @@ async function loadWebsiteLinkPreview(value) {
 }
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message?.type !== "load-website-link-preview") return false;
+  if (!["load-website-link-preview", "open-website-verification"].includes(message?.type)) return false;
   if (sender.id !== chrome.runtime.id || !sender.url?.startsWith("https://chatgpt.com/")) {
     sendResponse({ ok: false, error: "Website previews are only available from ChatGPT." });
     return false;
+  }
+  if (message.type === "open-website-verification") {
+    (async () => {
+      const url = new URL(message.url);
+      if (!["https:", "http:"].includes(url.protocol) || url.username || url.password) {
+        throw new Error("Unsupported website URL.");
+      }
+      // A real top-level website can run its own verification and retain its
+      // normal browser cookies. Keep it separate from the summary conversation.
+      await chrome.windows.create({ url: url.href, type: "popup", width: 620, height: 800, focused: true });
+      return { ok: true };
+    })().then(sendResponse).catch(error => sendResponse({ ok: false, error: error.message }));
+    return true;
   }
   loadWebsiteLinkPreview(message.url).then(sendResponse)
     .catch(error => sendResponse({ ok: false, error: error.message }));

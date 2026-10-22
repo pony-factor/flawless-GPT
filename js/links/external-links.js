@@ -441,6 +441,36 @@
     header.append(close, copy, open, destination);
     panel.append(resizer, header);
 
+    if (!["github.com", "www.github.com"].includes(url.hostname) && !nativeGuide) {
+      const verification = document.createElement("div");
+      verification.className = "ghrc-preview-verification";
+      const verify = document.createElement("button");
+      verify.type = "button";
+      verify.textContent = "Verify website";
+      verify.title = "Open an isolated website window to complete verification";
+      const retry = document.createElement("button");
+      retry.type = "button";
+      retry.textContent = "Retry preview";
+      retry.addEventListener("click", () => showLinkPreview(href, link));
+      const status = document.createElement("span");
+      status.setAttribute("role", "status");
+      verify.addEventListener("click", async () => {
+        verify.disabled = true;
+        status.textContent = "";
+        try {
+          const result = await chrome.runtime.sendMessage({ type: "open-website-verification", url: href });
+          if (!result?.ok) throw new Error(result?.error || "Could not open the verification window.");
+          status.textContent = "Complete verification in the website window. You can continue reading there or retry this preview.";
+        } catch (error) {
+          status.textContent = error.message || "Could not open the verification window.";
+        } finally {
+          verify.disabled = false;
+        }
+      });
+      verification.append(verify, retry, status);
+      panel.append(verification);
+    }
+
     if (nativeGuide) {
       const content = document.createElement("div");
       content.className = "ghrc-preview-content";
@@ -575,6 +605,11 @@
       if (!content.isConnected) return;
       if (!result?.ok) throw new Error(result?.error || "Website preview is unavailable.");
       const page = new DOMParser().parseFromString(result.html, "text/html");
+      if (/just a moment|attention required|verify.*human|captcha|security verification/i.test(page.title)
+          || page.querySelector('#challenge-form, #cf-challenge-running, form[action*="__cf_chl"]')) {
+        content.textContent = "This website requires verification. Select Verify website to complete it in the isolated website window.";
+        return;
+      }
       page.querySelectorAll('script, style, noscript, template, nav, header, footer, aside, form, iframe, object, embed, [hidden], [aria-hidden="true"]').forEach(node => node.remove());
       const main = page.querySelector('main, article, [role="main"]') || page.body;
       const fragment = document.createDocumentFragment();

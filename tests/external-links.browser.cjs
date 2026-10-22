@@ -811,6 +811,33 @@ test('blocked archive pages render safe text inside the isolated sidebar without
   await page.close();
 });
 
+test('DOI verification remains interactive through a user-opened isolated window and preview retry', async () => {
+  const href = 'https://doi.org/10.15779/Z38D795C24';
+  const page = await fixture({ openExternalLinksInSplitView: true }, null, true,
+    `<p><a id="source" href="${href}">Schultz article</a></p>`);
+  await page.evaluate(() => {
+    window.websitePreviewResponse = { ok: true, html: '<title>Just a moment...</title><form id="challenge-form">Verify you are human</form>' };
+  });
+  await page.locator('.ghrc-link-sidebar-button').click();
+  await page.waitForFunction(() => previewRequests.some(msg => msg.type === 'watch-link-preview'));
+  await page.evaluate(() => {
+    const watch = previewRequests.find(msg => msg.type === 'watch-link-preview');
+    runtimeListeners.forEach(fn => fn({ type: 'link-preview-navigation-error', previewId: watch.previewId, url: watch.url, error: 'net::ERR_BLOCKED_BY_RESPONSE' }));
+  });
+  await page.locator('.ghrc-preview-content').getByText(/This website requires verification/).waitFor();
+  assert.equal((await page.evaluate(() => previewRequests)).filter(msg => msg.type === 'open-website-verification').length, 0);
+  await page.getByRole('button', { name: 'Verify website', exact: true }).click();
+  assert.equal((await page.evaluate(() => previewRequests)).find(msg => msg.type === 'open-website-verification').url, href);
+  await page.getByRole('status').getByText(/Complete verification in the website window/).waitFor();
+  assert.equal(await page.locator('#ghrc-link-preview').count(), 1);
+  assert.equal(await page.locator('#ghrc-link-preview form').count(), 0);
+  assert.deepEqual(await page.evaluate(() => openedLinks), []);
+  await page.getByRole('button', { name: 'Retry preview', exact: true }).click();
+  await page.waitForFunction(() => previewRequests.filter(msg => msg.type === 'watch-link-preview').length === 2);
+  assert.equal(await page.locator('#ghrc-link-preview iframe').count(), 1);
+  await page.close();
+});
+
 test('sidebar setting changes add and remove link actions immediately and close an open sidebar', async () => {
   const page = await fixture();
   assert.equal(await page.locator('.ghrc-link-actions').count(), 0);
