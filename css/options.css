@@ -247,6 +247,17 @@ legend {
   font-size: 15px;
 }
 
+/* Center settings section headings without shifting individual preferences. */
+.standalone-options fieldset > legend,
+.standalone-options fieldset > h3 {
+  text-align: center;
+}
+
+.standalone-options fieldset > legend {
+  box-sizing: border-box;
+  width: 100%;
+}
+
 .standalone-options .section-divider {
   border: 0;
   border-top: 1px solid light-dark(#d0d7de, #3d444d);
