@@ -872,6 +872,16 @@
     schedulePump();
   }
 
+  function attachmentRail(row) {
+    let rail = row.querySelector(".ghrc-message-queue-attachments");
+    if (!rail) {
+      rail = document.createElement("div");
+      rail.className = "ghrc-message-queue-attachments";
+      row.querySelector(".ghrc-message-queue-index").after(rail);
+    }
+    return rail;
+  }
+
   function updateAttachmentThumbnails(row, item) {
     const images = (item.attachments || []).filter(file =>
       /^data:image\//i.test(file.dataUrl || "")
@@ -885,7 +895,7 @@
     if (!previews) {
       previews = document.createElement("div");
       previews.className = "ghrc-message-queue-thumbnails";
-      row.querySelector(".ghrc-message-queue-index").after(previews);
+      attachmentRail(row).append(previews);
     }
     // Keep loaded previews mounted during text edits and queue reordering.
     if (previews.children.length === images.length && images.every((file, index) =>
@@ -939,8 +949,8 @@
     const files = (item.attachments || []).filter(file =>
       file && !/^data:image\//i.test(file.dataUrl || "")
     );
-    const content = row.querySelector(".ghrc-message-queue-content");
-    let list = content.querySelector(".ghrc-message-queue-files");
+    let list = row.querySelector(".ghrc-message-queue-files");
+    row.classList.toggle("ghrc-message-queue-has-files", files.length > 0);
     if (!files.length) {
       list?.remove();
       return;
@@ -950,7 +960,7 @@
       list.className = "ghrc-message-queue-files";
       list.setAttribute("role", "group");
       list.setAttribute("aria-label", "Queued file attachments");
-      content.append(list);
+      attachmentRail(row).append(list);
     }
     const entries = files.map(file => ({
       name: typeof file.name === "string" && file.name ? file.name : "Unnamed file",
@@ -1063,10 +1073,7 @@
       textarea.setAttribute("aria-description", `Attachments: ${names}`);
       row.title = `Attachments: ${names}`;
     }
-    const content = document.createElement("div");
-    content.className = "ghrc-message-queue-content";
-    content.append(textarea);
-    row.append(ordinal, content, controls);
+    row.append(ordinal, textarea, controls);
     return row;
   }
 
@@ -1186,6 +1193,8 @@
       row.title = names ? `Attachments: ${names}` : "";
       updateAttachmentThumbnails(row, item);
       updateAttachmentCards(row, item);
+      const rail = row.querySelector(".ghrc-message-queue-attachments");
+      if (rail && !rail.childElementCount) rail.remove();
       const [up, down] = row.querySelectorAll(".ghrc-message-queue-move-controls button");
       up.disabled = index === 0 || sending;
       down.disabled = index === queue.length - 1 || sending;
