@@ -902,6 +902,94 @@
     }));
   }
 
+
+  function queuedAttachmentSize(file) {
+    if (Number.isSafeInteger(file.size) && file.size >= 0) return file.size;
+    const dataUrl = file.dataUrl;
+    if (typeof dataUrl !== "string") return null;
+    const comma = dataUrl.indexOf(",");
+    if (comma < 0 || !/;base64$/i.test(dataUrl.slice(0, comma))) return null;
+    const length = dataUrl.length - comma - 1;
+    if (length % 4) return null;
+    return Math.max(0, length / 4 * 3 - (dataUrl.endsWith("==") ? 2 : dataUrl.endsWith("=") ? 1 : 0));
+  }
+
+  function formatQueuedAttachmentSize(bytes) {
+    if (!Number.isFinite(bytes) || bytes < 0) return "";
+    if (bytes < 1024) return bytes + " B";
+    const units = ["KB", "MB", "GB"];
+    let value = bytes;
+    let index = -1;
+    do {
+      value /= 1024;
+      index += 1;
+    } while (value >= 1024 && index < units.length - 1);
+    return (value < 10 ? Math.round(value * 10) / 10 : Math.round(value)) + " " + units[index];
+  }
+
+  function queuedAttachmentType(file) {
+    const extension = /\.([a-z\d]{1,8})$/i.exec(file.name || "")?.[1];
+    if (extension) return extension.toUpperCase();
+    if (file.type === "application/pdf") return "PDF";
+    if (/^text\//i.test(file.type || "")) return "TEXT";
+    return "FILE";
+  }
+
+  function updateAttachmentCards(row, item) {
+    const files = (item.attachments || []).filter(file =>
+      file && !/^data:image\//i.test(file.dataUrl || "")
+    );
+    const content = row.querySelector(".ghrc-message-queue-content");
+    let list = content.querySelector(".ghrc-message-queue-files");
+    if (!files.length) {
+      list?.remove();
+      return;
+    }
+    if (!list) {
+      list = document.createElement("div");
+      list.className = "ghrc-message-queue-files";
+      list.setAttribute("role", "group");
+      list.setAttribute("aria-label", "Queued file attachments");
+      content.append(list);
+    }
+    const entries = files.map(file => ({
+      name: typeof file.name === "string" && file.name ? file.name : "Unnamed file",
+      mime: typeof file.type === "string" ? file.type : "",
+      label: queuedAttachmentType(file),
+      size: formatQueuedAttachmentSize(queuedAttachmentSize(file)),
+    }));
+    // Reuse cards on text edits, moves, and unrelated queue updates.
+    if (list.children.length === entries.length && entries.every((file, index) => {
+      const card = list.children[index];
+      return card.dataset.name === file.name && card.dataset.mime === file.mime
+        && card.dataset.size === file.size;
+    })) return;
+    list.replaceChildren(...entries.map(file => {
+      const card = document.createElement("div");
+      card.className = "ghrc-message-queue-file-card";
+      card.setAttribute("role", "group");
+      card.dataset.name = file.name;
+      card.dataset.mime = file.mime;
+      card.dataset.size = file.size;
+      const summary = file.label + (file.size ? " · " + file.size : "");
+      card.title = file.name + " (" + (file.mime || "unknown type")
+        + (file.size ? ", " + file.size : "") + ")";
+      card.setAttribute("aria-label", "Queued attachment: " + file.name + ", " + summary);
+      const icon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      icon.setAttribute("viewBox", "0 0 24 24");
+      icon.setAttribute("aria-hidden", "true");
+      icon.innerHTML = '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/>';
+      const name = document.createElement("span");
+      name.className = "ghrc-message-queue-file-name";
+      name.textContent = file.name;
+      const meta = document.createElement("span");
+      meta.className = "ghrc-message-queue-file-meta";
+      meta.textContent = summary;
+      card.append(icon, name, meta);
+      return card;
+    }));
+  }
+
   function createItemRow(item, index) {
     const row = document.createElement("article");
     row.className = "ghrc-message-queue-item";
@@ -975,7 +1063,10 @@
       textarea.setAttribute("aria-description", `Attachments: ${names}`);
       row.title = `Attachments: ${names}`;
     }
-    row.append(ordinal, textarea, controls);
+    const content = document.createElement("div");
+    content.className = "ghrc-message-queue-content";
+    content.append(textarea);
+    row.append(ordinal, content, controls);
     return row;
   }
 
@@ -1094,6 +1185,7 @@
       else editor.removeAttribute("aria-description");
       row.title = names ? `Attachments: ${names}` : "";
       updateAttachmentThumbnails(row, item);
+      updateAttachmentCards(row, item);
       const [up, down] = row.querySelectorAll(".ghrc-message-queue-move-controls button");
       up.disabled = index === 0 || sending;
       down.disabled = index === queue.length - 1 || sending;

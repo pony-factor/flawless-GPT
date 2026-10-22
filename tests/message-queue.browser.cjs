@@ -1382,6 +1382,72 @@ async function attachmentFixture(page, { images = false, portalInput = false, ge
   }, { images, portalInput, genericRemove });
 }
 
+
+test('queued attachment info cards coexist with image thumbnails and survive editing and reorder', async () => {
+  const p = await fixture({ active: true, stored: {
+    queuedChatMessages: { 'conversation:test': [
+      { id: 'mixed-files', text: 'Review these attachments', attachments: [
+        { name: 'brief.pdf', type: 'application/pdf', dataUrl: 'data:application/pdf;base64,SGVsbG8=' },
+        { name: 'picture.png', type: 'image/png', dataUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j1ioAAAAASUVORK5CYII=' },
+        { name: 'results.csv', type: 'text/csv', dataUrl: 'data:text/csv;base64,YWJj' },
+      ] },
+      { id: 'second-file', text: 'Later prompt', attachments: [
+        { name: 'draft.txt', type: 'text/plain', dataUrl: 'data:text/plain;base64,SGk=' },
+      ] },
+    ] },
+    queuedChatMessagesPaused: { 'conversation:test': true },
+  } });
+  const first = p.locator('[data-queue-id="mixed-files"]');
+  await first.waitFor();
+  assert.equal(await first.locator('.ghrc-message-queue-thumbnails img').count(), 1);
+  assert.equal(await first.locator('.ghrc-message-queue-thumbnails img').first().getAttribute('alt'), 'picture.png');
+  assert.deepEqual(await first.locator('.ghrc-message-queue-file-name').allTextContents(), ['brief.pdf', 'results.csv']);
+  assert.deepEqual(await first.locator('.ghrc-message-queue-file-meta').allTextContents(), ['PDF · 5 B', 'CSV · 3 B']);
+  assert.equal(await first.locator('.ghrc-message-queue-file-card').first().getAttribute('title'), 'brief.pdf (application/pdf, 5 B)');
+  await p.evaluate(() => {
+    window.savedFileCard = document.querySelector('[data-queue-id="mixed-files"] .ghrc-message-queue-file-card');
+  });
+  await first.locator('.ghrc-message-queue-editor').fill('Updated text');
+  await first.getByRole('button', { name: 'Move queued message later' }).click();
+  assert.equal(await p.evaluate(() => window.savedFileCard ===
+    document.querySelector('[data-queue-id="mixed-files"] .ghrc-message-queue-file-card')), true);
+  assert.equal(await p.locator('[data-queue-id="second-file"] .ghrc-message-queue-file-meta').textContent(), 'TXT · 2 B');
+  assert.deepEqual(p.errors, []);
+  await p.close();
+});
+
+test('queued file cards update when stored attachments change and disappear when cleared', async () => {
+  const p = await fixture({ active: true, stored: {
+    queuedChatMessages: { 'conversation:test': [
+      { id: 'update-files', text: 'Read attachment', attachments: [
+        { name: 'file.txt', type: 'text/plain', dataUrl: 'data:text/plain;base64,YWJj' },
+        { name: 'scan.png', type: 'image/png', dataUrl: 'data:image/png;base64,YWJj' },
+      ] },
+    ] },
+    queuedChatMessagesPaused: { 'conversation:test': true },
+  } });
+  const row = p.locator('[data-queue-id="update-files"]');
+  await row.waitFor();
+  assert.equal(await row.locator('.ghrc-message-queue-file-card').count(), 1);
+  await p.evaluate(async () => {
+    const next = structuredClone(storage.queuedChatMessages);
+    next['conversation:test'][0].attachments = next['conversation:test'][0].attachments.slice(1);
+    await chrome.storage.local.set({ queuedChatMessages: next });
+  });
+  await p.waitForFunction(() => document.querySelector('[data-queue-id="update-files"]')
+    && !document.querySelector('[data-queue-id="update-files"] .ghrc-message-queue-files'));
+  assert.equal(await row.locator('.ghrc-message-queue-thumbnails img').count(), 1);
+  await p.evaluate(async () => {
+    const next = structuredClone(storage.queuedChatMessages);
+    next['conversation:test'][0].attachments = [];
+    await chrome.storage.local.set({ queuedChatMessages: next });
+  });
+  await p.waitForFunction(() => !document.querySelector('[data-queue-id="update-files"] .ghrc-message-queue-thumbnails'));
+  assert.equal(await row.evaluate(el => el.classList.contains('ghrc-message-queue-has-images')), false);
+  assert.deepEqual(p.errors, []);
+  await p.close();
+});
+
 test('a portal-mounted upload input and generic remove control queue the real file bytes', async () => {
   const p = await fixture({ active: true });
   await attachmentFixture(p, { portalInput: true, genericRemove: true });

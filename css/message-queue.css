@@ -84,6 +84,61 @@ html[data-theme="dark"] #ghrc-message-queue {
   width: 32px;
 }
 
+
+.ghrc-message-queue-content {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+.ghrc-message-queue-files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  min-width: 0;
+}
+
+.ghrc-message-queue-file-card {
+  align-items: center;
+  background: var(--ghrc-queue-subtle);
+  border: 1px solid var(--ghrc-queue-border);
+  border-radius: 7px;
+  display: inline-flex;
+  font-size: 11px;
+  gap: 5px;
+  max-width: 100%;
+  min-width: 0;
+  padding: 5px 7px;
+}
+
+.ghrc-message-queue-file-card svg {
+  fill: none;
+  flex-shrink: 0;
+  height: 16px;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.7;
+  width: 16px;
+}
+
+.ghrc-message-queue-file-name {
+  font-weight: 600;
+  max-width: 13rem;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ghrc-message-queue-file-meta {
+  flex-shrink: 0;
+  font-size: 10px;
+  opacity: 0.68;
+  white-space: nowrap;
+}
+
 .ghrc-message-queue-item[data-sending="true"] {
   background: color-mix(in srgb, currentColor 5%, transparent);
 }
