@@ -339,33 +339,6 @@ html[data-ghrc-link-preview="left"] #ghrc-link-preview .ghrc-preview-resizer {
   background: white;
 }
 
-#ghrc-link-preview .ghrc-preview-verification {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding: 8px 16px;
-  border-bottom: 1px solid var(--ghrc-preview-border);
-}
-
-#ghrc-link-preview .ghrc-preview-verification button {
-  padding: 4px 8px;
-  border: 1px solid var(--ghrc-preview-border);
-  border-radius: 5px;
-  background: var(--ghrc-preview-button);
-  color: var(--ghrc-preview-text);
-  font: inherit;
-  cursor: pointer;
-}
-
-#ghrc-link-preview .ghrc-preview-verification [role="status"] {
-  flex-basis: 100%;
-  color: var(--ghrc-preview-muted);
-}
-
-#ghrc-link-preview .ghrc-preview-verification [role="status"]:empty {
-  display: none;
-}
-
 #ghrc-link-preview .ghrc-preview-content {
   flex: 1;
   min-height: 0;

@@ -7,7 +7,6 @@ importScripts(
   "../links/clipboard-url-navigation.js",
   "../links/native-split-view.js",
   "../links/github-link-preview.js",
-  "../links/website-link-preview.js",
   "../github/github-app-auth.js",
   "../launchers/youtube-search-worker.js",
   "../research/deep-research-cache-background.js",
