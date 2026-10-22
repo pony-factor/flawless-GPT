@@ -135,10 +135,10 @@ test('stale close requests cannot unregister the current preview', async () => {
   assert.equal(f.session['linkPreviewWatch:10'].id, 'current');
 });
 
-test('a blocked link clicked inside the sidebar opens its destination instead of the original page', async () => {
+test('the Satoshi code sidebar opens its blocked Bitcointalk source instead of reopening the archive', async () => {
   const f = fixture();
-  const url = 'https://example.org/article';
-  const destination = 'https://doi.org/10.15779/Z38D795C24';
+  const url = 'https://satoshi.nakamotoinstitute.org/en/code/';
+  const destination = 'https://bitcointalk.org/index.php?topic=68121.0';
   f.session['linkPreviewWatch:10'] = { url, id: 'preview' };
   f.navigation.before({ tabId: 10, frameId: 3, url });
   await new Promise(resolve => setImmediate(resolve));
