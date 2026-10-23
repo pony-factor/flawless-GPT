@@ -142,6 +142,39 @@ test("sub-minute values hide the time and show minutes starting at one minute", 
   assert.equal(f.element.getAttribute("data-ghrc-worked-minutes"), "");
 });
 
+test("sub-minute live labels suppress the entire empty disclosure until one full minute", () => {
+  // The badge may be on the native disclosure or on a nested label next to
+  // its chevron. Both DOM shapes must be hidden while the badge is blank.
+  const f = fixture("Worked for 0m 59s", { splitText: true });
+  f.flush();
+  assert.equal(f.element.getAttribute("data-ghrc-worked-minutes"), "");
+  assert.match(style, /\[data-ghrc-worked-duration\]\[data-ghrc-worked-minutes=""\],/);
+  assert.match(style, /:is\(button, \[role="button"\], summary\):has\(\[data-ghrc-worked-duration\]\[data-ghrc-worked-minutes=""\]\)/);
+  assert.match(style, /display: none !important;/);
+  f.update("Worked for 1m");
+  assert.equal(f.element.getAttribute("data-ghrc-worked-minutes"), "1m");
+  f.update("Worked for 59s");
+  assert.equal(f.element.getAttribute("data-ghrc-worked-minutes"), "");
+  f.stop();
+});
+
+test("cannon replaces the chevron without removing native disclosure interaction", () => {
+  // Match badges directly on native controls and nested within them. Only
+  // SVG chevrons are hidden; the button stays visible/clickable after 1m.
+  const block = style.split("/* The native disclosure remains the click and keyboard target.")[1]
+    ?.split("/* Optional one-dot-per-minute display")[0];
+  assert.ok(block, "dedicated disclosure styling is present");
+  assert.match(block, /:is\(button, \[role="button"\], summary\)\[data-ghrc-worked-duration\]/);
+  assert.match(block, /:has\(\[data-ghrc-worked-duration\]/);
+  assert.match(block, /:not\(\[data-ghrc-worked-minutes=""\]\)/);
+  assert.match(block, /\) svg\s*\{\s*display: none !important;/);
+  assert.match(block, /cursor: pointer;/);
+  assert.doesNotMatch(block, /pointer-events: none|visibility: hidden/);
+  // Preserve native click and keyboard event handling rather than creating
+  // a second synthetic toggle or replacing native buttons.
+  assert.doesNotMatch(source, /\.click\(\)|\.dispatchEvent\(/);
+});
+
 test("unrelated messages and quoted prose are left unchanged", () => {
   const text = fixture("We worked for 8m 41s");
   text.flush();
