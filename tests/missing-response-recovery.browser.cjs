@@ -265,6 +265,24 @@ test('navigation pauses recovery until a prompt in the new conversation', async 
   await f.p.close();
 });
 
+test('a cancelled recovery request cannot delay the next conversation', async () => {
+  const f = await fixture({ delayed: true });
+  await settle(f.p);
+  assert.equal(f.reads(), 1, 'the first conversation began a saved-answer read');
+  await f.p.evaluate(() => history.pushState({}, '', '/c/fresh'));
+  f.release();
+  await f.p.waitForTimeout(150);
+  assert.equal(await f.p.locator('[data-ghrc-recovered-answer]').count(), 0,
+    'aborted results from the previous conversation must not be inserted');
+  await f.p.locator('textarea').fill('A new prompt after navigation');
+  await f.p.clock.runFor(2_000);
+  await f.p.waitForFunction(() => document.querySelector('[data-ghrc-recovered-answer]')?.textContent === 'Saved answer');
+  assert.equal(f.reads(), 2,
+    'a stale request must not impose a minute-long retry cooldown on the new conversation');
+  assert.deepEqual(f.errors, []);
+  await f.p.close();
+});
+
 test('sending from a new chat keeps recovery awake across creation of its conversation', async () => {
   const f = await fixture();
   await settle(f.p);
