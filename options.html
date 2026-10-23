@@ -235,7 +235,7 @@
             <p class="help">Default: full research only. Combined mode appears only when ChatGPT provides both counts; missing lightweight counts are never guessed.</p>
             <label for="deep-research-usage-pie-total">Pie allowance total (optional)</label>
             <input id="deep-research-usage-pie-total" type="number" min="1" max="10000" step="1" placeholder="Auto" />
-            <p class="help">For full research, Auto uses only a server-reported full maximum; enter your actual full allowance if it is absent (for example, historical Plus 10 or Pro 125). In combined mode, Auto can estimate 25 or 250 when no total is reported. Current limits vary by plan.</p>
+            <p class="help">Auto uses the server-reported maximum when available; otherwise the pie uses an estimated scale of 25 or 250, labeled in its tooltip. Enter your actual allowance for an accurate percentage. The count always follows the selected allowance mode. Current limits vary by plan.</p>
             <h3>Homepage</h3>
             <label class="preference">
               <input id="show-deep-research-homepage" type="checkbox" checked />
