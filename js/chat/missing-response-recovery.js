@@ -312,7 +312,8 @@
   document.addEventListener("submit", onPromptSend, true);
   window.addEventListener("ghrc:route-change", onRouteChange);
   window.addEventListener("pagehide", stopPolling);
-  // Initial load gets the existing fast recovery behavior. Once it settles,
-  // only a new user prompt or composer edit starts the polling loop again.
-  startPolling();
+  // Existing conversations retain immediate recovery after a reload. A
+  // brand-new homepage has nothing to recover and needs no idle timer.
+  // After cooldown or navigation, only the next prompt wakes the scanner.
+  if (conversationId()) startPolling();
 })();
