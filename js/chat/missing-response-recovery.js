@@ -83,15 +83,17 @@
   let previousPath = location.pathname;
   let submittedFromNewChat = false;
   let generation = 0;
+  let activeRequest = null;
 
   const conversationId = () => location.pathname.match(/^\/c\/([a-zA-Z0-9-]+)$/)?.[1] || "";
   const scroller = () => document.querySelector("[data-app-action-timeline-scroll]");
 
-  async function loadSavedConversation(id) {
+  async function loadSavedConversation(id, signal) {
     // Keep authentication inside the page, as with personalization reads.
     // Never persist or bridge credentials or conversation contents.
     const sessionResponse = await fetch("/api/auth/session", {
-      credentials: "include", cache: "no-store", signal: AbortSignal.timeout(10_000),
+      credentials: "include", cache: "no-store",
+      signal: AbortSignal.any([signal, AbortSignal.timeout(10_000)]),
     });
     if (!sessionResponse.ok) return null;
     const session = await sessionResponse.json();
@@ -99,7 +101,7 @@
     const response = await fetch(`/backend-api/conversation/${id}`, {
       credentials: "include", cache: "no-store",
       headers: { authorization: `Bearer ${session.accessToken}` },
-      signal: AbortSignal.timeout(10_000),
+      signal: AbortSignal.any([signal, AbortSignal.timeout(10_000)]),
     });
     return response.ok ? response.json() : null;
   }
@@ -208,8 +210,10 @@
     if (pending || Date.now() < retryAfter) return;
     pending = true;
     retryAfter = Date.now() + REFRESH_MS;
+    const requestController = new AbortController();
+    activeRequest = requestController;
     try {
-      const saved = await loadSavedConversation(id);
+      const saved = await loadSavedConversation(id, requestController.signal);
       if (generation !== requestGeneration || conversationId() !== id) return;
       if (!saved?.mapping) { retryAfter = Date.now() + 60_000; return; }
       savedConversation = saved;
@@ -217,8 +221,10 @@
       // currently streaming turn are never changed or interrupted.
       repair(elements, saved);
     } catch {
-      retryAfter = Date.now() + 60_000;
+      // Cancelled reads must not rate-limit a new prompt after navigation.
+      if (generation === requestGeneration) retryAfter = Date.now() + 60_000;
     } finally {
+      if (activeRequest === requestController) activeRequest = null;
       // An old request must not clear the pending flag of a newer session.
       if (generation === requestGeneration) pending = false;
     }
@@ -227,8 +233,10 @@
   function stopPolling() {
     if (pollingTimer !== null) clearInterval(pollingTimer);
     pollingTimer = null;
-    // A settled tab must not retain an entire saved conversation in memory.
+    // A settled tab must not retain fetched content or an in-flight read.
     generation++;
+    activeRequest?.abort();
+    activeRequest = null;
     pending = false;
     savedId = "";
     savedConversation = null;
