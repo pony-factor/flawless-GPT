@@ -50,7 +50,7 @@
     }
   }
   function onReportState(event) {
-    if (!/^https:\/\/(connector-openai-deep-research|mcp-app-[a-f0-9]+)\\.web-sandbox\\.oaiusercontent\\.com$/.test(event.origin)
+    if (!/^https:\/\/(connector-openai-deep-research|mcp-app-[a-f0-9]+)\.web-sandbox\.oaiusercontent\.com$/.test(event.origin)
       || event.data?.type !== 'ghrc-research-report-state') return;
     const frame = [...document.querySelectorAll('iframe')].find(node => node.contentWindow === event.source);
     if (!frame) return;
