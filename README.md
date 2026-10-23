@@ -77,14 +77,14 @@ the current tab; this feature does not upload its contents.
 
 ### GitHub App login
 
-Connect GitHub opens the Flawless ChatGPT app's browser authorization page and returns to the extension automatically. Choose repositories to install the app on a personal account or organization and select its repository access.
+Connect GitHub opens the Flawless Pony GitHub App's browser authorization page and returns to the extension automatically. Choose repositories to install the app on a personal account or organization and select its repository access.
 
 The small local login service exchanges GitHub's authorization code; the extension stores the resulting session in its encrypted browser vault. The service listens only on `127.0.0.1:8787`, accepts the configured extension identity, and keeps access tokens out of redirect URLs.
 
 To configure it on macOS:
 
-1. In the app settings, set the callback URL to `http://127.0.0.1:8787/github/callback` and generate a client secret. App settings: https://github.com/settings/apps/flawless-chatgpt
-2. Run `swift auth/configure-secret.swift` and paste the secret into the secure local dialog. It saves the credential in macOS Keychain; do not put it in the repository or extension settings.
+1. In the Flawless Pony GitHub App settings (under the owning account's **Developer settings → GitHub Apps**), set the callback URL to `http://127.0.0.1:8787/github/callback` and generate a client secret. Public app page: https://github.com/apps/flawless-pony
+2. Run `swift auth/configure-secret.swift` and paste the secret into the secure local dialog. It saves the credential in macOS Keychain; do not put it in the repository or extension settings. Renaming or transferring the existing GitHub App does not require replacing the Client ID or its stored Keychain credential.
 3. Run `python3 auth/install.py` to install the login service, which starts automatically at login. Run the installer again after changing the Keychain credential to restart it.
 4. Reload the extension and select Connect GitHub.
 
