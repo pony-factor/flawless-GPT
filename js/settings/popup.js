@@ -1,7 +1,7 @@
 (() => {
   const GITHUB_APP_CONFIG = Object.freeze({
     clientId: "Iv23liukJaqMAIiIIfOz",
-    appSlug: "flawless-chatgpt",
+    appSlug: "flawless-pony",
   });
   const PINS_PER_PAGE = 6;
   const tabs = [...document.querySelectorAll('[role="tab"]')];
