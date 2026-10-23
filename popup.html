@@ -238,13 +238,6 @@
                 <small>Master switch for the homepage and active research composer trackers.</small>
               </span>
             </label>
-            <label class="preference">
-              <input id="show-deep-research-usage-pie" type="checkbox" />
-              <span>
-                <strong>Show remaining reports as a usage pie</strong>
-                <small>Use a Sweetiebot-style pie scaled to your Deep Research allowance. The exact remaining count remains accessible.</small>
-              </span>
-            </label>
             <label for="deep-research-allowance-mode">Counter allowance</label>
             <select id="deep-research-allowance-mode">
               <option value="full" selected>Full research only</option>
@@ -261,11 +254,15 @@
             </label>
             <label class="preference">
               <input id="show-deep-research-homepage-count" type="checkbox" checked />
-              <span><strong>Show reports remaining</strong><small>Displays the allowance count on the homepage and in-chat tracker, such as “13 left.”</small></span>
+              <span><strong>Show reports remaining</strong><small>Display the count on the homepage only.</small></span>
             </label>
             <label class="preference">
               <input id="show-deep-research-homepage-reset" type="checkbox" checked />
-              <span><strong>Show reset countdown</strong><small>Displays time until reset in both tracker locations, such as “resets 5d.” Disable it to show only reports remaining.</small></span>
+              <span><strong>Show reset countdown</strong><small>Display the reset time on the homepage only.</small></span>
+            </label>
+            <label class="preference">
+              <input id="show-deep-research-homepage-pie" type="checkbox" />
+              <span><strong>Show usage pie on homepage</strong><small>Only affects the homepage tracker.</small></span>
             </label>
             <label for="deep-research-homepage-visibility">Homepage visibility</label>
             <select id="deep-research-homepage-visibility">
@@ -278,9 +275,20 @@
             <h3>Research composer</h3>
             <label class="preference">
               <input id="show-deep-research-composer" type="checkbox" checked />
-              <span><strong>Show tracker in research composer</strong><small>Only appears while Deep Research is selected.</small></span>
+              <span><strong>Show tracker in research composer</strong><small>Appears while Deep Research is selected, independently of the homepage.</small></span>
             </label>
-            <p class="help">The composer uses the same reports-remaining and reset-countdown choices as the homepage, even when the homepage tracker is hidden.</p>
+            <label class="preference">
+              <input id="show-deep-research-composer-count" type="checkbox" checked />
+              <span><strong>Show reports remaining</strong><small>Display the count in the active composer only.</small></span>
+            </label>
+            <label class="preference">
+              <input id="show-deep-research-composer-reset" type="checkbox" checked />
+              <span><strong>Show reset countdown</strong><small>Display the reset time in the active composer only.</small></span>
+            </label>
+            <label class="preference">
+              <input id="show-deep-research-composer-pie" type="checkbox" />
+              <span><strong>Show usage pie in composer</strong><small>Only affects the active composer tracker.</small></span>
+            </label>
             <label class="preference">
               <input id="show-writing-research-button" type="checkbox" checked />
               <span>

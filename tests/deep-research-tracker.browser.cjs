@@ -102,13 +102,14 @@ test('dashboard counter sits left of the game launcher; plugin selection and set
       mention.textContent = 'Deep research';
       document.getElementById('prompt-textarea').append(mention);
     });
-    await page.waitForFunction(() => document.getElementById('ghrc-deep-research-tracker') && !document.getElementById('ghrc-deep-research-tracker-composer'));
+    await page.waitForFunction(() => document.getElementById('ghrc-deep-research-tracker')
+      && document.getElementById('ghrc-deep-research-tracker-composer'));
     assert.equal(await page.locator('#ghrc-deep-research-tracker').count(), 1);
     await page.evaluate(() => window.changeSetting(false));
     await page.waitForFunction(() => document.querySelectorAll('.ghrc-deep-research-tracker').length === 0);
     assert.equal(await page.locator('#ghrc-highlighted-pages').count(), 1);
     await page.evaluate(() => window.changeSetting(true));
-    await page.waitForFunction(() => document.querySelectorAll('.ghrc-deep-research-tracker').length === 1);
+    await page.waitForFunction(() => document.querySelectorAll('.ghrc-deep-research-tracker').length === 2);
     await page.evaluate(() => document.querySelector('[data-prompt-link-href]').remove());
     await page.waitForFunction(() => !document.getElementById('ghrc-deep-research-tracker-composer'));
     assert.equal(await page.locator('#prompt-textarea').innerText(), 'My draft');
@@ -141,7 +142,7 @@ test('homepage only shows the Deep Research embed in the final five days', async
       document.documentElement.setAttribute('data-ghrc-deep-research-usage', JSON.stringify({ remaining: 13, resetAt: now + 5 * 24 * 60 * 60_000, observedAt: now }));
     });
     await page.waitForFunction(() => document.getElementById('ghrc-deep-research-tracker')?.textContent.includes('13 left')
-      && !document.getElementById('ghrc-deep-research-tracker-composer'));
+      && document.getElementById('ghrc-deep-research-tracker-composer')?.textContent.includes('13 left'));
   } finally { await browser.close(); }
 });
 
@@ -183,7 +184,7 @@ test('native initialization fills the tracker automatically and clicking refresh
 });
 
 
-test('Research composer shares homepage allowance fields whenever the homepage readout is unavailable', async () => {
+test('homepage and active research composer render independently and keep their own allowance fields', async () => {
   const browser = await chromium.launch({ executablePath: '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser', headless: true });
   try {
     const page = await browser.newPage();
@@ -216,7 +217,9 @@ test('Research composer shares homepage allowance fields whenever the homepage r
     const homepage = page.locator('#ghrc-deep-research-tracker');
     const composer = page.locator('#ghrc-deep-research-tracker-composer');
     await homepage.waitFor();
-    assert.equal(await composer.count(), 0);
+    await composer.waitFor();
+    assert.match(await composer.innerText(), /resets \d+d/);
+    assert.doesNotMatch(await composer.innerText(), /13 left/);
     assert.match(await homepage.innerText(), /13 left/);
     assert.doesNotMatch(await homepage.innerText(), /reset/i);
     const pie = homepage.locator('.ghrc-research-usage-pie');
@@ -308,53 +311,66 @@ test('Research composer shares homepage allowance fields whenever the homepage r
     await page.waitForFunction(() => document.getElementById('ghrc-deep-research-tracker')?.textContent.includes('13 left'));
     assert.equal(await homepage.evaluate(node => node.classList.contains('ghrc-research-near-reset')), false);
 
+    // Homepage window changes cannot remove the selected in-chat tracker.
     await page.evaluate(() => window.changeResearchSetting('deepResearchHomepageWindowDays', 14));
     await page.waitForFunction(() => document.getElementById('ghrc-deep-research-tracker').classList.contains('ghrc-research-near-reset'));
-    assert.equal(await composer.count(), 0);
+    assert.equal(await composer.count(), 1);
     await page.evaluate(() => window.changeResearchSetting('deepResearchHomepageWindowDays', 5));
     await page.waitForFunction(() => !document.getElementById('ghrc-deep-research-tracker').classList.contains('ghrc-research-near-reset'));
-    assert.equal(await composer.count(), 0);
+    assert.equal(await composer.count(), 1);
 
     await page.evaluate(() => window.changeResearchSetting('deepResearchHomepageVisibility', 'near-reset'));
-    await page.waitForFunction(() => !document.getElementById('ghrc-deep-research-tracker')
-      && !!document.getElementById('ghrc-deep-research-tracker-composer'));
-    assert.match(await composer.innerText(), /13 left/);
-    assert.doesNotMatch(await composer.innerText(), /reset/i);
-    assert.equal(await composer.getAttribute('aria-label'), 'Deep Research · 13 left');
+    await page.waitForFunction(() => !document.getElementById('ghrc-deep-research-tracker'));
+    assert.match(await composer.innerText(), /resets \d+d/);
+    assert.doesNotMatch(await composer.innerText(), /left/);
 
     await page.evaluate(() => window.changeResearchSetting('deepResearchHomepageWindowDays', 14));
     await homepage.waitFor();
-    await page.waitForFunction(() => !document.getElementById('ghrc-deep-research-tracker-composer'));
-    assert.equal(await homepage.evaluate(node => node.classList.contains('ghrc-research-near-reset')), true);
-    assert.match(await homepage.innerText(), /13 left/);
+    assert.equal(await composer.count(), 1);
 
     await page.evaluate(() => window.changeResearchSetting('showDeepResearchHomepageCount', false));
-    await page.waitForFunction(() => document.getElementById('ghrc-deep-research-tracker')?.getAttribute('aria-label') === 'Deep Research'
-      && !!document.getElementById('ghrc-deep-research-tracker-composer'));
+    await page.waitForFunction(() => document.getElementById('ghrc-deep-research-tracker')?.getAttribute('aria-label') === 'Deep Research');
     assert.equal(await homepage.innerText(), '');
-    assert.equal(await composer.innerText(), '', 'composer must not resurrect disabled homepage fields');
-    assert.equal(await composer.getAttribute('aria-label'), 'Deep Research');
+    assert.match(await composer.innerText(), /resets \d+d/);
 
     await page.evaluate(() => window.changeResearchSetting('showDeepResearchHomepageReset', true));
-    await page.waitForFunction(() => document.getElementById('ghrc-deep-research-tracker')?.textContent.includes('resets')
-      && !document.getElementById('ghrc-deep-research-tracker-composer'));
-    assert.doesNotMatch(await homepage.innerText(), /13 left/);
+    await page.waitForFunction(() => document.getElementById('ghrc-deep-research-tracker')?.textContent.includes('resets'));
+    assert.doesNotMatch(await homepage.innerText(), /left/);
+    assert.match(await composer.innerText(), /resets \d+d/);
 
-    await page.evaluate(() => window.changeResearchSetting('showDeepResearchHomepage', false));
-    await page.waitForFunction(() => !document.getElementById('ghrc-deep-research-tracker')
-      && !!document.getElementById('ghrc-deep-research-tracker-composer'));
+    await page.evaluate(() => window.changeResearchSetting('showDeepResearchComposerCount', true));
+    await page.waitForFunction(() => document.getElementById('ghrc-deep-research-tracker-composer')?.getAttribute('aria-label')?.includes('13 left'));
     assert.match(await composer.innerText(), /resets \d+d/);
-    assert.doesNotMatch(await composer.innerText(), /left/);
-    await page.evaluate(() => window.changeResearchSetting('showDeepResearchHomepageCount', true));
-    await page.waitForFunction(() => document.getElementById('ghrc-deep-research-tracker-composer')?.textContent.includes('13 left'));
-    assert.match(await composer.innerText(), /resets \d+d/);
-    await page.evaluate(() => window.changeResearchSetting('showDeepResearchHomepageReset', false));
+    await page.evaluate(() => window.changeResearchSetting('showDeepResearchComposerReset', false));
     await page.waitForFunction(() => document.getElementById('ghrc-deep-research-tracker-composer')?.getAttribute('aria-label') === 'Deep Research · 13 left');
     assert.doesNotMatch(await composer.innerText(), /reset/i);
-    await page.evaluate(() => window.changeResearchSetting('showDeepResearchComposer', false));
-    await page.waitForFunction(() => !document.getElementById('ghrc-deep-research-tracker-composer'));
+    assert.match(await homepage.innerText(), /reset/i);
+
+    // Each location also has its own usage-pie switch.
+    await page.evaluate(() => {
+      window.changeResearchSetting('showDeepResearchHomepageCount', true);
+      window.changeResearchSetting('showDeepResearchHomepagePie', true);
+      window.changeResearchSetting('showDeepResearchComposerPie', false);
+    });
+    await page.waitForFunction(() => !document.querySelector('#ghrc-deep-research-tracker .ghrc-research-usage-pie').hidden);
+    assert.equal(await composer.locator('.ghrc-research-usage-pie').isVisible(), false);
+    await page.evaluate(() => {
+      window.changeResearchSetting('showDeepResearchHomepagePie', false);
+      window.changeResearchSetting('showDeepResearchComposerPie', true);
+    });
+    await page.waitForFunction(() => document.querySelector('#ghrc-deep-research-tracker .ghrc-research-usage-pie').hidden
+      && !document.querySelector('#ghrc-deep-research-tracker-composer .ghrc-research-usage-pie').hidden);
+
+    await page.evaluate(() => window.changeResearchSetting('showDeepResearchHomepage', false));
+    await page.waitForFunction(() => !document.getElementById('ghrc-deep-research-tracker'));
+    assert.equal(await composer.count(), 1);
     await page.evaluate(() => window.changeResearchSetting('showDeepResearchHomepage', true));
     await homepage.waitFor();
+    assert.equal(await composer.count(), 1);
+
+    await page.evaluate(() => window.changeResearchSetting('showDeepResearchComposer', false));
+    await page.waitForFunction(() => !document.getElementById('ghrc-deep-research-tracker-composer'));
+    assert.equal(await homepage.count(), 1);
     await page.evaluate(() => window.changeResearchSetting('showDeepResearchTracker', false));
     await page.waitForFunction(() => !document.getElementById('ghrc-deep-research-tracker'));
     assert.equal(await composer.count(), 0);
@@ -380,7 +396,7 @@ test('composer allowance returns when the homepage dashboard is hidden or remove
     const composer = page.locator('#ghrc-deep-research-tracker-composer');
     const homepage = page.locator('#ghrc-deep-research-tracker');
     await homepage.waitFor();
-    assert.equal(await composer.count(), 0);
+    await composer.waitFor();
 
     await page.evaluate(() => document.documentElement.setAttribute('data-ghrc-hide-repository-dashboard', ''));
     await composer.waitFor();
@@ -388,13 +404,51 @@ test('composer allowance returns when the homepage dashboard is hidden or remove
 
     await page.evaluate(() => document.documentElement.removeAttribute('data-ghrc-hide-repository-dashboard'));
     await homepage.waitFor();
-    await page.waitForFunction(() => !document.getElementById('ghrc-deep-research-tracker-composer'));
+    assert.equal(await composer.count(), 1);
 
     await page.evaluate(() => document.getElementById('github-repositories-for-chatgpt').remove());
     await composer.waitFor();
     assert.equal(await homepage.count(), 0);
     assert.equal(await page.locator('#prompt-textarea').innerText(), 'Draft');
     assert.deepEqual(errors, []);
+  } finally { await browser.close(); }
+});
+
+test('unrelated response streaming does not schedule Deep Research tracker scans', async () => {
+  const browser = await chromium.launch({ executablePath: '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser', headless: true });
+  try {
+    const page = await browser.newPage();
+    await page.setContent('<form><div id="prompt-textarea" contenteditable="true">Draft</div></form>'
+      + '<section id="github-repositories-for-chatgpt"><footer class="ghrc-dashboard-footer"></footer></section>'
+      + '<article><div id="unrelated-stream"></div></article>');
+    await page.evaluate(() => {
+      window.__ghrcExtensionContext = { active: () => true, onStop() {} };
+      window.chrome = { storage: { local: { async get(defaults) {
+        return { ...defaults, deepResearchHomepageVisibility: 'always' };
+      } }, onChanged: { addListener() {}, removeListener() {} } } };
+      const realFrame = window.requestAnimationFrame.bind(window);
+      window.trackerFrames = 0;
+      window.requestAnimationFrame = callback => {
+        window.trackerFrames += 1;
+        return realFrame(callback);
+      };
+    });
+    await page.addScriptTag({ content: fs.readFileSync(path.join(__dirname, '../js/research/deep-research-tracker.js'), 'utf8') });
+    await page.locator('#ghrc-deep-research-tracker').waitFor();
+    await page.waitForTimeout(100);
+    await page.evaluate(() => {
+      window.trackerFrames = 0;
+      const stream = document.getElementById('unrelated-stream');
+      for (let i = 0; i < 100; i++) stream.append(document.createTextNode(String(i)));
+    });
+    await page.waitForTimeout(80);
+    assert.equal(await page.evaluate(() => window.trackerFrames), 0, 'unrelated streaming does not request tracker frames');
+    await page.evaluate(() => {
+      const mention = document.createElement('span');
+      mention.setAttribute('data-prompt-link-href', 'app://connector_openai_deep_research');
+      document.querySelector('#prompt-textarea').append(mention);
+    });
+    await page.locator('#ghrc-deep-research-tracker-composer').waitFor();
   } finally { await browser.close(); }
 });
 
