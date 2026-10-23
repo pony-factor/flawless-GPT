@@ -2,6 +2,8 @@ import importlib.util
 from contextlib import closing
 from pathlib import Path
 import sqlite3
+import subprocess
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -47,6 +49,27 @@ class BraveTestProfileTests(unittest.TestCase):
             process.return_value.returncode = 0
             launcher.main()
             copy.assert_not_called()
+
+    def test_real_process_check_accepts_posix_pattern_and_detects_profile(self):
+        with tempfile.TemporaryDirectory(prefix='brave test ') as directory:
+            directory = str(Path(directory).resolve())
+            process = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(30)',
+                                        '--user-data-dir=' + directory])
+            try:
+                with patch.object(launcher.sys, 'argv', ['launcher', directory]), \
+                     patch.object(launcher, 'copy_cookies') as copy:
+                    launcher.main()
+                    copy.assert_not_called()
+            finally:
+                process.terminate()
+                process.wait()
+
+    def test_real_process_check_allows_copy_when_profile_stopped(self):
+        with tempfile.TemporaryDirectory(prefix='brave test ') as directory:
+            with patch.object(launcher.sys, 'argv', ['launcher', directory]), \
+                 patch.object(launcher, 'copy_cookies') as copy:
+                launcher.main()
+                copy.assert_called_once()
 
 
 if __name__ == '__main__':

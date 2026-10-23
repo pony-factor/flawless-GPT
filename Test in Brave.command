@@ -12,7 +12,9 @@ if [[ ! -d '/Applications/Brave Browser.app' ]]; then
 fi
 
 # Keep each checkout isolated, but reuse normal Brave's encrypted cookies.
-python3 "$workspace_dir/tools/prepare-brave-test.py" "$test_profile_dir"
+if ! python3 "$workspace_dir/tools/prepare-brave-test.py" "$test_profile_dir"; then
+  printf 'Cookie sync failed. Opening the test browser with its existing cookies.\n' >&2
+fi
 
 /usr/bin/open -na 'Brave Browser' --args \
   "--user-data-dir=$test_profile_dir" \
