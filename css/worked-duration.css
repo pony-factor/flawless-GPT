@@ -44,6 +44,20 @@
   display: none !important;
 }
 
+/* The native disclosure remains the click and keyboard target. The cannon
+   lives inside it, so remove the redundant native chevron (including its
+   SVG wrapper) once a full minute has elapsed without hiding the button.
+   Both a directly badged button and a button with a nested badge work. */
+:is(button, [role="button"], summary)[data-ghrc-worked-duration][data-ghrc-worked-minutes]:not([data-ghrc-worked-minutes=""]),
+:is(button, [role="button"], summary):has([data-ghrc-worked-duration][data-ghrc-worked-minutes]:not([data-ghrc-worked-minutes=""])) {
+  cursor: pointer;
+}
+
+:is(button, [role="button"], summary)[data-ghrc-worked-duration][data-ghrc-worked-minutes]:not([data-ghrc-worked-minutes=""]) svg,
+:is(button, [role="button"], summary):has([data-ghrc-worked-duration][data-ghrc-worked-minutes]:not([data-ghrc-worked-minutes=""])) svg {
+  display: none !important;
+}
+
 /* Optional one-dot-per-minute display, placed to the left of the cannon. */
 [data-ghrc-worked-duration][data-ghrc-worked-dots-mode] {
   display: inline-flex;

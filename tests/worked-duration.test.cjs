@@ -158,6 +158,23 @@ test("sub-minute live labels suppress the entire empty disclosure until one full
   f.stop();
 });
 
+test("cannon replaces the chevron without removing native disclosure interaction", () => {
+  // Match badges directly on native controls and nested within them. Only
+  // SVG chevrons are hidden; the button stays visible/clickable after 1m.
+  const block = style.split("/* The native disclosure remains the click and keyboard target.")[1]
+    ?.split("/* Optional one-dot-per-minute display")[0];
+  assert.ok(block, "dedicated disclosure styling is present");
+  assert.match(block, /:is\(button, \[role="button"\], summary\)\[data-ghrc-worked-duration\]/);
+  assert.match(block, /:has\(\[data-ghrc-worked-duration\]/);
+  assert.match(block, /:not\(\[data-ghrc-worked-minutes=""\]\)/);
+  assert.match(block, /\) svg\s*\{\s*display: none !important;/);
+  assert.match(block, /cursor: pointer;/);
+  assert.doesNotMatch(block, /pointer-events: none|visibility: hidden/);
+  // Preserve native click and keyboard event handling rather than creating
+  // a second synthetic toggle or replacing native buttons.
+  assert.doesNotMatch(source, /\.click\(\)|\.dispatchEvent\(/);
+});
+
 test("unrelated messages and quoted prose are left unchanged", () => {
   const text = fixture("We worked for 8m 41s");
   text.flush();
