@@ -1,5 +1,7 @@
 (() => {
-  chrome.runtime.onMessage.addListener((message, sender, respond) => {
+  const context = globalThis.__ghrcExtensionContext;
+  if (context && !context.active()) return;
+  function handleResearchContext(message, sender, respond) {
     if (message?.type !== 'research-report-context') return false;
     const title = document.title.replace(/\s*[-–|]\s*ChatGPT\s*$/i, '').trim();
     const frames = [...document.querySelectorAll('iframe')].filter(node =>
@@ -12,9 +14,8 @@
     const prompt = preceding.at(-1)?.textContent.trim() || '';
     respond({ title: title && !/^(ChatGPT|New chat)$/i.test(title) ? title : prompt.slice(0, 2000), prompt: prompt.slice(0, 2000) });
     return false;
-  });
-  const context = globalThis.__ghrcExtensionContext;
-  if (context && !context.active()) return;
+  }
+  chrome.runtime.onMessage.addListener(handleResearchContext);
   const reports = new Map();
   const finalized = new WeakMap();
   const ATTRIBUTE = 'data-ghrc-research-fullscreen';
@@ -100,6 +101,7 @@
   window.addEventListener('pagehide', cleanup);
   context?.onStop(() => {
     cleanup();
+    chrome.runtime.onMessage.removeListener?.(handleResearchContext);
     window.removeEventListener('message', handleReportMessage);
     window.removeEventListener('pagehide', cleanup);
     style.remove();
