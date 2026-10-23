@@ -44,7 +44,7 @@
     if (disposed) return;
     disposed = true;
     stopMonitoring();
-    chrome.storage?.onChanged?.removeListener?.(settingsChanged);
+    globalThis.chrome?.storage?.onChanged?.removeListener?.(settingsChanged);
     window.removeEventListener('pagehide', onPageHide);
   }
   function onPageHide(event) {
