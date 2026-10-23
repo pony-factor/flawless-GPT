@@ -47,6 +47,18 @@
     return { remaining, total };
   }
 
+  // Scoped totals supersede the legacy single total, even when cleared.
+  function selectedResearchPieTotal(settings, mode = 'full') {
+    const selectedMode = mode === 'all' ? 'all' : 'full';
+    const scoped = settings?.deepResearchUsagePieTotals;
+    const preferred = scoped && typeof scoped === 'object' && !Array.isArray(scoped)
+      ? scoped[selectedMode]
+      : ((settings?.deepResearchAllowanceMode === 'all' ? 'all' : 'full') === selectedMode
+        ? settings.deepResearchUsagePieTotal : null);
+    return Number.isSafeInteger(preferred) && preferred > 0 && preferred <= 10000
+      ? preferred : null;
+  }
+
   function usagePiePercent(remaining, total) {
     if (!Number.isSafeInteger(remaining) || remaining < 0 ||
         !Number.isSafeInteger(total) || total <= 0 || remaining > total) return null;
@@ -54,7 +66,7 @@
   }
 
   if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { parseAllowance, selectedResearchQuota, usagePieTotal, usagePiePercent };
+    module.exports = { parseAllowance, selectedResearchQuota, selectedResearchPieTotal, usagePieTotal, usagePiePercent };
     return;
   }
   const context = globalThis.__ghrcExtensionContext;
@@ -79,7 +91,8 @@
     showDeepResearchComposerCount: true,
     showDeepResearchComposerReset: true,
     showDeepResearchUsagePie: false,
-    deepResearchUsagePieTotal: null,
+    deepResearchUsagePieTotal: null, // Legacy single-mode preference.
+    deepResearchUsagePieTotals: null,
     deepResearchAllowanceMode: 'full',
     deepResearchHomepageVisibility: 'near-reset',
     deepResearchHomepageWindowDays: 5,
@@ -272,7 +285,7 @@
     const pieRemaining = serverQuota ? selected?.remaining : (
       fresh && allowance.full && preferences.deepResearchAllowanceMode === 'full'
         ? allowance.remaining : null);
-    const preferredTotal = preferences.deepResearchUsagePieTotal;
+    const preferredTotal = selectedResearchPieTotal(preferences, preferences.deepResearchAllowanceMode);
     const reportedTotal = selected?.total ?? null;
     // A missing maximum must not silently disable an enabled pie. Use the
     // estimated scale in either mode and identify it in the tooltip; the
@@ -405,10 +418,6 @@
     const days = preferences.deepResearchHomepageWindowDays;
     preferences.deepResearchHomepageWindowDays =
       Number.isInteger(days) && days >= 1 && days <= 365 ? days : 5;
-    const selectedTotal = preferences.deepResearchUsagePieTotal;
-    preferences.deepResearchUsagePieTotal =
-      Number.isSafeInteger(selectedTotal) && selectedTotal > 0 && selectedTotal <= 10000
-        ? selectedTotal : null;
     preferences.deepResearchAllowanceMode = preferences.deepResearchAllowanceMode === 'all' ? 'all' : 'full';
     enabled = preferences.showDeepResearchTracker !== false;
     schedule();
