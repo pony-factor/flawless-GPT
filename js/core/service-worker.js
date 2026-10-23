@@ -4,7 +4,6 @@ const DEFAULT_OWNER_ORDER = [];
 const REPOSITORIES_PER_PAGE = 100;
 const REPOSITORY_CACHE_KEY = "repositoryPayloadCacheV3";
 const REPOSITORY_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
-const WOOTEN_LINK_TAB_ID_KEY = "wootenLinkSearchTabId";
 
 async function lookupCustomSearchRepository(fullName) {
   const name = typeof fullName === "string" ? fullName.trim() : "";
@@ -572,27 +571,19 @@ function requestRepositoryPayload() {
   return repositoryLoadRequest;
 }
 
-async function openWootenLink(urlValue) {
+async function openWootenLink(urlValue, sender) {
+  let source;
+  try { source = new URL(sender?.url); } catch { /* Invalid sender. */ }
+  if (source?.origin !== "https://chatgpt.com" || sender?.frameId !== 0
+      || !Number.isInteger(sender?.tab?.id)) {
+    throw new Error("wooten.link searches must originate from a ChatGPT tab");
+  }
   const url = new URL(urlValue);
   if (url.origin !== "https://wooten.link") {
     throw new Error("Only wooten.link URLs can be opened in the reference tab");
   }
 
-  const stored = await chrome.storage.session.get({ [WOOTEN_LINK_TAB_ID_KEY]: null });
-  const existingTabId = stored[WOOTEN_LINK_TAB_ID_KEY];
-  if (Number.isInteger(existingTabId)) {
-    try {
-      await chrome.tabs.update(existingTabId, { active: true, url: url.toString() });
-      return;
-    } catch {
-      await chrome.storage.session.remove(WOOTEN_LINK_TAB_ID_KEY);
-    }
-  }
-
-  const tab = await chrome.tabs.create({ active: true, url: url.toString() });
-  if (Number.isInteger(tab.id)) {
-    await chrome.storage.session.set({ [WOOTEN_LINK_TAB_ID_KEY]: tab.id });
-  }
+  await chrome.tabs.update(sender.tab.id, { url: url.toString() });
 }
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
@@ -632,7 +623,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   }
 
   if (message?.type === "open-wooten-link") {
-    openWootenLink(message.url)
+    openWootenLink(message.url, _sender)
       .then(() => sendResponse({ ok: true }))
       .catch((error) => sendResponse({ ok: false, error: error.message }));
     return true;
