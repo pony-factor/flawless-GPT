@@ -1087,6 +1087,49 @@ test('details source chips retain their layout with the sidebar action on the sa
   await page.close();
 });
 
+test('details citation layout survives React replacing classes on hover and leave', async () => {
+  const page = await fixture({ openExternalLinksInSplitView: true }, null, true, `
+    <p style="width:360px;font:16px/26px sans-serif">
+      <span style="display:inline-block;width:245px">Paragraph ending.</span>
+      <span style="display:inline-flex;max-width:100%;align-items:center;font:9px/9px sans-serif">
+        <a id="source" data-testid="chatgpt-citation" class="native-chip"
+          href="https://example.org/source" style="height:18px;font:9px/9px sans-serif">
+          <span style="display:flex;align-items:center;height:100%;width:100%">
+            <span style="flex:1">Berkeley Law</span><span>+1</span>
+          </span>
+        </a>
+      </span>
+    </p>`);
+  await page.addStyleTag({ content: '.native-chip{display:flex}' });
+  await page.locator('#source + .ghrc-link-with-actions').waitFor();
+  await page.locator('#source').evaluate(link => {
+    // ChatGPT's hover state renders a new className without extension classes.
+    link.addEventListener('mouseenter', () => { link.className = 'native-chip hovered'; });
+    link.addEventListener('mouseleave', () => { link.className = 'native-chip'; });
+  });
+  const measure = () => page.locator('#source').evaluate(link => ({
+    display: getComputedStyle(link).display,
+    link: link.getBoundingClientRect().toJSON(),
+    action: link.nextElementSibling.getBoundingClientRect().toJSON(),
+  }));
+  const before = await measure();
+  await page.locator('#source').hover();
+  assert.equal(await page.locator('#source').getAttribute('class'), 'native-chip hovered');
+  const hovered = await measure();
+  await page.mouse.move(0, 0);
+  const left = await measure();
+  for (const state of [before, hovered, left]) {
+    assert.equal(state.display, 'flex');
+    assert.ok(Math.abs(state.link.width - before.link.width) < 0.5, JSON.stringify(state));
+    assert.ok(state.action.left >= state.link.right, JSON.stringify(state));
+    assert.ok(Math.abs(state.action.top + state.action.height / 2
+      - state.link.top - state.link.height / 2) < 0.5, JSON.stringify(state));
+    assert.ok(state.action.right <= 360, JSON.stringify(state));
+  }
+  assert.deepEqual(page.errors, []);
+  await page.close();
+});
+
 test('sidebar buttons share a vertical center beside prose, punctuation and citation pills', async () => {
   const page = await fixture({ openExternalLinksInSplitView: true }, null, true, `
     <p style="font:16px/26px sans-serif">

@@ -1,7 +1,7 @@
 (() => {
   const GITHUB_APP_CONFIG = Object.freeze({
     clientId: "Iv23liukJaqMAIiIIfOz",
-    appSlug: "flawless-chatgpt",
+    appSlug: "flawless-pony",
   });
 
   const settingsTabs = [...document.querySelectorAll(".standalone-settings-tab")];
