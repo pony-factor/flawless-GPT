@@ -6,6 +6,7 @@ const { chromium } = require('playwright');
 const source = [
   'vendor/showdown.min.js',
   'vendor/purify.min.js',
+  'js/core/chatgpt-route-events.js',
   'js/chat/missing-response-recovery.js',
 ].map(file => fs.readFileSync(path.join(__dirname, '..', file), 'utf8')).join('\n;\n');
 let browser;
@@ -219,6 +220,71 @@ test('navigation during a saved-answer read cancels insertion', async () => {
   f.release();
   await f.p.waitForTimeout(150);
   assert.equal(await f.p.locator('[data-ghrc-recovered-answer]').count(), 0);
+  await f.p.close();
+});
+
+test('idle recovery stops after fifteen minutes and wakes on a new composer edit', async () => {
+  const f = await fixture();
+  await settle(f.p);
+  assert.equal(await f.p.locator('[data-ghrc-recovered-answer]').textContent(), 'Saved answer');
+  await f.p.clock.fastForward(15 * 60_000 + 2_000);
+  // The inactivity cutoff clears the cached conversation and cancels polling.
+  await f.p.locator('[data-ghrc-recovered-answer]').evaluate(node => node.remove());
+  const reads = f.reads();
+  await f.p.locator('#answer').click();
+  await f.p.clock.runFor(8_000);
+  assert.equal(await f.p.locator('[data-ghrc-recovered-answer]').count(), 0,
+    'unrelated UI interactions cannot restart an idle recovery scan');
+  assert.equal(f.reads(), reads, 'no further API reads in a settled chat');
+
+  await f.p.locator('textarea').fill('A new user prompt');
+  await f.p.clock.runFor(2_000);
+  await f.p.waitForFunction(() => document.querySelector('[data-ghrc-recovered-answer]')?.textContent === 'Saved answer');
+  assert.equal(f.reads(), reads + 1, 'new prompt activity restarts the scanner and its cache');
+  assert.equal(await f.p.locator('textarea').inputValue(), 'A new user prompt');
+  assert.deepEqual(f.errors, []);
+  await f.p.close();
+});
+
+test('navigation pauses recovery until a prompt in the new conversation', async () => {
+  const f = await fixture();
+  await settle(f.p);
+  assert.equal(await f.p.locator('[data-ghrc-recovered-answer]').textContent(), 'Saved answer');
+  await f.p.evaluate(() => history.pushState({}, '', '/c/different'));
+  await f.p.locator('[data-ghrc-recovered-answer]').evaluate(node => node.remove());
+  const reads = f.reads();
+  await f.p.clock.runFor(8_000);
+  assert.equal(f.reads(), reads);
+  assert.equal(await f.p.locator('[data-ghrc-recovered-answer]').count(), 0);
+
+  await f.p.locator('textarea').fill('Continue this conversation');
+  await f.p.clock.runFor(2_000);
+  await f.p.waitForFunction(() => document.querySelector('[data-ghrc-recovered-answer]')?.textContent === 'Saved answer');
+  assert.equal(f.reads(), reads + 1, 'a new prompt in the destination chat restarts recovery');
+  assert.deepEqual(f.errors, []);
+  await f.p.close();
+});
+
+test('sending from a new chat keeps recovery awake across creation of its conversation', async () => {
+  const f = await fixture();
+  await settle(f.p);
+  await f.p.evaluate(() => {
+    history.pushState({}, '', '/');
+    const send = document.createElement('button');
+    send.type = 'button';
+    send.dataset.testid = 'send-button';
+    send.textContent = 'Send';
+    document.querySelector('form').append(send);
+  });
+  await f.p.locator('[data-ghrc-recovered-answer]').evaluate(node => node.remove());
+  await f.p.locator('textarea').fill('Ask a fresh question');
+  await f.p.getByRole('button', { name: 'Send', exact: true }).click();
+  await f.p.evaluate(() => history.pushState({}, '', '/c/new-conversation'));
+  const reads = f.reads();
+  await f.p.clock.runFor(2_000);
+  await f.p.waitForFunction(() => document.querySelector('[data-ghrc-recovered-answer]')?.textContent === 'Saved answer');
+  assert.equal(f.reads(), reads + 1, 'the just-submitted prompt must not be paused by URL creation');
+  assert.deepEqual(f.errors, []);
   await f.p.close();
 });
 
