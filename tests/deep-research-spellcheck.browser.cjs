@@ -12,7 +12,7 @@ before(async () => {
 });
 after(async () => { await browser.close(); });
 
-async function fixture() {
+async function fixture({ enabled = true } = {}) {
   const page = await browser.newPage();
   const errors = [];
   page.on("pageerror", error => errors.push(error.message));
@@ -28,7 +28,15 @@ async function fixture() {
     ].join(""),
   }));
   await page.goto("https://chatgpt.com/");
-  await page.evaluate(() => {
+  await page.evaluate((enabled) => {
+    window.spellcheckPreference = enabled;
+    window.storageListeners = [];
+    window.setSpellcheckEnabled = next => {
+      const previous = window.spellcheckPreference;
+      window.spellcheckPreference = next;
+      const changes = { deepResearchSpellcheckEnabled: { oldValue: previous, newValue: next } };
+      for (const listener of [...window.storageListeners]) listener(changes, "local");
+    };
     window.requests = [];
     window.sent = 0;
     window.listeners = [];
@@ -47,9 +55,15 @@ async function fixture() {
           return { ok: true };
         },
       },
-      storage: { local: {} },
+      storage: {
+        local: { get: async defaults => ({ ...defaults, deepResearchSpellcheckEnabled: window.spellcheckPreference }) },
+        onChanged: {
+          addListener(fn) { window.storageListeners.push(fn); },
+          removeListener(fn) { window.storageListeners = window.storageListeners.filter(listener => listener !== fn); },
+        },
+      },
     };
-  });
+  }, enabled);
   for (const path of ["js/core/extension-context.js", "js/research/deep-research-spellcheck.js"])
     await page.addScriptTag({ content: fs.readFileSync(path, "utf8") });
   return { page, errors };
@@ -97,6 +111,38 @@ test("changed source draft cannot be replaced or submitted by a stale result", a
   assert.equal(await page.evaluate(() => applied.ok), false);
   assert.match(await page.locator("#prompt-textarea").innerText(), /User edited the original prompt/);
   assert.equal(await page.evaluate(() => sent), 0);
+  assert.deepEqual(errors, []);
+  await page.close();
+});
+test("disabling spellcheck restores normal Send and it can be re-enabled live", async () => {
+  const { page, errors } = await fixture({ enabled: false });
+  await page.getByRole("button", { name: "Send" }).click();
+  assert.equal(await page.evaluate(() => sent), 1);
+  assert.equal(await page.evaluate(() => requests.length), 0);
+  await page.evaluate(() => setSpellcheckEnabled(true));
+  await page.getByRole("button", { name: "Send" }).click();
+  await page.waitForFunction(() => requests.some(message => message.type === "ghrc-research-spellcheck-begin"));
+  assert.equal(await page.evaluate(() => sent), 1);
+  assert.deepEqual(errors, []);
+  await page.close();
+});
+
+test("disabling a pending spellcheck rejects stale corrections and allows Send", async () => {
+  const { page, errors } = await fixture();
+  await page.getByRole("button", { name: "Send" }).click();
+  await page.waitForFunction(() => requests.some(message => message.type === "ghrc-research-spellcheck-begin"));
+  await page.evaluate(() => setSpellcheckEnabled(false));
+  await page.evaluate(async () => {
+    window.applied = await new Promise(resolve => listeners.find(fn => fn({
+      type: "ghrc-research-spellcheck-apply", id: "job-one",
+      original: "Reserch this subject carefuly", corrected: "Research this subject carefully.",
+    }, {}, resolve)));
+  });
+  assert.equal(await page.evaluate(() => applied.ok), false);
+  assert.match(await page.locator("#prompt-textarea").innerText(), /Reserch this subject carefuly/);
+  assert.equal(await page.getByRole("button", { name: "Send reviewed Deep Research prompt" }).count(), 0);
+  await page.getByRole("button", { name: "Send" }).click();
+  assert.equal(await page.evaluate(() => sent), 1);
   assert.deepEqual(errors, []);
   await page.close();
 });

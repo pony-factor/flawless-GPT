@@ -5,6 +5,10 @@
 
   const DEEP_RESEARCH = "app://connector_openai_deep_research";
   const BANNER_ID = "ghrc-research-spellcheck-review";
+  const SETTING_KEY = "deepResearchSpellcheckEnabled";
+  // Never intercept Send before the saved preference is known.
+  let spellcheckEnabled = false;
+  let settingsRevision = 0;
   let running = false;
   let activeId = null;
   let approvedText = null;
@@ -86,7 +90,7 @@
   }
 
   async function start() {
-    if (running || !chatIsNew()) return;
+    if (!spellcheckEnabled || running || !chatIsNew()) return;
     const input = editor();
     const prompt = draft(input);
     if (prompt === null || !prompt.trim()) return;
@@ -111,7 +115,7 @@
   }
 
   function intercept(event) {
-    if (!event.isTrusted || !chatIsNew()) return;
+    if (!spellcheckEnabled || !event.isTrusted || !chatIsNew()) return;
     const input = editor();
     const prompt = draft(input);
     if (prompt === null || !prompt.trim()) return;
@@ -134,7 +138,7 @@
 
   async function replaceDraft(original, corrected) {
     const input = editor();
-    if (!chatIsNew() || !input || draft(input) !== original)
+    if (!spellcheckEnabled || !chatIsNew() || !input || draft(input) !== original)
       throw new Error("The research prompt changed while spellchecking; its current draft was preserved.");
     const token = mention(input);
     if (!token) throw new Error("The Deep Research app mention disappeared.");
@@ -243,7 +247,34 @@
     }
   }
 
+  function setSpellcheckEnabled(value) {
+    spellcheckEnabled = value !== false;
+    if (spellcheckEnabled) return;
+    // Invalidates in-flight corrections and removes stale Go controls.
+    running = false;
+    activeId = null;
+    approvedText = null;
+    document.getElementById(BANNER_ID)?.remove();
+  }
+
+  function settingsChanged(changes, area) {
+    if (area !== "local" || !changes[SETTING_KEY]) return;
+    settingsRevision++;
+    setSpellcheckEnabled(changes[SETTING_KEY].newValue);
+  }
+
+  if (globalThis.chrome?.storage?.local?.get) {
+    chrome.storage.onChanged?.addListener(settingsChanged);
+    const loadRevision = settingsRevision;
+    void chrome.storage.local.get({ [SETTING_KEY]: true })
+      .then(settings => {
+        if (loadRevision === settingsRevision) setSpellcheckEnabled(settings[SETTING_KEY]);
+      })
+      .catch(error => context.handleError?.(error));
+  }
+
   context.onStop(() => {
+    globalThis.chrome?.storage?.onChanged?.removeListener(settingsChanged);
     for (const type of ["keydown", "click", "submit"])
       window.removeEventListener(type, intercept, true);
     document.getElementById(BANNER_ID)?.remove();

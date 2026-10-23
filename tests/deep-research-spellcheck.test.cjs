@@ -139,3 +139,13 @@ test("composer interception is gated on a real Deep Research mention and approve
   assert.match(content, /Review the corrected prompt and press Go/);
   assert.match(content, /The research prompt changed while spellchecking/);
 });
+test("the Research setting defaults on, persists, and gates composer interception", () => {
+  const html = fs.readFileSync(path.join(__dirname, "../options.html"), "utf8");
+  const settings = fs.readFileSync(path.join(__dirname, "../js/settings/options.js"), "utf8");
+  assert.match(html, /id="deep-research-spellcheck-enabled" type="checkbox" checked/);
+  assert.match(settings, /deepResearchSpellcheckEnabled: true/);
+  assert.match(settings, /deepResearchSpellcheckEnabled: deepResearchSpellcheckEnabledInput.checked/);
+  assert.match(content, /if \(!spellcheckEnabled \|\| !event.isTrusted \|\| !chatIsNew\(\)\) return/);
+  assert.match(content, /chrome.storage.onChanged\?\.addListener\(settingsChanged\)/);
+  assert.match(content, /if \(!spellcheckEnabled \|\| !chatIsNew\(\) \|\| !input \|\| draft\(input\) !== original\)/);
+});
