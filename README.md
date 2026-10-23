@@ -50,6 +50,13 @@ https://github.com/JFWooten4/JFWooten4/blob/main/headshots/final-form/README.md
 
 ## Install
 
+On macOS, double-click `Test in Brave.command` to open ChatGPT in a separate
+Brave test profile with this checkout loaded as an unpacked extension. Each
+checkout has its own persistent test profile. Sign in and configure the extension
+once in that profile. After editing the extension, reload its card in
+`brave://extensions` and refresh the test tab, or fully quit the test browser
+instance and run the launcher again.
+
 1. Download or clone this repository.
 2. Open `chrome://extensions` in Chrome or `brave://extensions` in Brave.
 3. Turn on **Developer mode**.
