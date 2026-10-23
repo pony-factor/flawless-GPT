@@ -9,6 +9,8 @@
   let scheduled = false;
   let frameTimer;
   let automaticBusy = false;
+  let lookupRetryCount = 0;
+  const MAX_JOB_LOOKUP_RETRIES = 60;
   let finalized = false;
   let disposed = false;
   const reportCandidates = new WeakMap();
@@ -74,8 +76,19 @@
     if (!scope || scope.querySelector('[aria-busy="true"], [role="progressbar"]') || download.disabled) return;
     automaticBusy = true;
     try {
-      const response = await request({ type: 'research-launch-job' });
-      if (!response?.ok) throw new Error(response?.error || 'Could not check automatic import. Retrying…');
+      let response;
+      try {
+        response = await request({ type: 'research-launch-job' });
+        if (!response?.ok) throw new Error(response?.error || 'Could not check automatic import. Retrying…');
+        lookupRetryCount = 0;
+      } catch (error) {
+        // A reconnecting service worker can fail before providing a job state.
+        // Retry only while this report is present, with a bounded recovery
+        // window rather than an idle timer running in every sandbox forever.
+        lookupRetryCount++;
+        pollActiveImport(lookupRetryCount <= MAX_JOB_LOOKUP_RETRIES);
+        throw error;
+      }
       const { job } = response;
       const status = scope.querySelector('.ghrc-report-status');
       pollActiveImport(['submitted', 'importing', 'import-retry'].includes(job?.state));
