@@ -18,6 +18,8 @@
   let pointer = { x: Number.POSITIVE_INFINITY, y: Number.POSITIVE_INFINITY, inside: false };
 
   function sidebarToggleState() {
+    // Settings has its own navigation; leave its sidebar under native control.
+    if (/(?:^|\/)settings(?:\/|$)/.test(location.pathname)) return null;
     const buttons = document.querySelectorAll("button[aria-label]");
 
     for (const button of buttons) {
