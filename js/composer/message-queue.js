@@ -1394,9 +1394,12 @@
     return true;
   }
 
-  async function sendClipboardText(text) {
+  async function sendClipboardText(text, mentions = []) {
     if (!context.active() || !stateLoaded || routeSyncRunning || conversationKey() !== activeKey) return false;
     text = normalizedText(text);
+    const validMentions = normalizeMentions(mentions, text);
+    if (validMentions.length !== mentions.length) return false;
+    mentions = validMentions;
     if (!text.trim()) return false;
     const composer = findComposerInput();
     if (!composer) return false;
@@ -1404,9 +1407,9 @@
     // Use the same completion gate as the FIFO, rather than treating a missing
     // Stop/streaming indicator as permission to submit and interrupt that work.
     if (queue.length || !queueCanAdvance(lifecycleSnapshot(), COMPLETE_SETTLE_MS) || nativeSubmissionPending(composer)
-      || sendingItemId || enqueueRunning || interruptRunning) return enqueueText(text);
+      || sendingItemId || enqueueRunning || interruptRunning) return enqueueText(text, [], mentions);
     // Preserve attachments and selected context for the existing draft.
-    if (hasComposerContext(composer)) return enqueueText(text);
+    if (hasComposerContext(composer)) return enqueueText(text, [], mentions);
 
     const key = activeKey;
     const draft = composerText(composer);
@@ -1419,13 +1422,14 @@
     scheduleMount();
     try {
       replaced = true;
-      if (!await replaceComposerText(composer, text)) return false;
+      if (!await replaceComposerText(composer, text, mentions)) return false;
       const deadline = Date.now() + SUBMIT_TIMEOUT_MS;
       while (Date.now() < deadline) {
         if (!context.active() || key !== activeKey || conversationKey() !== key || routeSyncRunning
           || composer !== findComposerInput() || !composer.isConnected
-          || !textMatchesComposer(composer, text) || hasComposerContext(composer)) return false;
-        if (!queueCanAdvance(lifecycleSnapshot(), COMPLETE_SETTLE_MS) || queue.length) return enqueueText(text);
+          || !textMatchesComposer(composer, text) || !mentionsMatch(composer, mentions)
+          || hasComposerContext(composer)) return false;
+        if (!queueCanAdvance(lifecycleSnapshot(), COMPLETE_SETTLE_MS) || queue.length) return enqueueText(text, [], mentions);
         const sendButton = findSendButton(composer);
         if (sendButton && !sendButton.disabled && sendButton.getAttribute("aria-disabled") !== "true") {
           sendButton.click();
@@ -1455,7 +1459,7 @@
   // when idle, and otherwise join the FIFO without clicking Stop.
   globalThis.__ghrcMessageQueue = {
     enqueueText: text => context.run(() => enqueueText(text)),
-    sendClipboardText: text => context.run(() => sendClipboardText(text)),
+    sendClipboardText: (text, mentions) => context.run(() => sendClipboardText(text, mentions)),
     findComposerInput,
     findActionButton,
   };

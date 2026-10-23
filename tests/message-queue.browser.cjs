@@ -2221,6 +2221,80 @@ async function enableAppMentions(page) {
   });
 }
 
+
+for (const active of [false, true]) {
+  test(`clipboard rich app mention keeps plugin identity (${active ? 'queued' : 'immediate'})`, async () => {
+    const p = await fixture({ active, clipboard: true });
+    await enableAppMentions(p);
+    await p.evaluate(() => {
+      const plain = 'Review with CourtListener, then summarize';
+      const html = '<p>Review with <span app-mention-path="app://plugin_courtlistener" app-mention-name="courtlistener" app-mention-display-name="CourtListener" data-prompt-link-href="app://plugin_courtlistener" contenteditable="false">CourtListener</span>, then summarize</p>';
+      Object.defineProperty(navigator, 'clipboard', { configurable: true, value: {
+        async read() {
+          return [{ types: ['text/plain', 'text/html'], async getType(type) {
+            return new Blob([type === 'text/plain' ? plain : html], { type });
+          } }];
+        },
+        async readText() { throw Error('rich clipboard path must be used'); },
+      } });
+      if (!window.active) window.rejectQueueSave = true;
+    });
+    await p.locator('[data-composer-markdown]').fill('Keep existing draft');
+    await p.locator('#ghrc-clipboard-send-button').click();
+    if (active) {
+      await p.locator('.ghrc-message-queue-editor').waitFor();
+      const saved = await p.evaluate(() => structuredClone(storage));
+      const entry = saved.queuedChatMessages['conversation:test'][0];
+      assert.equal(entry.mentions[0].attributes['app-mention-path'], 'app://plugin_courtlistener');
+      assert.equal(entry.text, 'Review with CourtListener, then summarize');
+      assert.equal(await p.evaluate(() => read()), 'Keep existing draft');
+      await p.evaluate(() => finish());
+    }
+    await sentCount(p, 1);
+    assert.deepEqual(await p.evaluate(() => sentApps), [['app://plugin_courtlistener']]);
+    await p.waitForFunction(() => read() === 'Keep existing draft');
+    assert.deepEqual(p.errors, []);
+    await p.close();
+  });
+}
+
+test('clipboard-only Markdown app links are sent as app mentions', async () => {
+  const p = await fixture({ active: false, clipboard: true });
+  await enableAppMentions(p);
+  await p.evaluate(() => {
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: {
+      readText: async () => 'Use [CourtListener](app://plugin_courtlistener) for this research',
+    } });
+  });
+  await p.locator('#ghrc-clipboard-send-button').click();
+  await sentCount(p, 1);
+  assert.deepEqual(await p.evaluate(() => sent), ['Use CourtListener for this research']);
+  assert.deepEqual(await p.evaluate(() => sentApps), [['app://plugin_courtlistener']]);
+  assert.deepEqual(p.errors, []);
+  await p.close();
+});
+
+test('clipboard refuses to flatten rich plugins when their positions cannot be mapped', async () => {
+  const p = await fixture({ clipboard: true });
+  await p.evaluate(() => {
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: {
+      async read() {
+        return [{ types: ['text/plain', 'text/html'], async getType(type) {
+          return new Blob([type === 'text/plain' ? 'A different prompt' : '<p><span app-mention-path="app://plugin_courtlistener">CourtListener</span></p>'], { type });
+        } }];
+      },
+    } });
+  });
+  await p.locator('[data-composer-markdown]').fill('Keep existing draft');
+  await p.locator('#ghrc-clipboard-send-button').click();
+  await p.getByRole('button', { name: 'Clipboard plugin could not be preserved; paste manually' }).waitFor();
+  assert.deepEqual(await p.evaluate(() => sent), []);
+  assert.equal(await p.evaluate(() => read()), 'Keep existing draft');
+  assert.equal(await p.locator('.ghrc-message-queue-editor').count(), 0);
+  assert.deepEqual(p.errors, []);
+  await p.close();
+});
+
 for (const [label, connector] of [['Deep research', 'connector_openai_deep_research'], ['CourtListener', 'courtlistener']]) {
   test(`queued ${label} preserves app identity through storage and prompt edits`, async () => {
     let p = await fixture({ active: true });
