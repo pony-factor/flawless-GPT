@@ -7,10 +7,12 @@ const read = file => fs.readFileSync(path.join(__dirname, '..', file), 'utf8');
 let browser;
 before(async () => { browser = await chromium.launch({executablePath:'/Applications/Brave Browser.app/Contents/MacOS/Brave Browser',headless:true}); });
 after(async () => { await browser?.close(); });
-async function fixture({labels=['Show sidebar','Hide sidebar'], enabled=true, expanded=false, delay=0, storageDelay=0, duplicate=false, mouseOnly=false, pausedFrames=false, ignoreExitOutEvents=false}={}) {
+async function fixture({labels=['Show sidebar','Hide sidebar'], enabled=true, expanded=false, delay=0, storageDelay=0, duplicate=false, mouseOnly=false, pausedFrames=false, ignoreExitOutEvents=false, routePath="/"}={}) {
   const page = await browser.newPage();
   page.errors=[];
   page.on('pageerror', error => page.errors.push(error.message));
+  await page.route("http://sidebar.test/**", route => route.fulfill({ contentType: "text/html", body: "" }));
+  await page.goto(`http://sidebar.test${routePath}`);
   await page.setContent(`<style>
     body{margin:0}
     aside{position:fixed;top:0;left:0;height:100vh;width:260px}
@@ -388,5 +390,32 @@ test('the full rail below Library opens the sidebar with one mascot', async () =
   await page.waitForFunction(() => document.querySelector('aside').dataset.expanded === 'false');
   assert.equal(await page.evaluate(() => clicks), 2);
   assert.deepEqual(page.errors, []);
+  await page.close();
+});
+
+
+test('settings route sidebars stay expanded on load, pointer exit, and preference changes', async () => {
+  for (const routePath of ['/settings', '/settings/personalization', '/codex/settings/general']) {
+    const page = await fixture({ routePath, expanded: true });
+    await page.mouse.move(500, 250);
+    await page.evaluate(() => listeners.forEach(listener => listener({
+      hoverRevealSidebar: { newValue: true },
+    }, 'local')));
+    await page.waitForTimeout(200);
+    assert.equal(await page.locator('aside').getAttribute('data-expanded'), 'true');
+    assert.equal(await page.evaluate(() => clicks), 0);
+    await page.close();
+  }
+});
+
+test('a pending hover collapse does not close the sidebar after navigating to settings', async () => {
+  const page = await fixture();
+  await page.mouse.move(12, 250);
+  await page.waitForFunction(() => document.querySelector('aside').dataset.expanded === 'true');
+  await page.mouse.move(500, 250);
+  await page.evaluate(() => history.pushState({}, '', '/codex/settings'));
+  await page.waitForTimeout(200);
+  assert.equal(await page.locator('aside').getAttribute('data-expanded'), 'true');
+  assert.equal(await page.evaluate(() => clicks), 1);
   await page.close();
 });
