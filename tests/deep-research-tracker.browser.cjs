@@ -197,7 +197,7 @@ test('Research settings show the composer only when homepage allowance details a
         showDeepResearchHomepageCount: true, showDeepResearchHomepageReset: false,
         showDeepResearchComposerCount: false, showDeepResearchComposerReset: true,
         deepResearchHomepageVisibility: 'always', deepResearchHomepageWindowDays: 5,
-        deepResearchAllowanceMode: 'full', deepResearchUsagePieTotal: 25,
+        deepResearchAllowanceMode: 'full', deepResearchUsagePieTotal: null,
       };
       window.listeners = [];
       window.chrome = { storage: { local: { async get(defaults) { return { ...defaults, ...window.settings }; } }, onChanged: {
@@ -211,6 +211,7 @@ test('Research settings show the composer only when homepage allowance details a
         remaining: 13, resetAt: Date.now() + 10 * 24 * 3600_000, observedAt: Date.now(),
       }));
     });
+    await page.addStyleTag({ content: fs.readFileSync(path.join(__dirname, '../css/deep-research-tracker.css'), 'utf8') });
     await page.addScriptTag({ content: fs.readFileSync(path.join(__dirname, '../js/research/deep-research-tracker.js'), 'utf8') });
     const homepage = page.locator('#ghrc-deep-research-tracker');
     const composer = page.locator('#ghrc-deep-research-tracker-composer');
@@ -222,6 +223,13 @@ test('Research settings show the composer only when homepage allowance details a
     assert.equal(await pie.isVisible(), false, 'pie is opt-in by default');
     await page.evaluate(() => window.changeResearchSetting('showDeepResearchUsagePie', true));
     await page.waitForFunction(() => !document.querySelector('#ghrc-deep-research-tracker .ghrc-research-usage-pie').hidden);
+    assert.equal(await pie.isVisible(), true, 'full-only Auto mode renders a visible pie without a server total');
+    assert.match(await homepage.getAttribute('title'), /13 of 25 full reports remaining.*estimated allowance/);
+    await page.evaluate(() => window.changeResearchSetting('deepResearchUsagePieTotal', 20));
+    await page.waitForFunction(() => document.getElementById('ghrc-deep-research-tracker').title.includes('13 of 20'));
+    assert.doesNotMatch(await homepage.getAttribute('title'), /estimated allowance/);
+    await page.evaluate(() => window.changeResearchSetting('deepResearchUsagePieTotal', null));
+    await page.waitForFunction(() => document.getElementById('ghrc-deep-research-tracker').title.includes('13 of 25'));
     assert.equal(await homepage.innerText(), '', 'pie replaces only the visible report count');
     assert.match(await homepage.getAttribute('aria-label'), /13 left.*full/);
     assert.match(await pie.evaluate(node => node.style.background), /conic-gradient\(from 0deg/i);

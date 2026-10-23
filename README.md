@@ -21,7 +21,7 @@ The dashboard:
 - can skip ChatGPT's external-site warning and dismiss its history rate-limit
   modal independently;
 - hides ChatGPT's usage remaining / credits card by default;
-- offers an opt-in, Sweetiebot-style 12px pie for Deep Research; the counter defaults to full research only and can switch to full + lightweight when both quotas are reported. The full-only pie needs a reported full limit or an optional user-configured maximum; historical 25/250 totals are used only as estimates in combined mode. Colors inherit Chat bar preferences;
+- offers an opt-in, Sweetiebot-style 12px pie for Deep Research; the counter defaults to full research only and can switch to full + lightweight when both quotas are reported. The pie uses a reported limit or an optional user-configured maximum, falling back to an explicitly labeled estimated scale of 25 or 250. Colors inherit Chat bar preferences;
 - hides promotional ChatGPT plan-upgrade banners such as the Astra Pro upsell by default, without removing conversation content;
 - queues follow-up messages locally while ChatGPT is responding, keeps them editable and reorderable, and sends them FIFO only after the active response fully completes;
 - adds columns for any other GitHub accounts the connected tokens can access;
@@ -144,10 +144,9 @@ settings. Changes save automatically and update existing ChatGPT tabs.
 The **Counter allowance** setting defaults to **Full research only**, using
 ChatGPT's `deep_research` quota and excluding the `deep_research_mini` lightweight
 pool. Switch to **Full + lightweight** to display the sum only when both buckets
-are available. The pie and exact accessible count use the same selection. In
-full-only mode the pie needs a server-reported full total or a manually selected
-full maximum; historical 25/250 *combined* totals are never applied to full
-research. A missing combined quota is shown as unavailable, not invented.
+are available. The pie and exact accessible count use the same selection. When no total is available, either mode uses an estimated scale of 25 or 250,
+identified as an estimate in the tooltip. Enter your actual maximum under
+**Pie allowance total** for an accurate percentage. A missing combined quota is shown as unavailable, not invented.
 
 Counts come from ChatGPT's native Deep Research allowance; stale observations
 are labeled as last checked rather than being presented as fresh balances.
