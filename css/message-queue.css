@@ -9,7 +9,10 @@
   color: inherit;
   margin: 0 auto 8px;
   max-width: calc(100vw - 28px);
-  overflow: hidden;
+  max-height: var(--ghrc-queue-max-height, 60dvh);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
   position: relative;
   container-type: inline-size;
   left: var(--ghrc-queue-left-offset, 0px);
