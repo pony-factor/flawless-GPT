@@ -14,7 +14,13 @@
   function stopMonitoring() {
     clearInterval(frameTimer);
     frameTimer = undefined;
-    for (const observer of observers.values()) observer.disconnect();
+    for (const [doc, observer] of observers) {
+      observer.disconnect();
+      if (finalized) doc.removeEventListener('load', schedule, true);
+    }
+    // A completed report must not retain references to stale sandbox documents.
+    // On pagehide without finalization, keep handles for a BFCache restoration.
+    if (finalized) observers.clear();
   }
   function finalizeReport(doc) {
     if (finalized) return;
@@ -28,13 +34,13 @@
 
   async function request(message) {
     if (!globalThis.chrome?.runtime?.sendMessage) {
-      clearInterval(frameTimer);
+      stopMonitoring();
       throw new Error(RELOAD_MESSAGE);
     }
     try { return await chrome.runtime.sendMessage(message); }
     catch (error) {
       if (/extension context invalidated/i.test(error?.message || '')) {
-        clearInterval(frameTimer);
+        stopMonitoring();
         throw new Error(RELOAD_MESSAGE);
       }
       throw error;
@@ -232,9 +238,10 @@
     enabled = Boolean(value);
     if (finalized) return;
     clearInterval(frameTimer);
-    // Revisit active report documents to recover document.open() replacements
-    // and interrupted imports; never restart after repository finalization.
-    frameTimer = setInterval(schedule, 1000);
+    frameTimer = undefined;
+    // Only an enabled publisher needs the one-second recovery scan.
+    // Fullscreen/report links still work via the lightweight DOM listener.
+    if (enabled) frameTimer = setInterval(schedule, 1000);
     schedule();
   }
 
@@ -249,8 +256,8 @@
     }
 
   });
-  // Report links and fullscreen state work independently of the publishing preference.
-  if (!frameTimer && !finalized) frameTimer = setInterval(schedule, 1000);
+  // Report links and fullscreen state work even when publishing is disabled.
+  // Do not start a polling timer before the stored preference is loaded.
   window.addEventListener('pagehide', stopMonitoring);
   window.addEventListener('pageshow', event => {
     if (event.persisted && !finalized) {
