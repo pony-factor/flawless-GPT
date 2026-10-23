@@ -16,6 +16,10 @@ async function fixture({ enabled = true, existingChat = false } = {}) {
   const page = await browser.newPage();
   const errors = [];
   page.on("pageerror", error => errors.push(error.message));
+  page.on("console", message => {
+    if (message.type() === "warning" && message.text().includes("Flawless ChatGPT action failed:"))
+      errors.push(message.text());
+  });
   await page.route("https://chatgpt.com/**", route => route.fulfill({
     contentType: "text/html",
     body: [
@@ -75,6 +79,19 @@ async function fixture({ enabled = true, existingChat = false } = {}) {
     await page.addScriptTag({ content: fs.readFileSync(path, "utf8") });
   return { page, errors };
 }
+
+test("temporary-pane boot claims only on a new chat without extension errors", async () => {
+  for (const existingChat of [false, true]) {
+    const { page, errors } = await fixture({ existingChat });
+    await page.waitForTimeout(30);
+    const claims = await page.evaluate(() => requests.filter(
+      request => request.type === "ghrc-research-spellcheck-claim",
+    ).length);
+    assert.equal(claims, existingChat ? 0 : 1);
+    assert.deepEqual(errors, []);
+    await page.close();
+  }
+});
 
 test("Enter defers Deep Research, applies Spellcheck result and requires a deliberate Go", async () => {
   const { page, errors } = await fixture();

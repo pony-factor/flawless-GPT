@@ -235,7 +235,7 @@
   }
 
   async function runTemporaryPane() {
-    if (!chatIsNew()) return;
+    if (location.pathname !== "/") return;
     const { job } = await ask({ type: "ghrc-research-spellcheck-claim" });
     if (!job) return;
     try {
