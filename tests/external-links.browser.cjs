@@ -829,22 +829,53 @@ test('the vertical divider resizes the sidebar and persists the allocation', asy
   await page.close();
 });
 
-test('blocked embedded previews can still fall back to the browser native split', async () => {
+test('only failed embeds fall back to a separate tab without adding another sidebar', async () => {
   const page = await fixture({ openExternalLinksInSplitView: true });
   await page.locator('.ghrc-link-sidebar-button').click();
   await page.frameLocator('#ghrc-link-preview iframe').frameLocator('iframe').locator('h1').waitFor();
-  const watch = (await page.evaluate(() => previewRequests)).find(message => message.type === 'watch-link-preview');
-  assert.ok(watch);
-  await page.evaluate(watch => {
-    window.nativeSplitSupported = true;
-    runtimeListeners.forEach(fn => fn({
-      type: 'link-preview-navigation-error',
-      previewId: watch.previewId,
-      url: watch.url,
-    }));
-  }, watch);
-  await page.waitForFunction(() => previewRequests.filter(message => message.type === 'open-native-split-view').length === 2);
+  assert.equal((await page.evaluate(() => previewRequests)).filter(msg => msg.type === 'open-blocked-link-preview').length, 0);
+  assert.equal(await page.getByRole('button', { name: 'Verify website', exact: true }).count(), 0);
+  await page.evaluate(() => {
+    const watch = previewRequests.find(msg => msg.type === 'watch-link-preview');
+    const error = { type: 'link-preview-navigation-error', previewId: watch.previewId, url: watch.url, error: 'net::ERR_BLOCKED_BY_RESPONSE' };
+    runtimeListeners.forEach(fn => { fn(error); fn(error); });
+  });
+  await page.waitForFunction(() => !document.querySelector('#ghrc-link-preview'));
+  const requests = await page.evaluate(() => previewRequests);
+  assert.equal(requests.filter(msg => msg.type === 'open-blocked-link-preview').length, 1);
+  assert.equal(requests.filter(msg => msg.type === 'open-native-split-view').length, 1);
+  await page.close();
+});
+
+test('a failed fallback tab leaves a usable manual open control', async () => {
+  const page = await fixture({ openExternalLinksInSplitView: true });
+  await page.locator('.ghrc-link-sidebar-button').click();
+  await page.frameLocator('#ghrc-link-preview iframe').frameLocator('iframe').locator('h1').waitFor();
+  await page.evaluate(() => {
+    const original = chrome.runtime.sendMessage;
+    chrome.runtime.sendMessage = msg => msg.type === 'open-blocked-link-preview' ? Promise.resolve({ ok: false }) : original(msg);
+    const watch = previewRequests.find(msg => msg.type === 'watch-link-preview');
+    runtimeListeners.forEach(fn => fn({ type: 'link-preview-navigation-error', previewId: watch.previewId, url: watch.url, destinationUrl: 'https://doi.org/10.15779/Z38D795C24', error: 'net::ERR_BLOCKED_BY_RESPONSE' }));
+  });
+  await page.getByRole('status').getByText(/cannot load in the sidebar/).waitFor();
+  assert.equal(await page.getByRole('link', { name: 'Open this link in a new tab', exact: true }).getAttribute('href'), 'https://doi.org/10.15779/Z38D795C24');
+  await page.getByRole('link', { name: 'Open in new tab', exact: true }).click();
+  assert.equal((await page.evaluate(() => openedLinks)).length, 1);
   assert.equal(await page.locator('#ghrc-link-preview').count(), 0);
+  await page.close();
+});
+
+test('clicking a working website link navigates inside the sidebar without opening a tab', async () => {
+  const page = await fixture({ openExternalLinksInSplitView: true });
+  await page.route('https://example.org/**', route => route.fulfill({ contentType: 'text/html', body:
+    route.request().url().includes('/next') ? '<h1>Next page</h1>' : '<a href="https://example.org/next">Read next page</a>' }));
+  await page.locator('.ghrc-link-sidebar-button').click();
+  const website = page.frameLocator('#ghrc-link-preview iframe').frameLocator('iframe');
+  await website.getByRole('link', { name: 'Read next page' }).click();
+  await website.getByRole('heading', { name: 'Next page' }).waitFor();
+  assert.equal(await page.locator('#ghrc-link-preview').count(), 1);
+  assert.equal((await page.evaluate(() => previewRequests)).filter(msg => msg.type === 'open-blocked-link-preview').length, 0);
+  assert.deepEqual(await page.evaluate(() => openedLinks), []);
   await page.close();
 });
 
