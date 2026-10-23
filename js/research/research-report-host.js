@@ -1,5 +1,5 @@
 (() => {
-  chrome.runtime.onMessage.addListener((message, sender, respond) => {
+  function reportContextListener(message, sender, respond) {
     if (message?.type !== 'research-report-context') return false;
     const title = document.title.replace(/\s*[-–|]\s*ChatGPT\s*$/i, '').trim();
     const frames = [...document.querySelectorAll('iframe')].filter(node =>
@@ -12,7 +12,8 @@
     const prompt = preceding.at(-1)?.textContent.trim() || '';
     respond({ title: title && !/^(ChatGPT|New chat)$/i.test(title) ? title : prompt.slice(0, 2000), prompt: prompt.slice(0, 2000) });
     return false;
-  });
+  }
+  chrome.runtime.onMessage.addListener(reportContextListener);
   const context = globalThis.__ghrcExtensionContext;
   if (context && !context.active()) return;
   const reports = new Map();
@@ -26,7 +27,7 @@
     window.removeEventListener('resize', update);
   }
   function update() {
-    if (disposed) return;
+    if (disposed || (context && !context.active())) return;
     let expanded = false;
     for (const [frame, state] of reports) {
       if (!frame.isConnected) { reports.delete(frame); continue; }
@@ -78,6 +79,7 @@
     stopMonitoring();
     reports.clear();
     window.removeEventListener('message', onReportState);
+    globalThis.chrome?.runtime?.onMessage?.removeListener?.(reportContextListener);
     window.removeEventListener('pagehide', onPageHide);
     document.documentElement.removeAttribute(ATTRIBUTE);
     style.remove();
