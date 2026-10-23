@@ -5,6 +5,11 @@
   white-space: nowrap;
 }
 
+/* A running timer may nest the native text in explicitly sized spans. */
+[data-ghrc-worked-duration] :where(span, time) {
+  font-size: 0 !important;
+}
+
 [data-ghrc-worked-duration]::before {
   content: "";
   background: var(--ghrc-worked-artwork) center / contain no-repeat;
