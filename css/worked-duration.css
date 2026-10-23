@@ -35,6 +35,15 @@
   display: none;
 }
 
+/* Before the first full minute, hiding only the cannon leaves ChatGPT's
+   native disclosure chevron behind. Hide the entire disclosure control,
+   whether the duration label is on the button or nested inside it. A live
+   update to 1m immediately restores the normal button and cannon. */
+[data-ghrc-worked-duration][data-ghrc-worked-minutes=""],
+:is(button, [role="button"], summary):has([data-ghrc-worked-duration][data-ghrc-worked-minutes=""]) {
+  display: none !important;
+}
+
 /* Optional one-dot-per-minute display, placed to the left of the cannon. */
 [data-ghrc-worked-duration][data-ghrc-worked-dots-mode] {
   display: inline-flex;
