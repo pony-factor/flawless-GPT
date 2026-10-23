@@ -65,6 +65,104 @@ test('fullscreen hides both composer versions and restores them when the report 
   } finally { await browser.close(); }
 });
 
+test('report host observes only active frames and disconnects after finalization', async () => {
+  const browser = await chromium.launch({ executablePath: '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser', headless: true });
+  try {
+    const page = await browser.newPage();
+    await page.setContent('<form><div id="prompt-textarea">Draft</div></form><div style="position:fixed;inset:0"><iframe src="about:blank"></iframe></div>');
+    await page.evaluate(() => {
+      const NativeObserver = MutationObserver;
+      window.hostObserverStats = { created: 0, observing: 0, disconnected: 0 };
+      window.MutationObserver = class extends NativeObserver {
+        constructor(callback) { super(callback); hostObserverStats.created++; }
+        observe(...args) { hostObserverStats.observing++; return super.observe(...args); }
+        disconnect() { hostObserverStats.disconnected++; return super.disconnect(); }
+      };
+      window.__ghrcExtensionContext = { active: () => true, onStop: cleanup => { window.cleanupHost = cleanup; } };
+      window.reportEvent = details => window.dispatchEvent(new MessageEvent('message', {
+        origin: 'https://mcp-app-abc123.web-sandbox.oaiusercontent.com',
+        source: document.querySelector('iframe').contentWindow,
+        data: { type: 'ghrc-research-report-state', ...details },
+      }));
+    });
+    await page.addScriptTag({ content: fs.readFileSync('js/research/research-report-host.js', 'utf8') });
+    assert.deepEqual(await page.evaluate(() => hostObserverStats), { created: 0, observing: 0, disconnected: 0 });
+    await page.evaluate(() => reportEvent({ report: true }));
+    await page.waitForFunction(() => hostObserverStats.observing === 1);
+    assert.equal(await page.locator('form').evaluate(node => getComputedStyle(node).visibility), 'hidden');
+
+    await page.evaluate(() => reportEvent({ report: true, finalized: true }));
+    await page.waitForFunction(() => hostObserverStats.disconnected === 1);
+    assert.equal(await page.locator('form').evaluate(node => getComputedStyle(node).visibility), 'visible');
+    await page.evaluate(() => reportEvent({ report: true }));
+    await page.waitForTimeout(50);
+    assert.equal(await page.evaluate(() => hostObserverStats.observing), 1, 'stale messages cannot restart a finalized report observer');
+
+    // Reuse of the iframe for a different report is a new lifecycle.
+    await page.locator('iframe').evaluate(node => { node.src = 'about:blank#another-report'; });
+    await page.evaluate(() => reportEvent({ report: true }));
+    await page.waitForFunction(() => hostObserverStats.observing === 2);
+    await page.evaluate(() => cleanupHost());
+    assert.equal(await page.evaluate(() => hostObserverStats.disconnected), 2);
+    assert.equal(await page.locator('form').evaluate(node => getComputedStyle(node).visibility), 'visible');
+    assert.equal(await page.locator('style').evaluateAll(nodes =>
+      nodes.some(node => node.textContent.includes('data-ghrc-research-fullscreen'))), false);
+  } finally { await browser.close(); }
+});
+
+test('automatic report publishing stops its recovery timer and DOM observers after Git success', async () => {
+  const browser = await chromium.launch({ executablePath: '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser', headless: true });
+  try {
+    const page = await browser.newPage();
+    await page.setContent('<section><div><button aria-label="Export">Export</button></div><article class="_reportPage_fixture"><h1>Finished report</h1><p>Evidence and references.</p></article></section>');
+    await page.evaluate(() => {
+      window.observerStats = { started: 0, stopped: 0 };
+      const NativeObserver = MutationObserver;
+      window.MutationObserver = class extends NativeObserver {
+        observe(...args) { observerStats.started++; return super.observe(...args); }
+        disconnect() { observerStats.stopped++; return super.disconnect(); }
+      };
+      const createInterval = window.setInterval.bind(window);
+      const cancelInterval = window.clearInterval.bind(window);
+      window.startedIntervals = [];
+      window.stoppedIntervals = [];
+      window.setInterval = (...args) => {
+        const handle = createInterval(...args);
+        startedIntervals.push(handle);
+        return handle;
+      };
+      window.clearInterval = id => {
+        if (startedIntervals.includes(id)) stoppedIntervals.push(id);
+        return cancelInterval(id);
+      };
+      window.job = { id: 'research-1', state: 'submitted' };
+      window.imports = 0;
+      window.chrome = { storage: { local: { async get(defaults) {
+        return { ...defaults, researchPublisherEnabled: true };
+      } }, onChanged: { addListener() {}, removeListener() {} } },
+        runtime: { async sendMessage(message) {
+          if (message.type === 'research-launch-job') return { ok: true, job };
+          if (message.type === 'publish-research-report') {
+            imports++;
+            job.state = 'complete';
+            return { ok: true, repository: 'Research', branch: 'main', path: 'report.md' };
+          }
+          return { ok: true };
+        } } };
+    });
+    for (const file of ['vendor/turndown.js', 'vendor/turndown-plugin-gfm.js',
+      'js/research/research-import-dialog.js', 'js/research/research-publisher.js']) {
+      await page.addScriptTag({ content: fs.readFileSync(file, 'utf8') });
+    }
+    await page.waitForFunction(() => imports === 1, null, { timeout: 15000 });
+    await page.waitForFunction(() => observerStats.stopped > 0 && startedIntervals.length > 0
+      && startedIntervals.every(id => stoppedIntervals.includes(id)));
+    await page.evaluate(() => document.querySelector('article').append(document.createElement('p')));
+    await page.waitForTimeout(1200);
+    assert.equal(await page.evaluate(() => imports), 1, 'no additional imports after finalization');
+  } finally { await browser.close(); }
+});
+
 test('import confirmation links open through the bridge inside a sandbox frame', async () => {
   const browser = await chromium.launch({ executablePath: '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser', headless: true });
   try {
