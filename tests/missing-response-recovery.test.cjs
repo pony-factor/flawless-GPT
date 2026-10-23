@@ -1,6 +1,6 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { missingAnswer, answerForTurn, entryFor } = require('../js/chat/missing-response-recovery.js');
+const { missingAnswer, answerForTurn, entryFor, shouldCoolDown } = require('../js/chat/missing-response-recovery.js');
 
 const prefix = () => ({ errorMessage: null, turn: { status: 'complete', items: [
   { type: 'user-message' },
@@ -81,4 +81,17 @@ test('reads the current React tree rather than stale host-fiber props', () => {
   const root = { stateNode: { current: {} } }; old.return = root;
   assert.equal(entryFor({ '__reactFiber$fixture': old }), currentEntry);
   assert.equal(entryFor({}), null);
+});
+
+test('missing-response polling cools down only after fifteen minutes without prompting', () => {
+  const now = 1_000_000;
+  const elapsed = 15 * 60_000;
+  assert.equal(shouldCoolDown(now, now), false);
+  assert.equal(shouldCoolDown(now, now + elapsed - 1), false);
+  assert.equal(shouldCoolDown(now, now + elapsed), true);
+  assert.equal(shouldCoolDown(now, now + elapsed + 100_000), true);
+  // A new composer interaction establishes a fresh 15-minute active window.
+  const resumedAt = now + elapsed + 100_000;
+  assert.equal(shouldCoolDown(resumedAt, resumedAt + elapsed - 1), false);
+  assert.equal(shouldCoolDown(resumedAt, resumedAt + elapsed), true);
 });
