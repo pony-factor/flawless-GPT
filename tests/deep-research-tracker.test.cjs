@@ -66,18 +66,18 @@ test('reads separate full and lightweight quota fields without combining them', 
   ] }).miniRemaining, undefined);
 });
 
-test('reads the server report bucket and timestamp while excluding lightweight reports', () => {
+test('reads the server full bucket and timestamp without mixing lightweight quotas', () => {
   assert.deepEqual(quotaFromResponse({ limits_progress: [
     { feature_name: 'deep_research_mini', remaining: 99, reset_after: '2026-11-01T00:00:00Z' },
     { feature_name: 'deep_research', remaining: 13, reset_after: '2026-10-21T17:43:43.591330+00:00' },
-  ] }, 1000), { remaining: 13, resetAt: Date.parse('2026-10-21T17:43:43.591Z'), observedAt: 1000 });
+  ] }, 1000), { remaining: 13, resetAt: Date.parse('2026-10-21T17:43:43.591Z'), observedAt: 1000, miniRemaining: 99 });
 });
 
 test('uses the full-research quota total if the server reports one', () => {
   assert.deepEqual(quotaFromResponse({ limits_progress: [
     { feature_name: 'deep_research_mini', remaining: 17, total: 1000 },
     { feature_name: 'deep_research', remaining: 200, total: 250 },
-  ] }, 1000), { remaining: 200, resetAt: null, observedAt: 1000, total: 250 });
+  ] }, 1000), { remaining: 200, resetAt: null, observedAt: 1000, total: 250, miniRemaining: 17, miniTotal: 1000 });
   assert.equal(quotaFromResponse({ limits_progress: [
     { feature_name: 'deep_research', remaining: 20, limit: 200 },
   ] }).total, 200);
