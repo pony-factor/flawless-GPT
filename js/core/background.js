@@ -11,5 +11,6 @@ importScripts(
   "../launchers/youtube-search-worker.js",
   "../research/deep-research-cache-background.js",
   "../research/research-publisher-background.js",
-  "../research/research-launcher-background.js"
+  "../research/research-launcher-background.js",
+  "../research/deep-research-spellcheck-background.js"
 );

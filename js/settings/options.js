@@ -71,6 +71,7 @@ const disableWorkModeInput = document.getElementById("disable-work-mode");
 const disableManualWebSearchInput = document.getElementById("disable-manual-web-search");
 const showSpellcheckGptLauncherInput = document.getElementById("show-spellcheck-gpt-launcher");
 const show2048LauncherInput = document.getElementById("show-2048-launcher");
+const deepResearchSpellcheckEnabledInput = document.getElementById("deep-research-spellcheck-enabled");
 const showDeepResearchTrackerInput = document.getElementById("show-deep-research-tracker");
 const showDeepResearchHomepageInput = document.getElementById("show-deep-research-homepage");
 const showDeepResearchComposerInput = document.getElementById("show-deep-research-composer");
@@ -412,6 +413,7 @@ async function loadSettings() {
     disableWorkMode: false,
     showSpellcheckGptLauncher: false,
     show2048Launcher: false,
+    deepResearchSpellcheckEnabled: true,
     showDeepResearchTracker: true,
     showDeepResearchHomepage: true,
     showDeepResearchComposer: true,
@@ -478,6 +480,7 @@ async function loadSettings() {
   disableManualWebSearchInput.checked = Boolean(settings.disableManualWebSearch);
   showSpellcheckGptLauncherInput.checked = Boolean(settings.showSpellcheckGptLauncher);
   show2048LauncherInput.checked = Boolean(settings.show2048Launcher);
+  deepResearchSpellcheckEnabledInput.checked = settings.deepResearchSpellcheckEnabled !== false;
   showDeepResearchTrackerInput.checked = settings.showDeepResearchTracker !== false;
   showDeepResearchHomepageInput.checked = settings.showDeepResearchHomepage !== false;
   showDeepResearchComposerInput.checked = settings.showDeepResearchComposer !== false;
@@ -594,6 +597,7 @@ async function saveSettings() {
       disableManualWebSearch: disableManualWebSearchInput.checked,
       showSpellcheckGptLauncher: showSpellcheckGptLauncherInput.checked,
       show2048Launcher: show2048LauncherInput.checked,
+      deepResearchSpellcheckEnabled: deepResearchSpellcheckEnabledInput.checked,
       showDeepResearchTracker: showDeepResearchTrackerInput.checked,
       showDeepResearchHomepage: showDeepResearchHomepageInput.checked,
       showDeepResearchComposer: showDeepResearchComposerInput.checked,
