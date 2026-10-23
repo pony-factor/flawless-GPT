@@ -132,16 +132,22 @@ Deep Research allowance tracking for the homepage and active research composer.
 The master **Enable Deep Research allowance trackers** switch continues to disable
 both locations when turned off.
 
-The homepage has independent settings for its tracker, **Show reports remaining**,
-and **Show reset countdown**. By default the homepage tracker appears only within
-**5 days** of the next reset, as before. Change **Homepage visibility** to
-**Always show on homepage** to see the report count throughout the cycle, or
-adjust the reset window from 1 to 365 days. To show only the report count,
-enable homepage tracking and reports remaining, then disable **Show reset
-countdown**. The composer has an independent on/off switch, but shares the
-homepage's count and reset-countdown choices—even when the homepage tracker is
-hidden or outside its visibility window. Changes save automatically and update
-existing ChatGPT tabs.
+The homepage and active Deep Research composer each have independent switches for
+**Show tracker**, **Show reports remaining**, **Show reset countdown**, and
+**Show usage pie**. The composer can stay visible when the homepage tracker is
+also visible, and changing one location does not affect the other. The in-chat
+tracker only mounts while the Deep Research plugin is selected.
+
+By default the homepage tracker appears only within **5 days** of the next
+reset. Change **Homepage visibility** to **Always show on homepage** to see the
+report count throughout the cycle, or adjust the reset window from 1 to 365
+days. Full/combined quota selection and the optional allowance total are shared
+data settings. Legacy shared pie preferences carry forward until the new
+per-location switches are saved. Changes take effect in existing ChatGPT tabs.
+
+Research selection is detected through native interactions and a filtered
+DOM fallback; unrelated streaming conversation text no longer schedules
+tracker rerenders.
 
 The **Counter allowance** setting defaults to **Full research only**, using
 ChatGPT's `deep_research` quota and excluding the `deep_research_mini` lightweight
