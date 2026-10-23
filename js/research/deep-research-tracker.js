@@ -155,11 +155,10 @@
     const stale = Date.now() - serverQuota.observedAt >= quotaRefreshInterval();
     const quota = selectedResearchQuota(serverQuota, preferences.deepResearchAllowanceMode);
     const amount = quota?.remaining;
-    const mode = preferences.deepResearchAllowanceMode === 'all' ? 'full + lightweight' : 'full';
     const count = amount === null || amount === undefined
       ? 'full + lightweight balance unavailable'
-      : stale ? `${amount} last checked (${mode}) · Refresh allowance`
-      : `${amount} left (${mode})`;
+      : stale ? `${amount} last checked · Refresh allowance`
+      : `${amount} left`;
     const remainingMs = serverQuota.resetAt === null ? null : serverQuota.resetAt - Date.now();
     let reset = 'reset unknown';
     if (remainingMs !== null) {
@@ -250,7 +249,7 @@
     // Native unlabeled counts may combine pools. Do not present them as full.
     const count = fresh && allowance.remaining !== null && allowance.full
       && preferences.deepResearchAllowanceMode === 'full'
-      ? `${allowance.remaining} left (full)` : 'Check allowance';
+      ? `${allowance.remaining} left` : 'Check allowance';
     const reset = fresh && allowance.reset ? allowance.reset : 'Reset unknown';
     const homepage = id === ID;
     const nearReset = homepage && withinResetWindow();
@@ -275,13 +274,12 @@
         ? allowance.remaining : null);
     const preferredTotal = preferences.deepResearchUsagePieTotal;
     const reportedTotal = selected?.total ?? null;
-    // 25/250 were historically the combined allowance, not the full pool.
-    // Never auto-scale a full-only pie from those combined totals.
+    // A missing maximum must not silently disable an enabled pie. Use the
+    // estimated scale in either mode and identify it in the tooltip; the
+    // selected remaining count still excludes other pools in full-only mode.
     const total = usagePieTotal(pieRemaining, reportedTotal, preferredTotal);
-    const safeTotal = preferences.deepResearchAllowanceMode === 'full'
-      && reportedTotal == null && preferredTotal == null ? null : total;
     const percent = preferences.showDeepResearchUsagePie && includeCount
-      ? usagePiePercent(pieRemaining, safeTotal) : null;
+      ? usagePiePercent(pieRemaining, total) : null;
     const showPie = percent !== null;
     if (pie.hidden !== !showPie) pie.hidden = !showPie;
     if (showPie) {
@@ -309,7 +307,7 @@
     const combined = preferences.deepResearchAllowanceMode === 'all';
     const autoEstimate = showPie && preferredTotal == null && reportedTotal == null;
     widget.title = showPie
-      ? `Deep Research: ${pieRemaining} of ${safeTotal} ${combined ? 'full + lightweight' : 'full'} reports remaining${autoEstimate ? ' (estimated allowance)' : ''}. Click to refresh.`
+      ? `Deep Research: ${pieRemaining} of ${total} ${combined ? 'full + lightweight' : 'full'} reports remaining${autoEstimate ? ' (estimated allowance)' : ''}. Click to refresh.`
       : combined ? 'Combined full + lightweight allowance; requires both quotas from ChatGPT. Click to refresh.'
         : 'Full Deep Research only; lightweight requests excluded. Click to refresh.';
     return widget;
