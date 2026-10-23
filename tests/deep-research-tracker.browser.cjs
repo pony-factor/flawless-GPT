@@ -231,7 +231,7 @@ test('Research settings show the composer only when homepage allowance details a
     await page.evaluate(() => window.changeResearchSetting('deepResearchUsagePieTotal', null));
     await page.waitForFunction(() => document.getElementById('ghrc-deep-research-tracker').title.includes('13 of 25'));
     assert.equal(await homepage.innerText(), '', 'pie replaces only the visible report count');
-    assert.match(await homepage.getAttribute('aria-label'), /13 left.*full/);
+    assert.equal(await homepage.getAttribute('aria-label'), 'Deep Research · 13 left');
     assert.match(await pie.evaluate(node => node.style.background), /conic-gradient\(from 0deg/i);
     assert.match(await pie.evaluate(node => node.style.background), /172\.8deg.*360deg/i);
     assert.match(await pie.evaluate(node => node.style.background), /--ghrc-composer-toolbar-icon/);

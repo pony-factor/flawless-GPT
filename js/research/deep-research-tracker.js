@@ -155,11 +155,10 @@
     const stale = Date.now() - serverQuota.observedAt >= quotaRefreshInterval();
     const quota = selectedResearchQuota(serverQuota, preferences.deepResearchAllowanceMode);
     const amount = quota?.remaining;
-    const mode = preferences.deepResearchAllowanceMode === 'all' ? 'full + lightweight' : 'full';
     const count = amount === null || amount === undefined
       ? 'full + lightweight balance unavailable'
-      : stale ? `${amount} last checked (${mode}) · Refresh allowance`
-      : `${amount} left (${mode})`;
+      : stale ? `${amount} last checked · Refresh allowance`
+      : `${amount} left`;
     const remainingMs = serverQuota.resetAt === null ? null : serverQuota.resetAt - Date.now();
     let reset = 'reset unknown';
     if (remainingMs !== null) {
@@ -250,7 +249,7 @@
     // Native unlabeled counts may combine pools. Do not present them as full.
     const count = fresh && allowance.remaining !== null && allowance.full
       && preferences.deepResearchAllowanceMode === 'full'
-      ? `${allowance.remaining} left (full)` : 'Check allowance';
+      ? `${allowance.remaining} left` : 'Check allowance';
     const reset = fresh && allowance.reset ? allowance.reset : 'Reset unknown';
     const homepage = id === ID;
     const nearReset = homepage && withinResetWindow();
