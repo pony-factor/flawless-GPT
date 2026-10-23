@@ -11,14 +11,17 @@
   let settingsRevision = 0;
   let running = false;
   let activeId = null;
+  let activePath = null;
   let approvedText = null;
+  let approvedPath = null;
 
   const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
   const visible = node => Boolean(node?.isConnected && node.getClientRects?.().length);
   const editor = () => document.querySelector('[data-composer-markdown][contenteditable="true"], #prompt-textarea');
   const form = input => input?.closest("form") || input?.closest('[data-type="unified-composer"]');
-  const chatIsNew = () => location.pathname === "/"
-    && !document.querySelector('[data-message-author-role="user"]');
+  // Root is a new chat; /c/… and /g/…/c/… are existing conversations.
+  const chatIsSupported = () => location.pathname === "/"
+    || /^\/(?:g\/[^/]+\/)?c\/[a-z0-9-]+\/?$/i.test(location.pathname);
 
   function mention(input) {
     const scope = form(input) || input;
@@ -75,7 +78,8 @@
       go.style.cssText = "padding:5px 12px;border-radius:7px;border:1px solid currentColor;cursor:pointer;";
       go.addEventListener("click", () => {
         const input = editor();
-        if (!chatIsNew() || !input || draft(input) !== approvedText) return;
+        if (!chatIsSupported() || location.pathname !== approvedPath
+          || !input || draft(input) !== approvedText) return;
         const send = sendButton(input);
         if (send) send.click();
       });
@@ -90,7 +94,7 @@
   }
 
   async function start() {
-    if (!spellcheckEnabled || running || !chatIsNew()) return;
+    if (!spellcheckEnabled || running || !chatIsSupported()) return;
     const input = editor();
     const prompt = draft(input);
     if (prompt === null || !prompt.trim()) return;
@@ -103,10 +107,12 @@
       return;
     }
     running = true;
+    activePath = location.pathname;
     approvedText = null;
+    approvedPath = null;
     status("Spellchecking your Deep Research prompt in split view…");
     try {
-      const response = await ask({ type: "ghrc-research-spellcheck-begin", prompt });
+      const response = await ask({ type: "ghrc-research-spellcheck-begin", prompt, sourcePath: activePath });
       activeId = response.id;
     } catch (error) {
       running = false;
@@ -115,7 +121,7 @@
   }
 
   function intercept(event) {
-    if (!spellcheckEnabled || !event.isTrusted || !chatIsNew()) return;
+    if (!spellcheckEnabled || !event.isTrusted || !chatIsSupported()) return;
     const input = editor();
     const prompt = draft(input);
     if (prompt === null || !prompt.trim()) return;
@@ -130,7 +136,7 @@
       && !/stop|voice/i.test(button.getAttribute("aria-label") || "");
     if (!submit && !key && !clickedSend) return;
     // Exactly the reviewed version gets one ordinary, user-initiated submission.
-    if (!running && prompt === approvedText) return;
+    if (!running && prompt === approvedText && location.pathname === approvedPath) return;
     event.preventDefault();
     event.stopImmediatePropagation();
     if (!running) void context.run(start);
@@ -138,7 +144,8 @@
 
   async function replaceDraft(original, corrected) {
     const input = editor();
-    if (!spellcheckEnabled || !chatIsNew() || !input || draft(input) !== original)
+    if (!spellcheckEnabled || !chatIsSupported() || location.pathname !== activePath
+      || !input || draft(input) !== original)
       throw new Error("The research prompt changed while spellchecking; its current draft was preserved.");
     const token = mention(input);
     if (!token) throw new Error("The Deep Research app mention disappeared.");
@@ -162,11 +169,13 @@
       document.execCommand("insertText", false, corrected);
     }
     await pause(100);
-    if (draft(editor()) !== corrected || !mention(editor()))
-      throw new Error("The correction could not be verified in the composer. Review the draft manually.");
+    if (location.pathname !== activePath || draft(editor()) !== corrected || !mention(editor()))
+      throw new Error("The correction could not be verified in this conversation. Review the draft manually.");
     approvedText = corrected;
+    approvedPath = activePath;
     running = false;
     activeId = null;
+    activePath = null;
     status("Spellcheck complete. Review the corrected prompt and press Go.", true);
   }
 
@@ -183,6 +192,7 @@
         } catch (error) {
           running = false;
           activeId = null;
+          activePath = null;
           status(error.message + " Nothing was sent.");
           reply({ ok: false, error: error.message });
         }
@@ -192,6 +202,7 @@
     if (message?.type === "ghrc-research-spellcheck-failed" && message.id === activeId) {
       running = false;
       activeId = null;
+      activePath = null;
       status(message.error + " Your research draft was not sent.");
     }
     return false;
@@ -253,7 +264,9 @@
     // Invalidates in-flight corrections and removes stale Go controls.
     running = false;
     activeId = null;
+    activePath = null;
     approvedText = null;
+    approvedPath = null;
     document.getElementById(BANNER_ID)?.remove();
   }
 

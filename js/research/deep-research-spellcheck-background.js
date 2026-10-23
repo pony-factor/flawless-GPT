@@ -18,8 +18,13 @@
     await chrome.storage.session.remove([childKey(job.childId), sourceKey(job.sourceId)]);
   }
 
+  // Accepted routes are limited to the new-chat page and real conversation pages.
+  const supportedPath = path => path === "/"
+    || /^\/(?:g\/[^/]+\/)?c\/[a-z0-9-]+\/?$/i.test(path);
+
   async function begin(sender, message) {
-    if (new URL(sender.url).pathname !== "/") throw new Error("Start with a new Deep Research chat.");
+    if (typeof message.sourcePath !== "string" || !supportedPath(message.sourcePath))
+      throw new Error("Open a new or existing ChatGPT conversation to spellcheck Deep Research.");
     if (typeof message.prompt !== "string" || !message.prompt.trim()
       || new TextEncoder().encode(message.prompt).length > 200000)
       throw new Error("The research prompt is empty or too large to spellcheck.");
@@ -28,6 +33,9 @@
     if (typeof chrome.tabs.createSplit !== "function")
       throw new Error("This browser cannot open a native split view.");
     const source = await chrome.tabs.get(sender.tab.id);
+    const url = new URL(source.url);
+    if (url.origin !== "https://chatgpt.com" || url.pathname !== message.sourcePath)
+      throw new Error("The active conversation changed. Nothing was sent.");
     if (Number.isInteger(source.splitViewId) && source.splitViewId >= 0)
       throw new Error("Close the existing split view before spellchecking this prompt.");
     const child = await chrome.tabs.create({
@@ -36,7 +44,7 @@
     });
     const job = {
       id: crypto.randomUUID(), sourceId: source.id, childId: child.id,
-      prompt: message.prompt, state: "pending",
+      prompt: message.prompt, sourcePath: message.sourcePath, state: "pending",
     };
     try {
       await chrome.tabs.createSplit([source.id, child.id]);
@@ -70,8 +78,8 @@
       throw new Error("Spellcheck did not return a usable correction.");
     const source = await chrome.tabs.get(job.sourceId);
     if (new URL(source.url).origin !== "https://chatgpt.com"
-      || new URL(source.url).pathname !== "/")
-      throw new Error("The original new-chat draft is no longer open.");
+      || new URL(source.url).pathname !== job.sourcePath)
+      throw new Error("The original conversation changed; its draft was preserved.");
     const reply = await chrome.tabs.sendMessage(job.sourceId, {
       type: "ghrc-research-spellcheck-apply",
       id: job.id, original: job.prompt, corrected: message.corrected,

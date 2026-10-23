@@ -12,14 +12,19 @@ before(async () => {
 });
 after(async () => { await browser.close(); });
 
-async function fixture({ enabled = true } = {}) {
+async function fixture({ enabled = true, existingChat = false } = {}) {
   const page = await browser.newPage();
   const errors = [];
   page.on("pageerror", error => errors.push(error.message));
   await page.route("https://chatgpt.com/**", route => route.fulfill({
     contentType: "text/html",
     body: [
-      "<!doctype html><html><head></head><body><main><form id='chat'>",
+      "<!doctype html><html><head></head><body><main>",
+      ...(existingChat ? [
+        "<article data-message-author-role='user'>An earlier user message</article>",
+        "<article data-message-author-role='assistant'>An earlier response</article>",
+      ] : []),
+      "<form id='chat'>",
       "<div data-composer-markdown id='prompt-textarea' contenteditable='true'>",
       "<p><span app-mention-path='app://connector_openai_deep_research' contenteditable='false'>Deep research</span> </p>",
       "<p>Reserch this subject carefuly</p></div>",
@@ -27,7 +32,9 @@ async function fixture({ enabled = true } = {}) {
       "</form></main></body></html>",
     ].join(""),
   }));
-  await page.goto("https://chatgpt.com/");
+  await page.goto(existingChat
+    ? "https://chatgpt.com/c/12345678-1234-1234-1234-123456789abc"
+    : "https://chatgpt.com/");
   await page.evaluate((enabled) => {
     window.spellcheckPreference = enabled;
     window.storageListeners = [];
@@ -143,6 +150,49 @@ test("disabling a pending spellcheck rejects stale corrections and allows Send",
   assert.equal(await page.getByRole("button", { name: "Send reviewed Deep Research prompt" }).count(), 0);
   await page.getByRole("button", { name: "Send" }).click();
   assert.equal(await page.evaluate(() => sent), 1);
+  assert.deepEqual(errors, []);
+  await page.close();
+});
+
+test("existing chat preserves conversation history and requires Go for the corrected research prompt", async () => {
+  const { page, errors } = await fixture({ existingChat: true });
+  const messages = await page.locator("[data-message-author-role]").allTextContents();
+  await page.getByRole("button", { name: "Send" }).click();
+  await page.waitForFunction(() => requests.some(message => message.type === "ghrc-research-spellcheck-begin"));
+  const request = await page.evaluate(() =>
+    requests.find(message => message.type === "ghrc-research-spellcheck-begin"));
+  assert.equal(request.sourcePath, "/c/12345678-1234-1234-1234-123456789abc");
+  assert.equal(await page.evaluate(() => sent), 0);
+  await page.evaluate(async () => {
+    window.applied = await new Promise(resolve => listeners.find(fn => fn({
+      type: "ghrc-research-spellcheck-apply", id: "job-one",
+      original: "Reserch this subject carefuly", corrected: "Research this subject carefully.",
+    }, {}, resolve)));
+  });
+  assert.equal(await page.evaluate(() => applied.ok), true);
+  assert.deepEqual(await page.locator("[data-message-author-role]").allTextContents(), messages);
+  assert.equal(await page.evaluate(() => sent), 0);
+  await page.getByRole("button", { name: "Send reviewed Deep Research prompt" }).click();
+  assert.equal(await page.evaluate(() => sent), 1);
+  assert.equal(new URL(page.url()).pathname, "/c/12345678-1234-1234-1234-123456789abc");
+  assert.deepEqual(errors, []);
+  await page.close();
+});
+
+test("switching existing chats during spellcheck preserves the current conversation draft", async () => {
+  const { page, errors } = await fixture({ existingChat: true });
+  await page.getByRole("button", { name: "Send" }).click();
+  await page.waitForFunction(() => requests.some(message => message.type === "ghrc-research-spellcheck-begin"));
+  await page.evaluate(() => history.pushState({}, "", "/c/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"));
+  await page.evaluate(async () => {
+    window.applied = await new Promise(resolve => listeners.find(fn => fn({
+      type: "ghrc-research-spellcheck-apply", id: "job-one",
+      original: "Reserch this subject carefuly", corrected: "Research this subject carefully.",
+    }, {}, resolve)));
+  });
+  assert.equal(await page.evaluate(() => applied.ok), false);
+  assert.match(await page.locator("#prompt-textarea").innerText(), /Reserch this subject carefuly/);
+  assert.equal(await page.evaluate(() => sent), 0);
   assert.deepEqual(errors, []);
   await page.close();
 });

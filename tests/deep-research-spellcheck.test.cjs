@@ -7,14 +7,15 @@ const vm = require("node:vm");
 const worker = fs.readFileSync(path.join(__dirname, "../js/research/deep-research-spellcheck-background.js"), "utf8");
 const content = fs.readFileSync(path.join(__dirname, "../js/research/deep-research-spellcheck.js"), "utf8");
 
-function fixture({ supported = true, existingSplit = false, applyResult = { ok: true } } = {}) {
+function fixture({ supported = true, existingSplit = false, applyResult = { ok: true },
+  sourcePath = "/" } = {}) {
   const store = {};
   const calls = [];
   let listener;
   let removed;
   let nextTabId = 20;
   const tabs = {
-    10: { id: 10, index: 1, windowId: 1, pinned: false, splitViewId: existingSplit ? 7 : -1, url: "https://chatgpt.com/" },
+    10: { id: 10, index: 1, windowId: 1, pinned: false, splitViewId: existingSplit ? 7 : -1, url: "https://chatgpt.com" + sourcePath },
   };
   const chrome = {
     runtime: { id: "fixture", onMessage: { addListener(fn) { listener = fn; } } },
@@ -53,7 +54,8 @@ function fixture({ supported = true, existingSplit = false, applyResult = { ok: 
   vm.runInNewContext(worker, { chrome, TextEncoder, URL, crypto: { randomUUID: () => "job-one" } });
   function message(type, data = {}, id = 10, url = "https://chatgpt.com/") {
     return new Promise(resolve => listener(
-      { type, ...data }, { id: "fixture", frameId: 0, tab: { id }, url }, resolve));
+      { type, ...(type === "ghrc-research-spellcheck-begin" ? { sourcePath } : {}), ...data },
+      { id: "fixture", frameId: 0, tab: { id }, url }, resolve));
   }
   return { store, calls, tabs, message, removeTab: removed };
 }
@@ -145,7 +147,58 @@ test("the Research setting defaults on, persists, and gates composer interceptio
   assert.match(html, /id="deep-research-spellcheck-enabled" type="checkbox" checked/);
   assert.match(settings, /deepResearchSpellcheckEnabled: true/);
   assert.match(settings, /deepResearchSpellcheckEnabled: deepResearchSpellcheckEnabledInput.checked/);
-  assert.match(content, /if \(!spellcheckEnabled \|\| !event.isTrusted \|\| !chatIsNew\(\)\) return/);
+  assert.match(content, /if \(!spellcheckEnabled \|\| !event.isTrusted \|\| !chatIsSupported\(\)\) return/);
   assert.match(content, /chrome.storage.onChanged\?\.addListener\(settingsChanged\)/);
-  assert.match(content, /if \(!spellcheckEnabled \|\| !chatIsNew\(\) \|\| !input \|\| draft\(input\) !== original\)/);
+  assert.match(content, /location.pathname !== activePath/);
+});
+
+// Existing conversations must keep their original tab, history, and pathname.
+test("existing chat supports split spellcheck without changing the source conversation", async () => {
+  const conversation = "/c/12345678-1234-1234-1234-123456789abc";
+  const f = fixture({ sourcePath: conversation });
+  const begun = await f.message("ghrc-research-spellcheck-begin", { prompt: "Reserch a folowup" });
+  assert.equal(begun.ok, true);
+  assert.deepEqual(f.calls.find(call => call[0] === "split")[1], [10, 20]);
+  assert.equal(f.store["ghrcResearchSpellcheck:child:20"].sourcePath, conversation);
+  const claimed = await f.message("ghrc-research-spellcheck-claim", {}, 20);
+  assert.equal(claimed.job.prompt, "Reserch a folowup");
+  const finished = await f.message("ghrc-research-spellcheck-finish",
+    { id: "job-one", corrected: "Research a follow-up" }, 20);
+  assert.equal(finished.ok, true);
+  assert.equal(f.tabs[10].url, "https://chatgpt.com" + conversation);
+  assert.equal(f.calls.some(call => call[0] === "update" && call[1] === 10), false);
+  assert.equal(f.calls.filter(call => call[0] === "sendMessage")[0][1], 10);
+  assert.equal(Object.keys(f.store).length, 0);
+});
+
+test("project GPT conversation routes are also eligible", async () => {
+  const path = "/g/g-research-assistant/c/12345678-1234-1234-1234-123456789abc";
+  const f = fixture({ sourcePath: path });
+  assert.equal((await f.message("ghrc-research-spellcheck-begin", { prompt: "Question" })).ok, true);
+});
+
+test("rejects changed or mismatched source chat routes before modifying a draft", async () => {
+  const first = "/c/12345678-1234-1234-1234-123456789abc";
+  const second = "/c/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
+  const f = fixture({ sourcePath: first });
+  assert.equal((await f.message("ghrc-research-spellcheck-begin",
+    { prompt: "Draft", sourcePath: second })).ok, false);
+  assert.equal(f.calls.length, 0);
+  await f.message("ghrc-research-spellcheck-begin", { prompt: "Draft" });
+  await f.message("ghrc-research-spellcheck-claim", {}, 20);
+  f.tabs[10].url = "https://chatgpt.com" + second;
+  const result = await f.message("ghrc-research-spellcheck-finish",
+    { id: "job-one", corrected: "Edited" }, 20);
+  assert.equal(result.ok, false);
+  assert.equal(f.calls.some(call => call[0] === "sendMessage"), false);
+  assert.equal(f.calls.some(call => call[0] === "remove"), false);
+});
+
+test("rejects non-chat routes and unrecognized chat paths", async () => {
+  for (const path of ["/settings", "/g/a/other-page", "/c/../settings", "/search?q=test"]) {
+    const f = fixture({ sourcePath: path });
+    const result = await f.message("ghrc-research-spellcheck-begin", { prompt: "No" });
+    assert.equal(result.ok, false);
+    assert.equal(f.calls.some(call => call[0] === "create"), false);
+  }
 });
