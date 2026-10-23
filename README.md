@@ -52,8 +52,13 @@ https://github.com/JFWooten4/JFWooten4/blob/main/headshots/final-form/README.md
 
 On macOS, double-click `Test in Brave.command` to open ChatGPT in a separate
 Brave test profile with this checkout loaded as an unpacked extension. Each
-checkout has its own persistent test profile. Sign in and configure the extension
-once in that profile. After editing the extension, reload its card in
+checkout has its own persistent test profile. When the test browser is stopped,
+the launcher copies encrypted cookies from normal Brave's Default profile,
+including committed changes while normal Brave remains open. This uses the same
+macOS Brave Keychain access; some sites may still require signing in again.
+Extension settings remain separate. If the test browser is already running,
+fully quit that test instance and launch again to refresh its cookies.
+After editing the extension, reload its card in
 `brave://extensions` and refresh the test tab, or fully quit the test browser
 instance and run the launcher again.
 

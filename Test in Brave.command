@@ -11,7 +11,9 @@ if [[ ! -d '/Applications/Brave Browser.app' ]]; then
   exit 1
 fi
 
-# Give each checkout its own browser data, without copying normal-profile data.
+# Keep each checkout isolated, but reuse normal Brave's encrypted cookies.
+python3 "$workspace_dir/tools/prepare-brave-test.py" "$test_profile_dir"
+
 /usr/bin/open -na 'Brave Browser' --args \
   "--user-data-dir=$test_profile_dir" \
   "--disable-extensions-except=$workspace_dir" \
