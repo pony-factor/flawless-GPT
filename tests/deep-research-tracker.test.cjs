@@ -26,7 +26,7 @@ test('usage pie accepts reported or custom totals and estimates common tiers', (
   assert.equal(usagePiePercent(201, 200), null);
 });
 
-test('both settings views default to full-only counter and share the same preference', () => {
+test('both settings views keep the same quota pool but independent presentation', () => {
   const fs = require('node:fs');
   const path = require('node:path');
   for (const file of ['options.html', 'popup.html']) {
@@ -34,13 +34,25 @@ test('both settings views default to full-only counter and share the same prefer
     assert.match(html, /id="deep-research-allowance-mode"/);
     assert.match(html, /<option value="full" selected>Full research only<\/option>/);
     assert.match(html, /<option value="all">Full \+ lightweight<\/option>/);
-    assert.match(html, /The composer uses the same reports-remaining and reset-countdown choices/);
-    assert.doesNotMatch(html, /id="show-deep-research-composer-(?:count|reset)"/);
+    for (const location of ['homepage', 'composer']) {
+      for (const detail of ['count', 'reset', 'pie']) {
+        assert.match(html, new RegExp('id="show-deep-research-' + location + '-' + detail + '"'));
+      }
+    }
+    assert.match(html, /independently of the homepage/);
+    assert.doesNotMatch(html, /id="show-deep-research-usage-pie"/);
   }
   const settings = fs.readFileSync(path.join(__dirname, '../js/settings/options.js'), 'utf8');
   assert.match(settings, /deepResearchAllowanceMode: "full"/);
   assert.match(settings, /deepResearchAllowanceMode: deepResearchAllowanceModeInput\.value/);
-  assert.doesNotMatch(settings, /showDeepResearchComposer(?:Count|Reset)/);
+  for (const key of ['showDeepResearchComposerCount', 'showDeepResearchComposerReset',
+    'showDeepResearchHomepagePie', 'showDeepResearchComposerPie']) {
+    assert.match(settings, new RegExp(key));
+  }
+  const tracker = fs.readFileSync(path.join(__dirname, '../js/research/deep-research-tracker.js'), 'utf8');
+  assert.doesNotMatch(tracker, /homepageShowsAllowance/);
+  assert.match(tracker, /function onMutations/);
+  assert.doesNotMatch(tracker, /characterData: true/);
 });
 
 test('full-only default and combined selection keep research pools distinct', () => {
