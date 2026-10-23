@@ -150,6 +150,9 @@
       style.textContent = `.${BUTTON}{display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;width:32px;height:32px;padding:6px;border:0;border-radius:6px;background:transparent;color:inherit;cursor:pointer}.${BUTTON}:hover{background:color-mix(in srgb,currentColor 10%,transparent)}.${BUTTON}:focus-visible{outline:2px solid currentColor;outline-offset:2px}.${BUTTON}:disabled{opacity:.55;cursor:default}.ghrc-report-status{font-size:12px;line-height:1.4;padding:6px 12px;overflow-wrap:anywhere}.ghrc-report-status:empty{display:none}`;
       style.textContent += '.ghrc-report-import{color:inherit;background:light-dark(#fff,#202123);border:1px solid #888;border-radius:12px;padding:24px;max-width:420px;width:calc(100% - 64px);color-scheme:light dark}.ghrc-report-import::backdrop{background:#0008}.ghrc-report-import h2{margin-top:0;font-size:20px}.ghrc-report-import p{font-size:13px}.ghrc-report-import input{display:block;box-sizing:border-box;width:100%;padding:10px;margin-top:8px}.ghrc-report-import form>div{display:flex;justify-content:flex-end;gap:12px;margin-top:20px}.ghrc-report-import button{padding:8px 12px;cursor:pointer}';
       (doc.head || doc.documentElement).append(style);
+      // document.open() can replace the root without changing Document identity.
+      // Disconnect the previous monitor before attaching to the new root.
+      observers.get(doc)?.disconnect();
       const observer = new MutationObserver(schedule);
       observer.observe(doc, { childList: true, subtree: true });
       observers.set(doc, observer);
