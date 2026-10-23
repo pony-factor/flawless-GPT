@@ -1382,6 +1382,114 @@ async function attachmentFixture(page, { images = false, portalInput = false, ge
   }, { images, portalInput, genericRemove });
 }
 
+
+test('queued attachment info cards coexist with image thumbnails and survive editing and reorder', async () => {
+  const p = await fixture({ active: true, stored: {
+    queuedChatMessages: { 'conversation:test': [
+      { id: 'mixed-files', text: 'Review these attachments', attachments: [
+        { name: 'brief.pdf', type: 'application/pdf', dataUrl: 'data:application/pdf;base64,SGVsbG8=' },
+        { name: 'picture.png', type: 'image/png', dataUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j1ioAAAAASUVORK5CYII=' },
+        { name: 'results.csv', type: 'text/csv', dataUrl: 'data:text/csv;base64,YWJj' },
+      ] },
+      { id: 'second-file', text: 'Later prompt', attachments: [
+        { name: 'draft.txt', type: 'text/plain', dataUrl: 'data:text/plain;base64,SGk=' },
+      ] },
+    ] },
+    queuedChatMessagesPaused: { 'conversation:test': true },
+  } });
+  const first = p.locator('[data-queue-id="mixed-files"]');
+  await first.waitFor();
+  assert.equal(await first.locator('.ghrc-message-queue-thumbnails img').count(), 1);
+  assert.equal(await first.locator('.ghrc-message-queue-thumbnails img').first().getAttribute('alt'), 'picture.png');
+  assert.deepEqual(await first.locator('.ghrc-message-queue-file-name').allTextContents(), ['brief.pdf', 'results.csv']);
+  assert.deepEqual(await first.locator('.ghrc-message-queue-file-meta').allTextContents(), ['PDF · 5 B', 'CSV · 3 B']);
+  assert.equal(await first.locator('.ghrc-message-queue-file-card').first().getAttribute('title'), 'brief.pdf (application/pdf, 5 B)');
+  const position = await first.evaluate(row => {
+    const index = row.querySelector('.ghrc-message-queue-index').getBoundingClientRect();
+    const rail = row.querySelector('.ghrc-message-queue-attachments').getBoundingClientRect();
+    const editor = row.querySelector('.ghrc-message-queue-editor').getBoundingClientRect();
+    return {
+      order: [...row.children].map(child => child.className),
+      indexRight: index.right,
+      railLeft: rail.left,
+      railRight: rail.right,
+      editorLeft: editor.left,
+      imageInRail: Boolean(row.querySelector('.ghrc-message-queue-attachments .ghrc-message-queue-thumbnails')),
+      filesInRail: Boolean(row.querySelector('.ghrc-message-queue-attachments .ghrc-message-queue-files')),
+    };
+  });
+  assert.deepEqual(position.order, [
+    'ghrc-message-queue-index', 'ghrc-message-queue-attachments',
+    'ghrc-message-queue-editor', 'ghrc-message-queue-controls',
+  ]);
+  assert.ok(position.indexRight <= position.railLeft + 1, 'attachments follow queue order number');
+  assert.ok(position.railRight <= position.editorLeft + 1, 'attachments stay to the left of prompt text');
+  assert.equal(position.imageInRail, true);
+  assert.equal(position.filesInRail, true);
+  await p.evaluate(() => {
+    window.savedFileCard = document.querySelector('[data-queue-id="mixed-files"] .ghrc-message-queue-file-card');
+  });
+  await first.locator('.ghrc-message-queue-editor').fill('Updated text');
+  await first.getByRole('button', { name: 'Move queued message later' }).click();
+  assert.equal(await p.evaluate(() => window.savedFileCard ===
+    document.querySelector('[data-queue-id="mixed-files"] .ghrc-message-queue-file-card')), true);
+  assert.equal(await p.locator('[data-queue-id="second-file"] .ghrc-message-queue-file-meta').textContent(), 'TXT · 2 B');
+  await p.setViewportSize({ width: 355, height: 720 });
+  const narrow = await first.evaluate(row => {
+    const index = row.querySelector('.ghrc-message-queue-index').getBoundingClientRect();
+    const rail = row.querySelector('.ghrc-message-queue-attachments').getBoundingClientRect();
+    const editor = row.querySelector('.ghrc-message-queue-editor').getBoundingClientRect();
+    const card = row.querySelector('.ghrc-message-queue-file-card').getBoundingClientRect();
+    const controls = row.querySelector('.ghrc-message-queue-controls').getBoundingClientRect();
+    return {
+      indexRight: index.right, railLeft: rail.left, railRight: rail.right,
+      editorLeft: editor.left, editorRight: editor.right, cardRight: card.right,
+      controlsTop: controls.top, editorBottom: editor.bottom,
+    };
+  });
+  assert.ok(narrow.indexRight <= narrow.railLeft + 1, 'narrow queue keeps order before attachments');
+  assert.ok(narrow.railRight <= narrow.editorLeft + 1, 'narrow queue keeps attachments left of text');
+  assert.ok(narrow.cardRight <= narrow.railRight + 1, 'file card fits inside its rail');
+  assert.ok(narrow.controlsTop >= narrow.editorBottom - 1, 'narrow queue puts controls beneath prompt');
+  assert.deepEqual(p.errors, []);
+  await p.close();
+});
+
+test('queued file cards update when stored attachments change and disappear when cleared', async () => {
+  const p = await fixture({ active: true, stored: {
+    queuedChatMessages: { 'conversation:test': [
+      { id: 'update-files', text: 'Read attachment', attachments: [
+        { name: 'file.txt', type: 'text/plain', dataUrl: 'data:text/plain;base64,YWJj' },
+        { name: 'scan.png', type: 'image/png', dataUrl: 'data:image/png;base64,YWJj' },
+      ] },
+    ] },
+    queuedChatMessagesPaused: { 'conversation:test': true },
+  } });
+  const row = p.locator('[data-queue-id="update-files"]');
+  await row.waitFor();
+  assert.equal(await row.locator('.ghrc-message-queue-file-card').count(), 1);
+  await p.evaluate(async () => {
+    const next = structuredClone(storage.queuedChatMessages);
+    next['conversation:test'][0].attachments = next['conversation:test'][0].attachments.slice(1);
+    await chrome.storage.local.set({ queuedChatMessages: next });
+  });
+  await p.waitForFunction(() => document.querySelector('[data-queue-id="update-files"]')
+    && !document.querySelector('[data-queue-id="update-files"] .ghrc-message-queue-files'));
+  assert.equal(await row.locator('.ghrc-message-queue-thumbnails img').count(), 1);
+  assert.equal(await row.locator('.ghrc-message-queue-attachments').count(), 1);
+  assert.equal(await row.evaluate(el => el.classList.contains('ghrc-message-queue-has-files')), false);
+  await p.evaluate(async () => {
+    const next = structuredClone(storage.queuedChatMessages);
+    next['conversation:test'][0].attachments = [];
+    await chrome.storage.local.set({ queuedChatMessages: next });
+  });
+  await p.waitForFunction(() => !document.querySelector('[data-queue-id="update-files"] .ghrc-message-queue-thumbnails'));
+  assert.equal(await row.evaluate(el => el.classList.contains('ghrc-message-queue-has-images')), false);
+  assert.equal(await row.locator('.ghrc-message-queue-attachments').count(), 0);
+  assert.deepEqual(p.errors, []);
+  await p.close();
+});
+
 test('a portal-mounted upload input and generic remove control queue the real file bytes', async () => {
   const p = await fixture({ active: true });
   await attachmentFixture(p, { portalInput: true, genericRemove: true });
