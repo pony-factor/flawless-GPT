@@ -3,12 +3,29 @@
   const PAGE = '[class*="_reportPage_"]';
   const MAX_BYTES = 4 * 1024 * 1024;
   const documents = new WeakSet();
+  const observers = new Map();
+  let finalized = false;
   let enabled = false;
   let scheduled = false;
   let frameTimer;
   let automaticBusy = false;
   const reportCandidates = new WeakMap();
   const RELOAD_MESSAGE = 'The extension was updated. Reload this ChatGPT page to reconnect and retry the import.';
+  function stopMonitoring() {
+    clearInterval(frameTimer);
+    frameTimer = undefined;
+    for (const observer of observers.values()) observer.disconnect();
+  }
+  function finalizeReport(doc) {
+    if (finalized) return;
+    // Only a confirmed native repository import can stop the retry loop.
+    // Report fullscreen state is released through the authenticated iframe
+    // message channel already used for report activation.
+    finalized = true;
+    stopMonitoring();
+    window.top.postMessage({ type: 'ghrc-research-report-finalized' }, 'https://chatgpt.com');
+  }
+
   async function request(message) {
     if (!globalThis.chrome?.runtime?.sendMessage) {
       clearInterval(frameTimer);
@@ -25,7 +42,7 @@
   }
 
   async function autoImport(doc) {
-    if (!enabled || automaticBusy) return;
+    if (!enabled || automaticBusy || finalized) return;
     const download = doc.querySelector('button[aria-label="Export"], button[aria-label="Download"]');
     const scope = download && reportScope(download);
     if (!scope || scope.querySelector('[aria-busy="true"], [role="progressbar"]') || download.disabled) return;
@@ -42,6 +59,7 @@
           button.setAttribute('aria-label', 'Report added to repo');
           button.title = `Added to ${job.result.repository} (${job.result.branch})`;
         }
+        finalizeReport(doc);
         return;
       }
       if (job?.state === 'import-error') {
@@ -66,6 +84,7 @@
       } else {
         const status = scope.querySelector('.ghrc-report-status');
         if (status) globalThis.__ghrcResearchImportStatus(status, result);
+        finalizeReport(doc);
       }
     } catch (error) {
       if (!error.message.startsWith('The complete report is not ready yet.')) {
@@ -118,14 +137,16 @@
   }
 
   function mount(doc) {
-    if (!doc.documentElement) return;
+    if (finalized || !doc.documentElement) return;
     if (!documents.has(doc.documentElement)) {
       documents.add(doc.documentElement);
       const style = doc.createElement('style');
       style.textContent = `.${BUTTON}{display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;width:32px;height:32px;padding:6px;border:0;border-radius:6px;background:transparent;color:inherit;cursor:pointer}.${BUTTON}:hover{background:color-mix(in srgb,currentColor 10%,transparent)}.${BUTTON}:focus-visible{outline:2px solid currentColor;outline-offset:2px}.${BUTTON}:disabled{opacity:.55;cursor:default}.ghrc-report-status{font-size:12px;line-height:1.4;padding:6px 12px;overflow-wrap:anywhere}.ghrc-report-status:empty{display:none}`;
       style.textContent += '.ghrc-report-import{color:inherit;background:light-dark(#fff,#202123);border:1px solid #888;border-radius:12px;padding:24px;max-width:420px;width:calc(100% - 64px);color-scheme:light dark}.ghrc-report-import::backdrop{background:#0008}.ghrc-report-import h2{margin-top:0;font-size:20px}.ghrc-report-import p{font-size:13px}.ghrc-report-import input{display:block;box-sizing:border-box;width:100%;padding:10px;margin-top:8px}.ghrc-report-import form>div{display:flex;justify-content:flex-end;gap:12px;margin-top:20px}.ghrc-report-import button{padding:8px 12px;cursor:pointer}';
       (doc.head || doc.documentElement).append(style);
-      new MutationObserver(schedule).observe(doc, { childList: true, subtree: true });
+      const observer = new MutationObserver(schedule);
+      observer.observe(doc, { childList: true, subtree: true });
+      observers.set(doc, observer);
       doc.addEventListener('load', schedule, true);
       doc.addEventListener('click', async event => {
         const link = event.target.closest?.('a[href]');
@@ -186,6 +207,7 @@
             button.title = `${result.unchanged ? 'Already in' : 'Added to'} ${result.repository} (${result.branch})`;
             button.setAttribute('aria-label', 'Report added to repo');
             globalThis.__ghrcResearchImportStatus(status, result);
+            finalizeReport(doc);
           } catch (error) {
             status.textContent = error.message || 'Connection unavailable. Reload this page and try again.';
             button.disabled = false;
@@ -201,16 +223,17 @@
   }
 
   function schedule() {
-    if (scheduled) return;
+    if (scheduled || finalized) return;
     scheduled = true;
-    setTimeout(() => { scheduled = false; mount(document); }, 0);
+    setTimeout(() => { scheduled = false; if (!finalized) mount(document); }, 0);
   }
 
   function updateEnabled(value) {
     enabled = Boolean(value);
+    if (finalized) return;
     clearInterval(frameTimer);
-    // The sandbox can document.open() an existing inner frame, replacing its observers.
-    // Revisit it so document replacement and delayed report loads recover.
+    // Revisit active report documents to recover document.open() replacements
+    // and interrupted imports; never restart after repository finalization.
     frameTimer = setInterval(schedule, 1000);
     schedule();
   }
@@ -227,6 +250,15 @@
 
   });
   // Report links and fullscreen state work independently of the publishing preference.
-  if (!frameTimer) frameTimer = setInterval(schedule, 1000);
+  if (!frameTimer && !finalized) frameTimer = setInterval(schedule, 1000);
+  window.addEventListener('pagehide', stopMonitoring);
+  window.addEventListener('pageshow', event => {
+    if (event.persisted && !finalized) {
+      for (const [doc, observer] of observers) {
+        if (doc.documentElement) observer.observe(doc, { childList: true, subtree: true });
+      }
+      updateEnabled(enabled);
+    }
+  });
   schedule();
 })();
