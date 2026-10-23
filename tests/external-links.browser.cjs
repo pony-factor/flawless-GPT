@@ -7,7 +7,10 @@ const read = file => fs.readFileSync(path.join(__dirname, '..', file), 'utf8');
 let browser;
 
 before(async () => {
-  browser = await chromium.launch({ executablePath: '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser', headless: true });
+  const options = { headless: true };
+  if (process.env.BRAVE_PATH) options.executablePath = process.env.BRAVE_PATH;
+  else if (process.platform === 'darwin') options.executablePath = '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser';
+  browser = await chromium.launch(options);
 });
 after(async () => { await browser?.close(); });
 
@@ -119,6 +122,37 @@ test('all sidebar buttons prefer the same native split, including GitHub documen
   await page.close();
 });
 
+
+test('modern conversation roles exclude user links before and after hydration', async () => {
+  const markup = [
+    '<article data-conversation-role="user"><a id="modern-user" href="https://github.com/pony-factor/sweetiebot-SCM/pull/420#issuecomment-6358632182">Pasted URL <svg id="own-arrow" width="14" height="14"></svg></a></article>',
+    '<article data-conversation-role="assistant"><a id="modern-assistant" href="https://example.org/assistant">Source</a></article>',
+    '<div data-conversation-role="user"><a id="nested-user" href="https://example.org/other">Another own link</a></div>',
+  ].join('');
+  const page = await fixture({ openExternalLinksInSplitView: true, hideExternalLinkArrows: true }, null, true, markup);
+  await page.locator('#modern-assistant + .ghrc-link-with-actions .ghrc-link-sidebar-button').waitFor();
+  assert.equal(await page.locator('#modern-user + .ghrc-link-with-actions').count(), 0);
+  assert.equal(await page.locator('#nested-user + .ghrc-link-with-actions').count(), 0);
+  assert.equal(await page.locator('#own-arrow[data-ghrc-external-link-arrow]').count(), 0);
+  assert.equal(await page.locator('#own-arrow').isVisible(), true);
+  assert.equal(await page.locator('.ghrc-link-sidebar-button').count(), 1);
+  await page.evaluate(() => {
+    const turn = document.createElement('article');
+    turn.id = 'hydrating-turn';
+    turn.innerHTML = '<a id="hydrating-link" href="https://example.org/hydrate">Link</a>';
+    document.querySelector('main').append(turn);
+  });
+  await page.locator('#hydrating-link + .ghrc-link-with-actions').waitFor();
+  await page.locator('#hydrating-turn').evaluate(turn => turn.setAttribute('data-conversation-role', 'user'));
+  await page.waitForFunction(() => !document.querySelector('#hydrating-link + .ghrc-link-with-actions'));
+  assert.equal(await page.locator('.ghrc-link-sidebar-button').count(), 1);
+  await page.locator('#hydrating-turn').evaluate(turn => turn.setAttribute('data-conversation-role', 'assistant'));
+  await page.locator('#hydrating-link + .ghrc-link-with-actions .ghrc-link-sidebar-button').waitFor();
+  await page.locator('#hydrating-turn').evaluate(turn => turn.setAttribute('data-conversation-role', 'user'));
+  await page.waitForFunction(() => !document.querySelector('#hydrating-link + .ghrc-link-with-actions'));
+  assert.deepEqual(page.errors, []);
+  await page.close();
+});
 
 test('own-message links never get sidebar buttons, including after role hydration', async () => {
   const conversation = [
