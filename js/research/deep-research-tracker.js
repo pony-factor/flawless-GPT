@@ -374,11 +374,9 @@
     } else document.getElementById(DASHBOARD_ID)?.remove();
 
     const prompts = [...document.querySelectorAll('#prompt-textarea, [data-composer-markdown][contenteditable="true"]')].filter(visible);
-    const researchPrompt = prompts.find(prompt => prompt.querySelector([
-      '[data-prompt-link-href="app://connector_openai_deep_research"]',
-      '[data-prompt-link-href="app://connector_openai_deep_research_work"]',
-      '[data-prompt-link-label="$deep-research"]',
-    ].join(',')));
+    // Match both current and legacy research mention representations.
+    const researchPrompt = prompts.find(prompt => prompt.querySelector(RESEARCH_MENTION)
+      || prompt.querySelector('[data-prompt-link-label="$deep-research"]'));
     const composer = researchPrompt?.closest('form, [data-type="unified-composer"]');
     // The in-chat tracker is independent of the homepage; both can display.
     if (enabled && preferences.showDeepResearchComposer !== false && composer?.parentElement) {
