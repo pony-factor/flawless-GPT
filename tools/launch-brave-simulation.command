@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-workspace_dir="$(cd -- "$(dirname -- "$0")" && pwd -P)"
+workspace_dir="$(cd -- "$(dirname -- "$0")/.." && pwd -P)"
 workspace_id="$(printf '%s' "$workspace_dir" | /usr/bin/shasum -a 256)"
 workspace_id="${workspace_id%% *}"
 test_profile_dir="$HOME/Library/Application Support/Flawless ChatGPT/Brave Tests/$workspace_id"

@@ -50,7 +50,7 @@ https://github.com/JFWooten4/JFWooten4/blob/main/headshots/final-form/README.md
 
 ## Install
 
-On macOS, double-click `Test in Brave.command` to open ChatGPT in a separate
+On macOS, double-click `tools/launch-brave-simulation.command` to open ChatGPT in a separate
 Brave test profile with this checkout loaded as an unpacked extension. Each
 checkout has its own persistent test profile. When the test browser is stopped,
 the launcher copies encrypted cookies from normal Brave's Default profile,
