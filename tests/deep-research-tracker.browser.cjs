@@ -142,7 +142,7 @@ test('homepage only shows the Deep Research embed in the final five days', async
       document.documentElement.setAttribute('data-ghrc-deep-research-usage', JSON.stringify({ remaining: 13, resetAt: now + 5 * 24 * 60 * 60_000, observedAt: now }));
     });
     await page.waitForFunction(() => document.getElementById('ghrc-deep-research-tracker')?.textContent.includes('13 left')
-      && !document.getElementById('ghrc-deep-research-tracker-composer'));
+      && document.getElementById('ghrc-deep-research-tracker-composer')?.textContent.includes('13 left'));
   } finally { await browser.close(); }
 });
 
