@@ -194,6 +194,33 @@ test('successful manual repository import stops sandbox observer and polling', a
   } finally { await browser.close(); }
 });
 
+test('disabled publishing does not start a one-second background scanner', async () => {
+  const browser = await chromium.launch({ executablePath: '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser', headless: true });
+  try {
+    const page = await browser.newPage();
+    await page.setContent('<section><button aria-label="Export">Export</button>'
+      + '<article class="_reportPage_fixture"><h1>Read-only report</h1></article></section>');
+    await page.evaluate(() => {
+      window.oneSecondTimers = [];
+      const realInterval = window.setInterval.bind(window);
+      window.setInterval = (callback, delay, ...args) => {
+        window.oneSecondTimers.push(delay);
+        return realInterval(callback, delay, ...args);
+      };
+      window.chrome = {
+        storage: { local: { get: async defaults => ({ ...defaults, researchPublisherEnabled: false }) },
+          onChanged: { addListener() {} } },
+        runtime: { sendMessage: async () => { throw new Error('Publisher is disabled'); } },
+      };
+    });
+    await page.addScriptTag({ content: fs.readFileSync('js/research/research-publisher.js', 'utf8') });
+    await page.waitForTimeout(50);
+    assert.deepEqual(await page.evaluate(() => oneSecondTimers), [],
+      'disabled publisher should rely on DOM events instead of periodic scans');
+    assert.equal(await page.getByRole('button', { name: 'Add to repo' }).count(), 0);
+  } finally { await browser.close(); }
+});
+
 test('import confirmation links open through the bridge inside a sandbox frame', async () => {
   const browser = await chromium.launch({ executablePath: '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser', headless: true });
   try {
