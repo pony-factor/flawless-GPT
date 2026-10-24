@@ -1,5 +1,6 @@
 #github-repositories-for-chatgpt {
-  --ghrc-accent: #0969da;
+  --ghrc-accent: var(--ghrc-dashboard-accent-light, #0969da);
+  --ghrc-repository-name-color: var(--ghrc-dashboard-link-light, var(--ghrc-accent));
   --ghrc-border: #d0d7de;
   --ghrc-canvas: #ffffff;
   --ghrc-canvas-subtle: #f6f8fa;
@@ -31,7 +32,8 @@ html[data-ghrc-new-chat][data-ghrc-hide-dictation]
 }
 
 html.dark #github-repositories-for-chatgpt {
-  --ghrc-accent: #4493f8;
+  --ghrc-accent: var(--ghrc-dashboard-accent-dark, #4493f8);
+  --ghrc-repository-name-color: var(--ghrc-dashboard-link-dark, var(--ghrc-accent));
   --ghrc-border: #3d444d;
   --ghrc-canvas: #0d1117;
   --ghrc-canvas-subtle: #151b23;
@@ -399,7 +401,7 @@ html.dark #github-repositories-for-chatgpt {
 }
 
 #github-repositories-for-chatgpt .ghrc-repository-name {
-  color: var(--ghrc-accent);
+  color: var(--ghrc-repository-name-color);
   font-size: 13px;
   font-weight: 600;
   overflow: hidden;
@@ -709,7 +711,8 @@ html.dark #github-repositories-for-chatgpt {
 
 @media (prefers-color-scheme: dark) {
   html:not(.light) #github-repositories-for-chatgpt {
-    --ghrc-accent: #4493f8;
+    --ghrc-accent: var(--ghrc-dashboard-accent-dark, #4493f8);
+  --ghrc-repository-name-color: var(--ghrc-dashboard-link-dark, var(--ghrc-accent));
     --ghrc-border: #3d444d;
     --ghrc-canvas: #0d1117;
     --ghrc-canvas-subtle: #151b23;
