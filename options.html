@@ -156,6 +156,14 @@
         </fieldset>
 
         <hr class="section-divider" />
+        <fieldset id="dashboard-color-settings" aria-label="Dashboard color settings">
+          <legend>Dashboard colors</legend>
+          <p class="help">Set dashboard accents and repository link colors separately for light and dark modes. Choose a swatch or enter any six-digit HEX value (with or without #). Repository links inherit the accent unless customized separately. Default restores inherited colors; changes apply to open dashboards.</p>
+          <div id="dashboard-color-grid" class="composer-color-grid"></div>
+          <button id="dashboard-color-reset" type="button" class="secondary">Restore dashboard colors</button>
+        </fieldset>
+
+        <hr class="section-divider" />
         <fieldset>
           <legend>Pinned repositories</legend>
           <p class="help">
@@ -632,6 +640,7 @@
     <script src="js/settings/owner-grid-options.js"></script>
     <script src="js/settings/options-page.js"></script>
     <script src="js/composer/composer-colors.js"></script>
+    <script src="js/dashboard/dashboard-colors.js"></script>
     <script src="js/settings/autofocus-options.js"></script>
   </body>
 </html>

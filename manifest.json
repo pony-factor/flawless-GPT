@@ -126,6 +126,7 @@
         "js/dashboard/repository-fast-ui.js",
         "js/dashboard/owner-grid.js",
         "js/dashboard/repository-search-shortcut.js",
+        "js/dashboard/dashboard-colors.js",
         "js/dashboard/content.js"
       ],
       "run_at": "document_start"
