@@ -90,7 +90,8 @@ test('Paste Link and Spellcheck join the composer before + in narrow viewports',
       assert.ok(link.x + link.width <= spellcheck.x, 'Paste Link stays ahead of Spellcheck');
       assert.ok(spellcheck.x + spellcheck.width <= plus.x, 'Spellcheck stays ahead of +');
       assert.equal(link.y, spellcheck.y);
-      assert.equal(spellcheck.y, plus.y);
+      assert.ok(Math.abs((spellcheck.y + spellcheck.height / 2) - (plus.y + plus.height / 2)) <= 1,
+        'Spellcheck stays vertically centered with the native + button');
     }
 
     await page.setViewportSize({ width: 1000, height: 600 });
