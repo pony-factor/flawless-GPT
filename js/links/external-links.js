@@ -178,6 +178,31 @@
     return true;
   }
 
+  // DIL document/source cards are React pressables without an href. When the
+  // same document is already open beside chat, React can treat another card
+  // click as selecting the current item instead of opening its external URL.
+  function openExternalCard(event) {
+    if (!newTabsEnabled || !isPlainPrimaryActivation(event)) return false;
+    const card = event.target.closest?.('[data-d-component="pressable"]');
+    if (!card || !card.closest('main, [role="dialog"]')
+        || card.closest('#ghrc-link-preview, .ghrc-link-actions')
+        || event.target.closest?.('a[href], input, textarea, select, [contenteditable="true"]')) return false;
+    // Nested buttons retain their own actions, such as expanding card details.
+    const control = event.target.closest?.('button, [role="button"]');
+    if (control && control !== card) return false;
+
+    card.dispatchEvent(new Event(card.closest('[role="dialog"]')
+      ? "ghrc-resolve-citation-url" : "ghrc-resolve-item-url", { bubbles: true }));
+    let url;
+    try { url = new URL(card.getAttribute("data-ghrc-citation-url")); } catch { return false; }
+    if (!["http:", "https:"].includes(url.protocol) || url.origin === window.location.origin
+        || url.username || url.password) return false;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    window.open(stripTrackingFromUrl(url).href, "_blank", "noopener,noreferrer");
+    return true;
+  }
+
   function closeLinkPreview(restoreFocus = true) {
     const hadPreview = Boolean(previewPanel);
     nativeSplitRequest += 1;
@@ -1167,7 +1192,7 @@
     }
     const link = event.target.closest?.("a[href]");
     stripTrackingFromLink(link);
-    openExternalLink(event, link);
+    if (!openExternalLink(event, link)) openExternalCard(event);
   }, true);
 
   document.addEventListener("keydown", (event) => {
