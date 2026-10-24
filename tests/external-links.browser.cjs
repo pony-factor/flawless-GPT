@@ -538,6 +538,70 @@ test('embedded citation buttons open the actual source beside chat without invok
 });
 
 
+test('collapsed document cards open new tabs when their source is already beside chat', async () => {
+  for (const nativeSplitSupported of [true, false]) {
+    const page = await fixture({ openExternalLinksInSplitView: true }, null, nativeSplitSupported);
+    await page.evaluate(() => {
+      const card = document.createElement('button');
+      card.id = 'document-card';
+      card.type = 'button';
+      card.setAttribute('data-d-component', 'pressable');
+      card.setAttribute('aria-label', 'Open source document');
+      card.textContent = 'Document info';
+      card.__reactFiber$fixture = { memoizedProps: { __dilHostElement: { props: {
+        onVisibleKey: 'https://example.org/source?utm_source=chatgpt&keep=1#section',
+      } } } };
+      window.nativeCardClicks = 0;
+      card.addEventListener('click', () => { window.nativeCardClicks++; });
+      document.querySelector('main').append(card);
+    });
+    await page.locator('.ghrc-link-sidebar-button').first().click();
+    await page.waitForFunction(() => previewRequests.some(
+      request => request.type === 'open-native-split-view'));
+    if (!nativeSplitSupported) await page.locator('#ghrc-link-preview').waitFor();
+    const previousRequests = await page.evaluate(() => previewRequests.length);
+    await page.locator('#document-card').click();
+    assert.deepEqual(await page.evaluate(() => openedLinks), [
+      ['https://example.org/source?keep=1#section', '_blank', 'noopener,noreferrer'],
+    ]);
+    assert.equal(await page.evaluate(() => nativeCardClicks), 0);
+    assert.equal(await page.evaluate(() => previewRequests.length), previousRequests);
+    assert.equal(await page.locator('#ghrc-link-preview').count(), nativeSplitSupported ? 0 : 1);
+    assert.deepEqual(page.errors, []);
+    await page.close();
+  }
+});
+
+test('source cards in a popup also use new tabs, but disabled new tabs preserve native clicks', async () => {
+  for (const newTabsEnabled of [true, false]) {
+    const page = await fixture({ openExternalLinksInSplitView: true,
+      openExternalLinksInNewTabs: newTabsEnabled });
+    await page.evaluate(() => {
+      const dialog = document.createElement('div');
+      dialog.setAttribute('role', 'dialog');
+      const card = document.createElement('button');
+      card.id = 'source-card';
+      card.type = 'button';
+      card.setAttribute('data-d-component', 'pressable');
+      card.setAttribute('aria-label', 'Open external source');
+      card.textContent = 'Source document';
+      card.__reactFiber$fixture = { memoizedProps: { __dilHostElement: { props: {
+        onVisibleKey: 'https://example.org/linked-document',
+      } } } };
+      window.nativeCardClicks = 0;
+      card.addEventListener('click', () => { window.nativeCardClicks++; });
+      dialog.append(card);
+      document.body.append(dialog);
+    });
+    await page.locator('#source-card').click();
+    assert.deepEqual(await page.evaluate(() => openedLinks), newTabsEnabled
+      ? [['https://example.org/linked-document', '_blank', 'noopener,noreferrer']] : []);
+    assert.equal(await page.evaluate(() => nativeCardClicks), newTabsEnabled ? 0 : 1);
+    assert.deepEqual(page.errors, []);
+    await page.close();
+  }
+});
+
 test('source card copy controls appear on hover, copy each card URL, and preserve popup width', async () => {
   const page = await fixture({ openExternalLinksInSplitView: true });
   await page.evaluate(() => {
