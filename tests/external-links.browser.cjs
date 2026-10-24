@@ -558,7 +558,9 @@ test('collapsed document cards open new tabs when their source is already beside
     await page.locator('.ghrc-link-sidebar-button').first().click();
     await page.waitForFunction(() => previewRequests.some(
       request => request.type === 'open-native-split-view'));
-    if (!nativeSplitSupported) await page.locator('#ghrc-link-preview').waitFor();
+    if (!nativeSplitSupported) {
+      await page.frameLocator('#ghrc-link-preview iframe').frameLocator('iframe').locator('h1').waitFor();
+    }
     const previousRequests = await page.evaluate(() => previewRequests.length);
     await page.locator('#document-card').click();
     assert.deepEqual(await page.evaluate(() => openedLinks), [
