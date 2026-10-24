@@ -30,6 +30,21 @@
     return prompt.closest("form") || prompt.closest('[data-type="unified-composer"]');
   }
 
+  // Stay scoped to the active composer; ChatGPT may show other plus buttons
+  // in menus, sidebars, and inline editors.
+  function findComposerPlusButton(composer) {
+    const host = composer?.closest?.("form") || composer?.closest?.('[data-type="unified-composer"]');
+    return host?.querySelector([
+      'button[data-testid="composer-plus-btn"]',
+      'button[data-testid="composer-plus-button"]',
+      'button[data-testid="composer-attachment-button"]',
+      'button[aria-label="Add files and more" i]',
+      'button[aria-label^="Add photos" i]',
+      'button[aria-label^="Add files" i]',
+      'button[aria-label^="Attach files" i]',
+    ].join(", ")) || null;
+  }
+
   function isVisible(node) {
     return Boolean(node?.isConnected !== false && node?.getClientRects?.().length);
   }
@@ -341,10 +356,19 @@
     const composer = findComposer();
     if (!composer) return;
 
+    const plus = window.matchMedia?.("(max-width: 700px)")?.matches
+      ? findComposerPlusButton(findComposerInput()) : null;
     let launcher = document.getElementById(LAUNCHER_ID);
-    if (!launcher || launcher.parentElement !== composer) {
-      launcher?.remove();
-      launcher = createLauncher();
+    if (!launcher) launcher = createLauncher();
+
+    launcher.toggleAttribute("data-ghrc-inline-before-plus", Boolean(plus));
+    if (plus) {
+      // Place the controls on the actual native toolbar, ahead of +.
+      // Moving the existing node preserves its click handler across resizes.
+      if (launcher.parentElement !== plus.parentElement || launcher.nextElementSibling !== plus) {
+        plus.before(launcher);
+      }
+    } else if (launcher.parentElement !== composer) {
       composer.append(launcher);
     }
     composer.setAttribute(HOST_ATTR, "true");
@@ -376,6 +400,12 @@
 
   void context.run(loadSettings);
   const observer = new MutationObserver(scheduleMount);
-  context.onStop(() => observer.disconnect());
+  const narrowViewport = window.matchMedia?.("(max-width: 700px)");
+  narrowViewport?.addEventListener("change", scheduleMount);
+  context.onStop(() => {
+    narrowViewport?.removeEventListener("change", scheduleMount);
+    observer.disconnect();
+    removeLauncher();
+  });
   observer.observe(document.documentElement, { childList: true, subtree: true });
 })();
