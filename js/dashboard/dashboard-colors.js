@@ -28,10 +28,16 @@
     let loaded = false;
     let pending = Promise.resolve();
 
+    function displayColor(key, preview) {
+      // Repository names inherit the dashboard accent until customized.
+      const accentKey = key === "repositoryLight" ? "accentLight"
+        : key === "repositoryDark" ? "accentDark" : null;
+      return colors[key] || (accentKey && colors[accentKey]) || preview;
+    }
     function render(input) {
       colors = valid(input);
       for (const [key, { picker, hex, clear, preview }] of fields) {
-        picker.value = hex.value = colors[key] || preview;
+        picker.value = hex.value = displayColor(key, preview);
         clear.hidden = !colors[key];
         hex.removeAttribute("aria-invalid");
       }
@@ -90,7 +96,7 @@
         const value = normalizeHex(hex.value);
         if (value && colors[key] !== value) setColor(value);
         else {
-          hex.value = colors[key] || preview;
+          hex.value = displayColor(key, preview);
           hex.removeAttribute("aria-invalid");
         }
       });

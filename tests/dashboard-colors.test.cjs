@@ -48,7 +48,7 @@ test("HEX values save and defaults restore independently", async () => {
   assert.equal(accentHex.value, "#aabbcc");
   assert.equal(accentDefault.hidden, false);
   assert.equal(linkDefault.hidden, true);
-  assert.equal(linkHex.value, "#0969da");
+  assert.equal(linkHex.value, "#aabbcc", "links inherit customized accent");
   linkHex.value = "CC33AA";
   linkHex.emit("input");
   await tick();
@@ -65,6 +65,7 @@ test("HEX values save and defaults restore independently", async () => {
   linkDefault.emit("click");
   await tick();
   assert.equal(linkDefault.hidden, true);
+  assert.equal(linkHex.value, "#aabbcc", "default restores active accent");
   assert.equal(writes.at(-1).repositoryLight, undefined);
   reset.emit("click");
   await tick();
