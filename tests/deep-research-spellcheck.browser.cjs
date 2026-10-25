@@ -213,3 +213,32 @@ test("switching existing chats during spellcheck preserves the current conversat
   assert.deepEqual(errors, []);
   await page.close();
 });
+
+test("Deep Research capture yields to queue before spellcheck when work is busy", async () => {
+  const { page, errors } = await fixture({ existingChat: true });
+  await page.evaluate(() => {
+    window.queued = 0;
+    window.deferQueue = true;
+    window.__ghrcMessageQueue = {
+      shouldQueueResearchPrompt: () => window.deferQueue,
+      composerAutocompleteIsOpen: () => false,
+      enqueueComposerMessage: () => { window.queued++; },
+    };
+    window.addEventListener('keydown', event => {
+      if (event.key === 'Enter' && !event.defaultPrevented) window.queued++;
+    }, true);
+  });
+  await page.locator('#prompt-textarea').click();
+  await page.keyboard.press('Enter');
+  assert.equal(await page.evaluate(() => queued), 1);
+  assert.equal(await page.evaluate(() => requests.some(r => r.type === 'ghrc-research-spellcheck-begin')), false);
+  await page.getByRole('button', { name: 'Send' }).click();
+  assert.equal(await page.evaluate(() => queued), 2);
+  assert.equal(await page.evaluate(() => sent), 0);
+  await page.evaluate(() => { window.deferQueue = false; });
+  await page.locator('#prompt-textarea').click();
+  await page.keyboard.press('Enter');
+  await page.waitForFunction(() => requests.some(r => r.type === 'ghrc-research-spellcheck-begin'));
+  assert.deepEqual(errors, []);
+  await page.close();
+});

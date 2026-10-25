@@ -2149,6 +2149,45 @@ for (const [label, connector] of [['Deep research', 'connector_openai_deep_resea
   });
 }
 
+test('standalone app chip without text queues and sends with plugin identity', async () => {
+  const p = await fixture({ active: true });
+  await enableAppMentions(p);
+  await p.evaluate(() => {
+    const chip = document.createElement('span');
+    chip.innerHTML = '<span app-mention-path="app://connector_openai_deep_research" app-mention-name="connector_openai_deep_research" app-mention-display-name="Deep research">Deep research</span><button type="button" aria-label="Remove Deep research">×</button>';
+    chip.querySelector('button').addEventListener('click', () => chip.remove());
+    document.querySelector('form').prepend(chip);
+  });
+  await p.locator('#ghrc-message-queue-button').click();
+  await p.locator('.ghrc-message-queue-editor').waitFor();
+  const saved = await p.evaluate(() => storage.queuedChatMessages['conversation:test'][0]);
+  assert.equal(saved.text, 'Deep research');
+  assert.equal(saved.mentions[0].attributes['app-mention-path'], 'app://connector_openai_deep_research');
+  assert.equal(await p.locator('form [app-mention-path]').count(), 0);
+  await p.evaluate(() => finish());
+  await sentCount(p, 1);
+  assert.deepEqual(await p.evaluate(() => sentApps), [['app://connector_openai_deep_research']]);
+  assert.deepEqual(p.errors, []);
+  await p.close();
+});
+
+test('inline plugin alone queues by Enter without a prompt', async () => {
+  const p = await fixture({ active: true });
+  await enableAppMentions(p);
+  await p.evaluate(() => {
+    editor.innerHTML = '<p><span app-mention-path="app://courtlistener" app-mention-name="courtlistener" contenteditable="false">CourtListener</span></p>';
+    editor.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await p.locator('[data-composer-markdown]').press('Enter');
+  await p.locator('.ghrc-message-queue-editor').waitFor();
+  assert.equal(await p.locator('.ghrc-message-queue-editor').inputValue(), 'CourtListener');
+  await p.evaluate(() => finish());
+  await sentCount(p, 1);
+  assert.deepEqual(await p.evaluate(() => sentApps), [['app://courtlistener']]);
+  assert.deepEqual(p.errors, []);
+  await p.close();
+});
+
 test('app restoration failure keeps the message queued and pauses instead of sending plain text', async () => {
   const p = await fixture({ active: true });
   await p.evaluate(() => {
