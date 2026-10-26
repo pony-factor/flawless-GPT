@@ -69,44 +69,155 @@ test('report host observes only active frames and disconnects after finalization
   const browser = await chromium.launch({ executablePath: '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser', headless: true });
   try {
     const page = await browser.newPage();
-    await page.setContent('<form><div id="prompt-textarea">Draft</div></form><div style="position:fixed;inset:0"><iframe src="about:blank"></iframe></div>');
+    await page.setContent('<form><div id="prompt-textarea">Draft</div></form>'
+      + '<div style="position:fixed;inset:0"><iframe></iframe></div>');
     await page.evaluate(() => {
-      const NativeObserver = MutationObserver;
-      window.hostObserverStats = { created: 0, observing: 0, disconnected: 0 };
+      const NativeObserver = window.MutationObserver;
+      window.observerCounts = { attached: 0, detached: 0, active: 0 };
       window.MutationObserver = class extends NativeObserver {
-        constructor(callback) { super(callback); hostObserverStats.created++; }
-        observe(...args) { hostObserverStats.observing++; return super.observe(...args); }
-        disconnect() { hostObserverStats.disconnected++; return super.disconnect(); }
+        observe(...args) {
+          window.observerCounts.attached += 1;
+          window.observerCounts.active += 1;
+          return super.observe(...args);
+        }
+        disconnect() {
+          window.observerCounts.detached += 1;
+          window.observerCounts.active = Math.max(0, window.observerCounts.active - 1);
+          return super.disconnect();
+        }
       };
-      window.__ghrcExtensionContext = { active: () => true, onStop: cleanup => { window.cleanupHost = cleanup; } };
-      window.reportEvent = details => window.dispatchEvent(new MessageEvent('message', {
-        origin: 'https://mcp-app-abc123.web-sandbox.oaiusercontent.com',
-        source: document.querySelector('iframe').contentWindow,
-        data: { type: 'ghrc-research-report-state', ...details },
-      }));
+      window.chrome = { runtime: { onMessage: { addListener() {} } } };
+      window.reportMessage = (type, frame = document.querySelector('iframe'), origin = 'https://mcp-app-abc123.web-sandbox.oaiusercontent.com') => {
+        window.dispatchEvent(new MessageEvent('message', {
+          origin, source: frame.contentWindow,
+          data: { type, report: true },
+        }));
+      };
     });
     await page.addScriptTag({ content: fs.readFileSync('js/research/research-report-host.js', 'utf8') });
-    assert.deepEqual(await page.evaluate(() => hostObserverStats), { created: 0, observing: 0, disconnected: 0 });
-    await page.evaluate(() => reportEvent({ report: true }));
-    await page.waitForFunction(() => hostObserverStats.observing === 1);
+    assert.equal(await page.evaluate(() => observerCounts.attached), 0,
+      'ordinary ChatGPT tabs must not start a document-wide observer');
+    await page.evaluate(() => reportMessage('ghrc-research-report-state'));
+    assert.equal(await page.evaluate(() => observerCounts.active), 1);
     assert.equal(await page.locator('form').evaluate(node => getComputedStyle(node).visibility), 'hidden');
 
-    await page.evaluate(() => reportEvent({ report: true, finalized: true }));
-    await page.waitForFunction(() => hostObserverStats.disconnected === 1);
-    assert.equal(await page.locator('form').evaluate(node => getComputedStyle(node).visibility), 'visible');
-    await page.evaluate(() => reportEvent({ report: true }));
-    await page.waitForTimeout(50);
-    assert.equal(await page.evaluate(() => hostObserverStats.observing), 1, 'stale messages cannot restart a finalized report observer');
+    await page.evaluate(() => reportMessage('ghrc-research-report-finalized',
+      document.querySelector('iframe'), 'https://untrusted.example'));
+    assert.equal(await page.evaluate(() => observerCounts.active), 1,
+      'untrusted completion messages cannot end the report lifecycle');
 
-    // Reuse of the iframe for a different report is a new lifecycle.
-    await page.locator('iframe').evaluate(node => { node.src = 'about:blank#another-report'; });
-    await page.evaluate(() => reportEvent({ report: true }));
-    await page.waitForFunction(() => hostObserverStats.observing === 2);
-    await page.evaluate(() => cleanupHost());
-    assert.equal(await page.evaluate(() => hostObserverStats.disconnected), 2);
+    await page.evaluate(() => reportMessage('ghrc-research-report-finalized'));
+    assert.equal(await page.evaluate(() => observerCounts.active), 0,
+      'successful finalization releases the active observer');
     assert.equal(await page.locator('form').evaluate(node => getComputedStyle(node).visibility), 'visible');
-    assert.equal(await page.locator('style').evaluateAll(nodes =>
-      nodes.some(node => node.textContent.includes('data-ghrc-research-fullscreen'))), false);
+    await page.evaluate(() => reportMessage('ghrc-research-report-state'));
+    assert.equal(await page.evaluate(() => observerCounts.active), 0,
+      'stale report-state pings cannot restart a finalized frame');
+
+    await page.evaluate(() => {
+      const next = document.createElement('iframe');
+      next.style.cssText = 'width:100vw;height:100vh';
+      document.querySelector('iframe').after(next);
+      reportMessage('ghrc-research-report-state', next);
+    });
+    assert.equal(await page.evaluate(() => observerCounts.active), 1,
+      'an independent later report can start its own observer');
+    await page.locator('iframe').last().evaluate(node => node.remove());
+    await page.waitForFunction(() => observerCounts.active === 0);
+    assert.equal(await page.locator('form').evaluate(node => getComputedStyle(node).visibility), 'visible');
+  } finally { await browser.close(); }
+});
+
+test('successful manual repository import stops sandbox observer and polling', async () => {
+  const browser = await chromium.launch({ executablePath: '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser', headless: true });
+  try {
+    const page = await browser.newPage();
+    await page.setContent('<section><div><button aria-label="Export">Export</button><button aria-label="Expand">Expand</button></div>'
+      + '<article class="_reportPage_fixture"><h1>Final report</h1><p>Completed analysis</p></article></section>');
+    await page.evaluate(() => {
+      const NativeObserver = window.MutationObserver;
+      const nativeInterval = window.setInterval.bind(window);
+      const nativeClear = window.clearInterval.bind(window);
+      window.monitoring = { observers: 0, polling: new Set(), signals: [], calls: [] };
+      window.MutationObserver = class extends NativeObserver {
+        observe(...args) {
+          window.monitoring.observers += 1;
+          return super.observe(...args);
+        }
+        disconnect() {
+          window.monitoring.observers = Math.max(0, window.monitoring.observers - 1);
+          return super.disconnect();
+        }
+      };
+      window.setInterval = (callback, delay, ...args) => {
+        const id = nativeInterval(callback, delay, ...args);
+        if (delay === 1000) window.monitoring.polling.add(id);
+        return id;
+      };
+      window.clearInterval = id => {
+        window.monitoring.polling.delete(id);
+        return nativeClear(id);
+      };
+      window.postMessage = (data, target) => {
+        window.monitoring.signals.push({ type: data.type, target });
+      };
+      window.chrome = { storage: { local: {
+        get: async defaults => ({ ...defaults, researchPublisherEnabled: true }),
+      }, onChanged: { addListener() {} } }, runtime: { sendMessage: async message => {
+        window.monitoring.calls.push(message.type);
+        if (message.type === 'research-launch-job') return { ok: true, job: null };
+        if (message.type === 'research-publisher-status') return {
+          ok: true, repository: 'Research', branch: 'main', categories: ['Markets'], contents: {},
+        };
+        return { ok: true, repository: 'Research', branch: 'main',
+          path: 'Markets/final-report.md', url: 'https://github.com/example/Research/blob/main/Markets/final-report.md' };
+      } } };
+    });
+    for (const file of ['vendor/turndown.js', 'vendor/turndown-plugin-gfm.js',
+      'js/research/research-import-dialog.js', 'js/research/research-publisher.js'])
+      await page.addScriptTag({ content: fs.readFileSync(file, 'utf8') });
+    await page.getByRole('button', { name: 'Add to repo', exact: true }).click();
+    await page.getByRole('dialog').waitFor();
+    await page.getByRole('button', { name: '📁 Markets', exact: true }).click();
+    await page.getByRole('button', { name: 'Import report', exact: true }).click();
+    await page.waitForFunction(() => document.querySelector('.ghrc-report-status')?.textContent.includes('Imported:'));
+    assert.deepEqual(await page.evaluate(() => ({
+      observers: monitoring.observers, polling: monitoring.polling.size,
+      finalSignals: monitoring.signals.filter(m => m.type === 'ghrc-research-report-finalized'),
+    })), { observers: 0, polling: 0, finalSignals: [
+      { type: 'ghrc-research-report-finalized', target: 'https://chatgpt.com' },
+    ] });
+    const scans = await page.evaluate(() => monitoring.calls.filter(type => type === 'research-launch-job').length);
+    await page.waitForTimeout(1200);
+    assert.equal(await page.evaluate(() => monitoring.calls.filter(type => type === 'research-launch-job').length), scans,
+      'completed reports must not resume the 1-second background scans');
+  } finally { await browser.close(); }
+});
+
+test('disabled publishing does not start a one-second background scanner', async () => {
+  const browser = await chromium.launch({ executablePath: '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser', headless: true });
+  try {
+    const page = await browser.newPage();
+    await page.setContent('<section><button aria-label="Export">Export</button>'
+      + '<article class="_reportPage_fixture"><h1>Read-only report</h1></article></section>');
+    await page.evaluate(() => {
+      window.oneSecondTimers = [];
+      const realInterval = window.setInterval.bind(window);
+      window.setInterval = (callback, delay, ...args) => {
+        window.oneSecondTimers.push(delay);
+        return realInterval(callback, delay, ...args);
+      };
+      window.chrome = {
+        storage: { local: { get: async defaults => ({ ...defaults, researchPublisherEnabled: false }) },
+          onChanged: { addListener() {} } },
+        runtime: { sendMessage: async () => { throw new Error('Publisher is disabled'); } },
+      };
+    });
+    await page.addScriptTag({ content: fs.readFileSync('js/research/research-publisher.js', 'utf8') });
+    await page.waitForTimeout(50);
+    assert.deepEqual(await page.evaluate(() => oneSecondTimers), [],
+      'disabled publisher should rely on DOM events instead of periodic scans');
+    assert.equal(await page.getByRole('button', { name: 'Add to repo' }).count(), 0);
   } finally { await browser.close(); }
 });
 
