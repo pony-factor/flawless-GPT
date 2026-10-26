@@ -491,6 +491,29 @@ html.dark #github-repositories-for-chatgpt {
   min-width: 0;
 }
 
+#github-repositories-for-chatgpt .ghrc-wooten-link-mark-submit {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+  display: inline-flex;
+  flex: none;
+  height: 34px;
+  justify-content: center;
+  padding: 2px;
+  width: 34px;
+}
+
+#github-repositories-for-chatgpt .ghrc-wooten-link-mark-submit:hover {
+  opacity: 0.85;
+}
+
+#github-repositories-for-chatgpt .ghrc-wooten-link-mark-submit:focus-visible {
+  outline: 2px solid var(--ghrc-accent);
+  outline-offset: 2px;
+}
+
 #github-repositories-for-chatgpt .ghrc-wooten-link-mark {
   filter: var(--ghrc-mark-filter);
   height: 30px;
