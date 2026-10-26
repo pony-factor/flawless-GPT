@@ -157,6 +157,10 @@ are labeled as last checked rather than being presented as fresh balances.
 
 Under **ChatGPT → Chat bar colors**, choose independent opt-in colors for the composer background, border, focus ring, typed text, caret, placeholder, selection, toolbar, send/stop buttons, and attachments. Unchecked swatches use ChatGPT's own theme, including dark-mode changes. Colors are stored locally under `composerColors`, update live in open chats, and can all be reset with **Restore ChatGPT colors**.
 
+### Dashboard accent and repository link colors
+
+Under **Dashboard → Dashboard colors** in both the extension popup and full settings, set independent light- and dark-mode colors for dashboard accents and repository names. Each swatch has a **custom HEX field** accepting six digits with or without the `#` prefix. Changes are stored locally under `dashboardColors` and update open dashboards immediately. Repository names follow the accent unless customized; **Default** restores an individual color and **Restore dashboard colors** clears all four overrides. Existing **Chat bar colors** continue to support HEX entry independently.
+
 ### Token storage
 
 GitHub token values are encrypted with AES-GCM before being written to
