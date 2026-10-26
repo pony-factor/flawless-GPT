@@ -350,6 +350,23 @@ shortcut hint immediately, and includes **Reset** to restore Alt+R. A plain
 shortcut key leaves normal typing, deletion, and editing alone while a text
 field is active. Browser-reserved keyboard combinations may be unavailable.
 
+## Automated tests
+
+Pull requests and pushes to `main` require all Node.js unit tests and focused
+user-message / sidebar-icon browser regressions. The full external-link browser
+suite also runs as an advisory check while unrelated existing browser failures
+are addressed. On Linux browser checks use Playwright's Chromium; macOS uses
+Brave by default or `BRAVE_PATH` when set.
+
+```sh
+node --test tests/*.test.cjs
+npm install --no-save --package-lock=false playwright@1.56.1
+npx playwright install chromium
+node --test tests/external-links.browser.cjs
+```
+
+Other browser suites are not yet enforced by CI.
+
 ## JavaScript organization
 
 Scripts live in feature folders under `js/`. The manifest and extension HTML
