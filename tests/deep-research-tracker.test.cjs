@@ -34,10 +34,13 @@ test('both settings views default to full-only counter and share the same prefer
     assert.match(html, /id="deep-research-allowance-mode"/);
     assert.match(html, /<option value="full" selected>Full research only<\/option>/);
     assert.match(html, /<option value="all">Full \+ lightweight<\/option>/);
+    assert.match(html, /The composer uses the same reports-remaining and reset-countdown choices/);
+    assert.doesNotMatch(html, /id="show-deep-research-composer-(?:count|reset)"/);
   }
   const settings = fs.readFileSync(path.join(__dirname, '../js/settings/options.js'), 'utf8');
   assert.match(settings, /deepResearchAllowanceMode: "full"/);
   assert.match(settings, /deepResearchAllowanceMode: deepResearchAllowanceModeInput\.value/);
+  assert.doesNotMatch(settings, /showDeepResearchComposer(?:Count|Reset)/);
   assert.match(settings, /deepResearchUsagePieTotals: \{ \.\.\.researchPieTotals \}/);
   assert.match(settings, /renderSelectedResearchPieTotal\(\)/);
 });
