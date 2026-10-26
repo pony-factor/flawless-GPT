@@ -183,7 +183,7 @@ test('native initialization fills the tracker automatically and clicking refresh
 });
 
 
-test('Research settings show the composer only when homepage allowance details are unavailable', async () => {
+test('Research composer shares homepage allowance fields whenever the homepage readout is unavailable', async () => {
   const browser = await chromium.launch({ executablePath: '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser', headless: true });
   try {
     const page = await browser.newPage();
@@ -308,6 +308,27 @@ test('Research settings show the composer only when homepage allowance details a
     await page.waitForFunction(() => document.getElementById('ghrc-deep-research-tracker')?.textContent.includes('13 left'));
     assert.equal(await homepage.evaluate(node => node.classList.contains('ghrc-research-near-reset')), false);
 
+    // A custom combined allowance must not change the full-only pie denominator.
+    await page.evaluate(() => {
+      window.changeResearchSetting('showDeepResearchUsagePie', true);
+      window.changeResearchSetting('deepResearchUsagePieTotals', { full: 20, all: 200 });
+      document.documentElement.setAttribute('data-ghrc-deep-research-usage', JSON.stringify({
+        remaining: 13, miniRemaining: 7,
+        resetAt: Date.now() + 10 * 24 * 3600_000, observedAt: Date.now(),
+      }));
+    });
+    await page.waitForFunction(() => document.querySelector('#ghrc-deep-research-tracker')?.title.includes('13 of 20 full reports'));
+    await page.evaluate(() => window.changeResearchSetting('deepResearchAllowanceMode', 'all'));
+    await page.waitForFunction(() => document.querySelector('#ghrc-deep-research-tracker')?.title.includes('20 of 200 full + lightweight reports'));
+    await page.evaluate(() => window.changeResearchSetting('deepResearchAllowanceMode', 'full'));
+    await page.waitForFunction(() => document.querySelector('#ghrc-deep-research-tracker')?.title.includes('13 of 20 full reports'));
+    await page.evaluate(() => window.changeResearchSetting('deepResearchUsagePieTotals', { full: null, all: 200 }));
+    await page.waitForFunction(() => document.querySelector('#ghrc-deep-research-tracker')?.title.includes('13 of 25 full reports'));
+    await page.evaluate(() => {
+      window.changeResearchSetting('showDeepResearchUsagePie', false);
+      window.changeResearchSetting('deepResearchUsagePieTotals', { full: null, all: null });
+    });
+
     await page.evaluate(() => window.changeResearchSetting('deepResearchHomepageWindowDays', 14));
     await page.waitForFunction(() => document.getElementById('ghrc-deep-research-tracker').classList.contains('ghrc-research-near-reset'));
     assert.equal(await composer.count(), 0);
@@ -318,8 +339,9 @@ test('Research settings show the composer only when homepage allowance details a
     await page.evaluate(() => window.changeResearchSetting('deepResearchHomepageVisibility', 'near-reset'));
     await page.waitForFunction(() => !document.getElementById('ghrc-deep-research-tracker')
       && !!document.getElementById('ghrc-deep-research-tracker-composer'));
-    assert.match(await composer.innerText(), /resets \d+d/);
-    assert.doesNotMatch(await composer.innerText(), /13 left/);
+    assert.match(await composer.innerText(), /13 left/);
+    assert.doesNotMatch(await composer.innerText(), /reset/i);
+    assert.equal(await composer.getAttribute('aria-label'), 'Deep Research · 13 left');
 
     await page.evaluate(() => window.changeResearchSetting('deepResearchHomepageWindowDays', 14));
     await homepage.waitFor();
@@ -331,6 +353,8 @@ test('Research settings show the composer only when homepage allowance details a
     await page.waitForFunction(() => document.getElementById('ghrc-deep-research-tracker')?.getAttribute('aria-label') === 'Deep Research'
       && !!document.getElementById('ghrc-deep-research-tracker-composer'));
     assert.equal(await homepage.innerText(), '');
+    assert.equal(await composer.innerText(), '', 'composer must not resurrect disabled homepage fields');
+    assert.equal(await composer.getAttribute('aria-label'), 'Deep Research');
 
     await page.evaluate(() => window.changeResearchSetting('showDeepResearchHomepageReset', true));
     await page.waitForFunction(() => document.getElementById('ghrc-deep-research-tracker')?.textContent.includes('resets')
@@ -340,6 +364,14 @@ test('Research settings show the composer only when homepage allowance details a
     await page.evaluate(() => window.changeResearchSetting('showDeepResearchHomepage', false));
     await page.waitForFunction(() => !document.getElementById('ghrc-deep-research-tracker')
       && !!document.getElementById('ghrc-deep-research-tracker-composer'));
+    assert.match(await composer.innerText(), /resets \d+d/);
+    assert.doesNotMatch(await composer.innerText(), /left/);
+    await page.evaluate(() => window.changeResearchSetting('showDeepResearchHomepageCount', true));
+    await page.waitForFunction(() => document.getElementById('ghrc-deep-research-tracker-composer')?.textContent.includes('13 left'));
+    assert.match(await composer.innerText(), /resets \d+d/);
+    await page.evaluate(() => window.changeResearchSetting('showDeepResearchHomepageReset', false));
+    await page.waitForFunction(() => document.getElementById('ghrc-deep-research-tracker-composer')?.getAttribute('aria-label') === 'Deep Research · 13 left');
+    assert.doesNotMatch(await composer.innerText(), /reset/i);
     await page.evaluate(() => window.changeResearchSetting('showDeepResearchComposer', false));
     await page.waitForFunction(() => !document.getElementById('ghrc-deep-research-tracker-composer'));
     await page.evaluate(() => window.changeResearchSetting('showDeepResearchHomepage', true));

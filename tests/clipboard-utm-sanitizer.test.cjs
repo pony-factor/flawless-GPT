@@ -271,7 +271,7 @@ test('removes a citation favicon and its standalone DOC filename from copied blo
 
 test('removes a standalone favicon without swallowing the following content', () => {
   const input = 'One\n\n![image](https://www.google.com/s2/favicons?domain=sec.gov&sz=32)\n\nTwo';
-  assert.equal(sanitizeCopiedText(input), 'One\n\n\n\nTwo');
+  assert.equal(sanitizeCopiedText(input), 'One\n\n\nTwo');
 });
 
 test('preserves image citations and document filenames that are actual content', () => {

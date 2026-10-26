@@ -218,17 +218,15 @@ test('import launcher stays available while the enabled publisher is disconnecte
   assert.equal(context.available(true, true), true);
 });
 
-
-test('report monitors are lifecycle-bound and finalization stops both environments', () => {
+test('report monitors remain bounded and use the confirmed publication event', () => {
   const publisher = fs.readFileSync('js/research/research-publisher.js', 'utf8');
   const host = fs.readFileSync('js/research/research-report-host.js', 'utf8');
   assert.match(publisher, /function pollActiveImport\(active\)/);
-  assert.match(publisher, /function finalizeReport\(doc\)/);
-  assert.match(publisher, /finalized: true/);
-  assert.match(publisher, /documentObservers\.clear\(\)/);
-  assert.doesNotMatch(publisher, /if \(!frameTimer\) frameTimer = setInterval\(schedule, 1000\)/);
-  assert.match(host, /if \(!reports\.size\)/);
-  assert.match(host, /observer\?\.disconnect\(\)/);
-  assert.match(host, /event\.data\.finalized === true/);
-  assert.match(host, /onStop\?\.\(dispose\)/);
+  assert.match(publisher, /MAX_JOB_LOOKUP_RETRIES = 60/);
+  assert.match(publisher, /function dispose\(\)/);
+  assert.match(publisher, /observers\.clear\(\)/);
+  assert.doesNotMatch(publisher, /if \(enabled\) frameTimer = setInterval\(schedule, 1000\)/);
+  assert.match(host, /if \(!reports\.size\) stopObserving\(\)/);
+  assert.match(host, /'ghrc-research-report-finalized'/);
+  assert.match(host, /context\?\.onStop\?\.\(dispose\)/);
 });

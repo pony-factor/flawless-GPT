@@ -157,3 +157,14 @@ test("can start a queued message in an otherwise empty new chat", () => {
 test("recognizes conversations inside custom GPT routes", () => {
   assert.equal(api().conversationIdFromPath("/g/g-example/c/abc-123"), "abc-123");
 });
+
+test("normalizes the queue viewport-height percentage", () => {
+  const normalize = api().normalizeQueueMaxHeightPercent;
+  assert.equal(normalize(undefined), 60);
+  assert.equal(normalize(""), 60);
+  assert.equal(normalize("invalid"), 60);
+  assert.equal(normalize(45), 45);
+  assert.equal(normalize("82.6"), 83);
+  assert.equal(normalize(1), 20);
+  assert.equal(normalize(100), 90);
+});
