@@ -76,8 +76,6 @@ const showDeepResearchHomepageInput = document.getElementById("show-deep-researc
 const showDeepResearchComposerInput = document.getElementById("show-deep-research-composer");
 const showDeepResearchHomepageCountInput = document.getElementById("show-deep-research-homepage-count");
 const showDeepResearchHomepageResetInput = document.getElementById("show-deep-research-homepage-reset");
-const showDeepResearchComposerCountInput = document.getElementById("show-deep-research-composer-count");
-const showDeepResearchComposerResetInput = document.getElementById("show-deep-research-composer-reset");
 const showDeepResearchUsagePieInput = document.getElementById("show-deep-research-usage-pie");
 const deepResearchUsagePieTotalInput = document.getElementById("deep-research-usage-pie-total");
 const deepResearchAllowanceModeInput = document.getElementById("deep-research-allowance-mode");
@@ -254,15 +252,12 @@ function normalizedResearchWindowDays(value) {
 function updateResearchSettingsControls() {
   const enabled = showDeepResearchTrackerInput.checked;
   const homepage = enabled && showDeepResearchHomepageInput.checked;
-  const composer = enabled && showDeepResearchComposerInput.checked;
   showDeepResearchHomepageInput.disabled = !enabled;
   showDeepResearchComposerInput.disabled = !enabled;
   showDeepResearchHomepageCountInput.disabled = !homepage;
   showDeepResearchHomepageResetInput.disabled = !homepage;
   deepResearchHomepageVisibilityInput.disabled = !homepage;
   deepResearchHomepageWindowDaysInput.disabled = !homepage;
-  showDeepResearchComposerCountInput.disabled = !composer;
-  showDeepResearchComposerResetInput.disabled = !composer;
   showDeepResearchUsagePieInput.disabled = !enabled;
   deepResearchAllowanceModeInput.disabled = !enabled;
   deepResearchUsagePieTotalInput.disabled = !enabled || !showDeepResearchUsagePieInput.checked;
@@ -440,8 +435,6 @@ async function loadSettings() {
     showDeepResearchComposer: true,
     showDeepResearchHomepageCount: true,
     showDeepResearchHomepageReset: true,
-    showDeepResearchComposerCount: true,
-    showDeepResearchComposerReset: true,
     showDeepResearchUsagePie: false,
     deepResearchUsagePieTotal: null,
     deepResearchUsagePieTotals: null,
@@ -507,8 +500,6 @@ async function loadSettings() {
   showDeepResearchComposerInput.checked = settings.showDeepResearchComposer !== false;
   showDeepResearchHomepageCountInput.checked = settings.showDeepResearchHomepageCount !== false;
   showDeepResearchHomepageResetInput.checked = settings.showDeepResearchHomepageReset !== false;
-  showDeepResearchComposerCountInput.checked = settings.showDeepResearchComposerCount !== false;
-  showDeepResearchComposerResetInput.checked = settings.showDeepResearchComposerReset !== false;
   showDeepResearchUsagePieInput.checked = settings.showDeepResearchUsagePie === true;
   deepResearchAllowanceModeInput.value = settings.deepResearchAllowanceMode === "all" ? "all" : "full";
   researchPieTotals = loadedResearchPieTotals(settings);
@@ -622,8 +613,6 @@ async function saveSettings() {
       showDeepResearchComposer: showDeepResearchComposerInput.checked,
       showDeepResearchHomepageCount: showDeepResearchHomepageCountInput.checked,
       showDeepResearchHomepageReset: showDeepResearchHomepageResetInput.checked,
-      showDeepResearchComposerCount: showDeepResearchComposerCountInput.checked,
-      showDeepResearchComposerReset: showDeepResearchComposerResetInput.checked,
       showDeepResearchUsagePie: showDeepResearchUsagePieInput.checked,
       deepResearchAllowanceMode: deepResearchAllowanceModeInput.value,
       deepResearchUsagePieTotals: { ...researchPieTotals },

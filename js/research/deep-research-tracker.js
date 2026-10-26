@@ -88,8 +88,6 @@
     showDeepResearchComposer: true,
     showDeepResearchHomepageCount: true,
     showDeepResearchHomepageReset: true,
-    showDeepResearchComposerCount: true,
-    showDeepResearchComposerReset: true,
     showDeepResearchUsagePie: false,
     deepResearchUsagePieTotal: null, // Legacy single-mode preference.
     deepResearchUsagePieTotals: null,
@@ -269,12 +267,10 @@
     if (widget.classList.contains('ghrc-research-near-reset') !== nearReset) {
       widget.classList.toggle('ghrc-research-near-reset', nearReset);
     }
-    const includeCount = homepage
-      ? preferences.showDeepResearchHomepageCount !== false
-      : preferences.showDeepResearchComposerCount !== false;
-    const includeReset = homepage
-      ? preferences.showDeepResearchHomepageReset !== false
-      : preferences.showDeepResearchComposerReset !== false;
+    // The composer is a placement fallback, not a separate allowance display
+    // policy: respect the same count/reset choices used by the homepage.
+    const includeCount = preferences.showDeepResearchHomepageCount !== false;
+    const includeReset = preferences.showDeepResearchHomepageReset !== false;
     const text = serverText(includeCount, includeReset)
       || ['Deep Research', ...(includeCount ? [count] : []), ...(includeReset ? [reset] : [])].join(' · ');
     const pie = widget.querySelector('.ghrc-research-usage-pie');
