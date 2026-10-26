@@ -3,19 +3,18 @@
   const PAGE = '[class*="_reportPage_"]';
   const MAX_BYTES = 4 * 1024 * 1024;
   const documents = new WeakSet();
-  const documentObservers = new Map();
-  const documentLoadListeners = new Map();
+  const observers = new Map();
+  let finalized = false;
+  let disposed = false;
+  let lookupRetryCount = 0;
+  const MAX_JOB_LOOKUP_RETRIES = 60;
   let enabled = false;
   let scheduled = false;
   let frameTimer;
   let automaticBusy = false;
-  let lookupRetryCount = 0;
-  const MAX_JOB_LOOKUP_RETRIES = 60;
-  let finalized = false;
-  let disposed = false;
   const reportCandidates = new WeakMap();
-  // The one-second recovery poll belongs to an active import, not every
-  // sandbox document opened in Brave.
+  const RELOAD_MESSAGE = 'The extension was updated. Reload this ChatGPT page to reconnect and retry the import.';
+  // Poll only during a known import or bounded job-lookup recovery.
   function pollActiveImport(active) {
     if (!active || finalized || disposed || !enabled) {
       clearInterval(frameTimer);
@@ -26,21 +25,12 @@
   }
   function stopMonitoring() {
     pollActiveImport(false);
-    for (const [doc, observer] of documentObservers) {
+    for (const [doc, observer] of observers) {
       observer.disconnect();
-      doc.removeEventListener('load', documentLoadListeners.get(doc), true);
+      if (finalized || disposed) doc.removeEventListener('load', schedule, true);
     }
-    documentObservers.clear();
-    documentLoadListeners.clear();
-  }
-  function finalizeReport(doc) {
-    if (finalized || disposed) return;
-    finalized = true;
-    stopMonitoring();
-    // The host disconnects its fullscreen observer after native Git
-    // publication has been confirmed, not after an arbitrary hour.
-    window.top.postMessage({ type: 'ghrc-research-report-state',
-      report: Boolean(doc.querySelector(PAGE)), finalized: true }, 'https://chatgpt.com');
+    // Keep disconnected handles only for BFCache restoration.
+    if (finalized || disposed) observers.clear();
   }
   function dispose() {
     if (disposed) return;
@@ -48,12 +38,32 @@
     stopMonitoring();
     globalThis.chrome?.storage?.onChanged?.removeListener?.(settingsChanged);
     window.removeEventListener('pagehide', onPageHide);
+    window.removeEventListener('pageshow', onPageShow);
   }
   function onPageHide(event) {
-    if (!event.persisted) dispose();
+    if (event.persisted) stopMonitoring();
+    else dispose();
+  }
+  function onPageShow(event) {
+    if (!event.persisted || finalized || disposed) return;
+    for (const [doc, observer] of observers) {
+      if (doc.documentElement) observer.observe(doc, {
+        childList: true, subtree: true, attributes: true,
+        attributeFilter: ['disabled', 'aria-busy'],
+      });
+    }
+    updateEnabled(enabled);
+  }
+  function finalizeReport(doc) {
+    if (finalized) return;
+    // Only a confirmed native repository import can stop the retry loop.
+    // Report fullscreen state is released through the authenticated iframe
+    // message channel already used for report activation.
+    finalized = true;
+    stopMonitoring();
+    window.top.postMessage({ type: 'ghrc-research-report-finalized' }, 'https://chatgpt.com');
   }
 
-  const RELOAD_MESSAGE = 'The extension was updated. Reload this ChatGPT page to reconnect and retry the import.';
   async function request(message) {
     if (!globalThis.chrome?.runtime?.sendMessage) {
       dispose();
@@ -82,11 +92,10 @@
         if (!response?.ok) throw new Error(response?.error || 'Could not check automatic import. Retrying…');
         lookupRetryCount = 0;
       } catch (error) {
-        // A reconnecting service worker can fail before providing a job state.
-        // Retry only while this report is present, with a bounded recovery
-        // window rather than an idle timer running in every sandbox forever.
+        // Retry a temporarily unavailable background worker, but never poll
+        // without a report or after the retry budget/context is exhausted.
         lookupRetryCount++;
-        pollActiveImport(lookupRetryCount <= MAX_JOB_LOOKUP_RETRIES);
+        pollActiveImport(lookupRetryCount <= MAX_JOB_LOOKUP_RETRIES && Boolean(doc.querySelector(PAGE)));
         throw error;
       }
       const { job } = response;
@@ -177,19 +186,21 @@
   }
 
   function mount(doc) {
-    if (disposed || finalized || !doc.documentElement) return;
+    if (finalized || disposed || !doc.documentElement) return;
     if (!documents.has(doc.documentElement)) {
       documents.add(doc.documentElement);
       const style = doc.createElement('style');
       style.textContent = `.${BUTTON}{display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;width:32px;height:32px;padding:6px;border:0;border-radius:6px;background:transparent;color:inherit;cursor:pointer}.${BUTTON}:hover{background:color-mix(in srgb,currentColor 10%,transparent)}.${BUTTON}:focus-visible{outline:2px solid currentColor;outline-offset:2px}.${BUTTON}:disabled{opacity:.55;cursor:default}.ghrc-report-status{font-size:12px;line-height:1.4;padding:6px 12px;overflow-wrap:anywhere}.ghrc-report-status:empty{display:none}`;
       style.textContent += '.ghrc-report-import{color:inherit;background:light-dark(#fff,#202123);border:1px solid #888;border-radius:12px;padding:24px;max-width:420px;width:calc(100% - 64px);color-scheme:light dark}.ghrc-report-import::backdrop{background:#0008}.ghrc-report-import h2{margin-top:0;font-size:20px}.ghrc-report-import p{font-size:13px}.ghrc-report-import input{display:block;box-sizing:border-box;width:100%;padding:10px;margin-top:8px}.ghrc-report-import form>div{display:flex;justify-content:flex-end;gap:12px;margin-top:20px}.ghrc-report-import button{padding:8px 12px;cursor:pointer}';
       (doc.head || doc.documentElement).append(style);
+      // document.open() can replace the root without changing Document identity.
+      // Disconnect the previous monitor before attaching to the new root.
+      observers.get(doc)?.disconnect();
       const observer = new MutationObserver(schedule);
       observer.observe(doc, { childList: true, subtree: true,
         attributes: true, attributeFilter: ['disabled', 'aria-busy'] });
-      documentObservers.set(doc, observer);
-      doc.addEventListener('load', schedule, true);
-      documentLoadListeners.set(doc, schedule);
+      if (!observers.has(doc)) doc.addEventListener('load', schedule, true);
+      observers.set(doc, observer);
       doc.addEventListener('click', async event => {
         const link = event.target.closest?.('a[href]');
         if (!event.isTrusted || !link?.closest(PAGE) || event.button !== 0 || event.altKey) return;
@@ -207,8 +218,7 @@
         }
       }, true);
     }
-    if (!finalized) window.top.postMessage({ type: 'ghrc-research-report-state',
-      report: Boolean(doc.querySelector(PAGE)) }, 'https://chatgpt.com');
+    window.top.postMessage({ type: 'ghrc-research-report-state', report: Boolean(doc.querySelector(PAGE)) }, 'https://chatgpt.com');
     if (!publisherAvailable()) {
       doc.querySelectorAll(`.${BUTTON}, .ghrc-report-status`).forEach((node) => node.remove());
     } else {
@@ -266,17 +276,16 @@
   }
 
   function schedule() {
-    if (disposed || finalized || scheduled) return;
+    if (scheduled || finalized || disposed) return;
     scheduled = true;
-    setTimeout(() => { scheduled = false; mount(document); }, 0);
+    setTimeout(() => { scheduled = false; if (!finalized && !disposed) mount(document); }, 0);
   }
 
   function updateEnabled(value) {
     if (finalized || disposed) return;
     enabled = Boolean(value);
+    // Job-state inspection determines whether recovery polling is needed.
     pollActiveImport(false);
-    // Initial document and nested frames are discovered by the scoped
-    // document observers; only active import jobs need a retry poll.
     schedule();
   }
 
@@ -284,11 +293,12 @@
     updateEnabled(settings.researchPublisherEnabled);
   }).catch(() => {});
   function settingsChanged(changes, area) {
-    if (area !== 'local') return;
-    if (changes.researchPublisherEnabled) updateEnabled(changes.researchPublisherEnabled.newValue);
+    if (area === 'local' && changes.researchPublisherEnabled)
+      updateEnabled(changes.researchPublisherEnabled.newValue);
   }
   chrome.storage.onChanged.addListener(settingsChanged);
+  // Report links and fullscreen state work without an idle polling timer.
   window.addEventListener('pagehide', onPageHide);
-  // Report links and fullscreen state work independently of the publishing preference.
+  window.addEventListener('pageshow', onPageShow);
   schedule();
 })();
