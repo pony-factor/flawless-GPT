@@ -441,6 +441,7 @@
     header.append(close, copy, open, destination);
     panel.append(resizer, header);
 
+
     if (nativeGuide) {
       const content = document.createElement("div");
       content.className = "ghrc-preview-content";
@@ -540,12 +541,45 @@
     });
   }
 
-  function handleBlockedPreview(error) {
+  function handleBlockedPreview(error, destinationUrl) {
     if (!previewWatch) return;
-    const { href, link, panel } = previewWatch;
+    const { href, panel } = previewWatch;
     const hostname = new URL(href).hostname;
     if (hostname !== "github.com" && hostname !== "www.github.com") {
-      void openNativeSplitView(href, link);
+      const watch = previewWatch;
+      previewWatch = null;
+      void (async () => {
+        try {
+          const result = await chrome.runtime.sendMessage({
+            type: "open-blocked-link-preview", url: href, previewId: watch.id,
+          });
+          if (!result?.ok) throw new Error("Could not open this website in a separate tab.");
+          if (previewPanel === panel) closeLinkPreview(false);
+        } catch {
+          if (!panel.isConnected) return;
+          panel.querySelector("iframe")?.remove();
+          const content = document.createElement("div");
+          content.className = "ghrc-preview-content";
+          content.setAttribute("role", "status");
+          content.textContent = "This website cannot load in the sidebar. Use Open in new tab to complete verification or view the page.";
+          try {
+            const target = new URL(destinationUrl || href);
+            if (["https:", "http:"].includes(target.protocol) && !target.username && !target.password) {
+              const open = document.createElement("a");
+              open.href = target.href;
+              open.target = "_blank";
+              open.rel = "noopener noreferrer";
+              open.textContent = "Open this link in a new tab";
+              content.append(document.createElement("br"), open);
+            }
+          } catch {
+            // The existing header control remains usable for the original URL.
+          }
+          panel.append(content);
+        } finally {
+          void unwatchLinkPreview(watch.id);
+        }
+      })();
       return;
     }
     if (!["net::ERR_BLOCKED_BY_RESPONSE", "net::ERR_BLOCKED_BY_CSP"].includes(error)) return;
@@ -980,7 +1014,7 @@
   chrome.runtime.onMessage.addListener(message => {
     if (message?.type !== "link-preview-navigation-error" || !previewWatch
         || message.previewId !== previewWatch.id || message.url !== previewWatch.href) return;
-    handleBlockedPreview(message.error);
+    handleBlockedPreview(message.error, message.destinationUrl);
   });
 
   function preserveNativeScroll(event) {
