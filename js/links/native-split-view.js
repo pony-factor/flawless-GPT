@@ -41,18 +41,41 @@ async function openNativeSplit(value, sourceTabId, onLeft = false) {
     return { ok: true };
   } catch {
     await chrome.tabs.update(destination.id, { active: true });
-    return { ok: false, unavailable: true };
+    return { ok: true, fallbackTab: true };
   }
 }
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (!["open-native-split-view", "watch-link-preview", "unwatch-link-preview"].includes(message?.type)) return false;
+  if (!["open-native-split-view", "watch-link-preview", "unwatch-link-preview", "open-blocked-link-preview"].includes(message?.type)) return false;
   if (sender.id !== chrome.runtime.id || !sender.url?.startsWith("https://chatgpt.com/")
       || !Number.isInteger(sender.tab?.id)) {
     sendResponse({ ok: false, error: "Native splits are only available from ChatGPT." });
     return false;
   }
   const tabId = sender.tab.id;
+  if (message.type === "open-blocked-link-preview") {
+    (async () => {
+      const key = `linkPreviewWatch:${tabId}`;
+      const saved = await chrome.storage.session.get(key);
+      const url = nativeSplitURL(message.url);
+      if (saved[key]?.id !== message.previewId || saved[key]?.url !== url) {
+        throw new Error("This website preview is no longer active.");
+      }
+      const destinationUrl = nativeSplitURL(saved[key].failedUrl || url);
+      const source = await chrome.tabs.get(tabId);
+      const windows = await chrome.windows.getAll({ windowTypes: ["normal"] });
+      const destination = windows.find(window => window.id === source.windowId)
+        || windows.find(window => window.focused) || windows[0];
+      if (destination) {
+        await chrome.tabs.create({ url: destinationUrl, windowId: destination.id, active: true });
+        await chrome.windows.update(destination.id, { focused: true });
+      } else {
+        await chrome.windows.create({ url: destinationUrl, type: "normal", focused: true });
+      }
+      return { ok: true };
+    })().then(sendResponse).catch(error => sendResponse({ ok: false, error: error.message }));
+    return true;
+  }
   if (message.type !== "open-native-split-view") {
     (async () => {
       const key = `linkPreviewWatch:${tabId}`;
@@ -97,8 +120,11 @@ chrome.webNavigation.onErrorOccurred.addListener(details => {
     const saved = await chrome.storage.session.get(key);
     const watch = saved[key];
     if (!watch || (watch.frameId !== details.frameId && watch.url !== details.url)) return;
+    const failedUrl = nativeSplitURL(details.url);
+    await chrome.storage.session.set({ [key]: { ...watch, failedUrl } });
     await chrome.tabs.sendMessage(details.tabId, {
-      type: "link-preview-navigation-error", previewId: watch.id, url: watch.url, error: details.error,
+      type: "link-preview-navigation-error", previewId: watch.id, url: watch.url,
+      destinationUrl: failedUrl, error: details.error,
     }, { frameId: 0 });
   })().catch(() => {});
 });
