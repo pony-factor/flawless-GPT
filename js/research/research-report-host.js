@@ -1,5 +1,7 @@
 (() => {
-  function reportContextListener(message, sender, respond) {
+  const context = globalThis.__ghrcExtensionContext;
+  if (context && !context.active()) return;
+  function handleResearchContext(message, sender, respond) {
     if (message?.type !== 'research-report-context') return false;
     const title = document.title.replace(/\s*[-–|]\s*ChatGPT\s*$/i, '').trim();
     const frames = [...document.querySelectorAll('iframe')].filter(node =>
@@ -13,79 +15,102 @@
     respond({ title: title && !/^(ChatGPT|New chat)$/i.test(title) ? title : prompt.slice(0, 2000), prompt: prompt.slice(0, 2000) });
     return false;
   }
-  chrome.runtime.onMessage.addListener(reportContextListener);
-  const context = globalThis.__ghrcExtensionContext;
-  if (context && !context.active()) return;
+  chrome.runtime.onMessage.addListener(handleResearchContext);
   const reports = new Map();
-  const finalizedFrames = new WeakMap();
+  const finalized = new WeakMap();
   const ATTRIBUTE = 'data-ghrc-research-fullscreen';
+  const REPORT_ORIGIN = /^https:\/\/(connector-openai-deep-research|mcp-app-[a-f0-9]+)\.web-sandbox\.oaiusercontent\.com$/;
   let observer = null;
+  let scheduled = false;
   let disposed = false;
-  function stopMonitoring() {
+
+  // No full-document observer runs on ChatGPT tabs without active report frames.
+  function stopObserving() {
     observer?.disconnect();
     observer = null;
-    window.removeEventListener('resize', update);
+    window.removeEventListener('resize', schedule);
   }
   function update() {
+    scheduled = false;
     if (disposed || (context && !context.active())) return;
     let expanded = false;
-    for (const [frame, state] of reports) {
+    for (const frame of reports.keys()) {
       if (!frame.isConnected) { reports.delete(frame); continue; }
       const bounds = frame.getBoundingClientRect();
       let fixed = false;
       for (let node = frame.parentElement; node && node !== document.body; node = node.parentElement) {
         if (getComputedStyle(node).position === 'fixed') { fixed = true; break; }
       }
-      if (state && (fixed || (bounds.width >= innerWidth * .8 && bounds.height >= innerHeight * .8))) expanded = true;
+      if (fixed || (bounds.width >= innerWidth * .8 && bounds.height >= innerHeight * .8)) expanded = true;
     }
     document.documentElement.toggleAttribute(ATTRIBUTE, expanded);
-    // No report iframe means no document-wide observer or resize handler.
-    if (!reports.size) {
-      stopMonitoring();
-    } else if (!observer) {
-      observer = new MutationObserver(update);
-      observer.observe(document.documentElement, {
-        childList: true, subtree: true, attributes: true, attributeFilter: ['style', 'class'],
-      });
-      window.addEventListener('resize', update);
-    }
+    if (!reports.size) stopObserving();
   }
-  function onReportState(event) {
-    if (!/^https:\/\/(connector-openai-deep-research|mcp-app-[a-f0-9]+)\.web-sandbox\.oaiusercontent\.com$/.test(event.origin)
-      || event.data?.type !== 'ghrc-research-report-state') return;
+  function schedule() {
+    if (disposed || scheduled || (context && !context.active())) return;
+    scheduled = true;
+    requestAnimationFrame(update);
+  }
+  function relevantMutation(mutation) {
+    for (const frame of reports.keys()) {
+      if (!frame.isConnected) return true;
+      if (mutation.target === frame || mutation.target.contains?.(frame)) return true;
+      if (mutation.type === 'childList' && [...mutation.addedNodes, ...mutation.removedNodes]
+        .some(node => node === frame || node.contains?.(frame))) return true;
+    }
+    return false;
+  }
+  function startObserving() {
+    if (observer || !reports.size) return;
+    observer = new MutationObserver(mutations => {
+      if (mutations.some(relevantMutation)) schedule();
+    });
+    observer.observe(document.documentElement, {
+      childList: true, subtree: true, attributes: true, attributeFilter: ['style', 'class'],
+    });
+    window.addEventListener('resize', schedule);
+  }
+  function handleReportMessage(event) {
+    if (disposed || (context && !context.active())) return;
+    if (!REPORT_ORIGIN.test(event.origin) || ![
+      'ghrc-research-report-state', 'ghrc-research-report-finalized',
+    ].includes(event.data?.type)) return;
     const frame = [...document.querySelectorAll('iframe')].find(node => node.contentWindow === event.source);
     if (!frame) return;
-    if (event.data.finalized === true) {
-      // Ignore stale sandbox messages after Git/native publishing has succeeded.
-      // A navigated iframe can host a new report and start a fresh lifecycle.
-      finalizedFrames.set(frame, frame.src);
+    if (event.data.type === 'ghrc-research-report-finalized') {
+      // A successful native publish confirms the report is saved to the repo.
+      // Repeated report-state pings must not recreate this observer.
+      finalized.set(frame, frame.src);
       reports.delete(frame);
-    } else if (finalizedFrames.get(frame) === frame.src) {
-      return;
-    } else if (event.data.report === true) {
+    } else if (event.data.report !== true) {
+      reports.delete(frame);
+    } else if (finalized.get(frame) !== frame.src) {
       reports.set(frame, true);
-    } else {
-      reports.delete(frame);
+      startObserving();
     }
     update();
   }
-  window.addEventListener('message', onReportState);
   const style = document.createElement('style');
   style.textContent = `html[${ATTRIBUTE}] :is(form:has(#prompt-textarea), form:has([data-composer-markdown]), [data-type="unified-composer"], [data-composer-surface-variant], #ghrc-deep-research-tracker-composer, #ghrc-message-queue, #ghrc-research-run-status, #ghrc-manual-research-import-status){visibility:hidden!important;pointer-events:none!important}`;
   (document.head || document.documentElement).append(style);
+  window.addEventListener('message', handleReportMessage);
+  function cleanup() {
+    reports.clear();
+    stopObserving();
+    document.documentElement.removeAttribute(ATTRIBUTE);
+  }
   function dispose() {
     if (disposed) return;
     disposed = true;
-    stopMonitoring();
-    reports.clear();
-    window.removeEventListener('message', onReportState);
-    globalThis.chrome?.runtime?.onMessage?.removeListener?.(reportContextListener);
+    cleanup();
+    globalThis.chrome?.runtime?.onMessage?.removeListener?.(handleResearchContext);
+    window.removeEventListener('message', handleReportMessage);
     window.removeEventListener('pagehide', onPageHide);
-    document.documentElement.removeAttribute(ATTRIBUTE);
     style.remove();
   }
   function onPageHide(event) {
-    if (!event.persisted) dispose();
+    if (event.persisted) cleanup();
+    else dispose();
   }
   window.addEventListener('pagehide', onPageHide);
   context?.onStop?.(dispose);
