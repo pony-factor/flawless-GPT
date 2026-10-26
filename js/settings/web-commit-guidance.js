@@ -19,6 +19,13 @@
     status.dataset.state = state;
   }
 
+  function showLengthWarning(value) {
+    const length = Array.from(value).length;
+    if (length <= 5000) return false;
+    showStatus(`Saved locally. ChatGPT allows 5,000 characters; guidance has ${length.toLocaleString("en-US")}. Shorten it by ${(length - 5000).toLocaleString("en-US")} characters to sync.`, "error");
+    return true;
+  }
+
   function withCoauthorGuidance(guidance, enabled) {
     const text = String(guidance || "").trim();
     if (!enabled || text.includes(COAUTHOR_TRAILER)) return text;
@@ -28,7 +35,7 @@
   async function save() {
     const value = textarea.value.trim();
     await chrome.storage.local.set({ [GUIDANCE_KEY]: value });
-    showStatus("Saved locally; syncing with ChatGPT…");
+    if (!showLengthWarning(value)) showStatus("Saved locally; syncing with ChatGPT…");
   }
 
   function scheduleSave() {
@@ -67,7 +74,9 @@
     }
 
     const syncStatus = stored[STATUS_KEY];
-    if (syncStatus?.message) showStatus(syncStatus.message, syncStatus.state || "");
+    if (!showLengthWarning(textarea.value) && syncStatus?.message) {
+      showStatus(syncStatus.message, syncStatus.state || "");
+    }
   }
 
   textarea.addEventListener("input", scheduleSave);
@@ -84,7 +93,7 @@
     }
     if (changes[STATUS_KEY]?.newValue?.message) {
       const next = changes[STATUS_KEY].newValue;
-      showStatus(next.message, next.state || "");
+      if (!showLengthWarning(textarea.value)) showStatus(next.message, next.state || "");
     }
   });
 
