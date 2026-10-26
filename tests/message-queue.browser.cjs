@@ -149,6 +149,71 @@ async function fixture({ active = false, voice = false, editable = true, stored 
   return page;
 }
 
+test('queue height tracks the viewport and scrolling preserves editors', async () => {
+  const queued = Array.from({ length: 14 }, (_, index) => ({
+    id: `viewport-item-${index}`,
+    text: `Queued message ${index}: ${'long text '.repeat(5)}`,
+    createdAt: index + 1,
+  }));
+  const p = await fixture({
+    active: true,
+    stored: {
+      messageQueueMaxHeightPercent: 45,
+      queuedChatMessages: { 'conversation:test': queued },
+    },
+  });
+  await p.setViewportSize({ width: 820, height: 600 });
+  await p.waitForFunction(() => document.querySelectorAll('.ghrc-message-queue-item').length === 14);
+
+  const initial = await p.evaluate(() => {
+    const panel = document.getElementById('ghrc-message-queue');
+    return {
+      height: panel.getBoundingClientRect().height,
+      maxHeight: getComputedStyle(panel).maxHeight,
+      canScroll: panel.scrollHeight > panel.clientHeight,
+      rowCount: panel.querySelectorAll('.ghrc-message-queue-item').length,
+    };
+  });
+  assert.ok(initial.height <= 271, 'queue must not exceed 45% of viewport height');
+  assert.equal(initial.maxHeight, '270px');
+  assert.equal(initial.canScroll, true);
+  assert.equal(initial.rowCount, 14);
+
+  await p.evaluate(() => {
+    const first = document.querySelector('.ghrc-message-queue-editor');
+    window.firstQueueEditor = first;
+    first.focus();
+    first.setSelectionRange(5, 5);
+  });
+  await p.evaluate(async () => chrome.storage.local.set({ messageQueueMaxHeightPercent: 25 }));
+  await p.waitForFunction(() =>
+    document.getElementById('ghrc-message-queue')?.style.getPropertyValue('--ghrc-queue-max-height') === '25dvh');
+  const changed = await p.evaluate(() => {
+    const panel = document.getElementById('ghrc-message-queue');
+    panel.scrollTop = 100;
+    return {
+      height: panel.getBoundingClientRect().height,
+      maxHeight: getComputedStyle(panel).maxHeight,
+      scrollTop: panel.scrollTop,
+      sameEditor: panel.querySelector('.ghrc-message-queue-editor') === window.firstQueueEditor,
+      focused: document.activeElement === window.firstQueueEditor,
+      selectionStart: window.firstQueueEditor.selectionStart,
+    };
+  });
+  assert.ok(changed.height <= 151, 'queue must honor updated 25% limit');
+  assert.equal(changed.maxHeight, '150px');
+  assert.ok(changed.scrollTop > 0, 'entire queue must scroll');
+  assert.equal(changed.sameEditor, true);
+  assert.equal(changed.focused, true);
+  assert.equal(changed.selectionStart, 5);
+
+  await p.setViewportSize({ width: 820, height: 400 });
+  const resizedHeight = await p.locator('#ghrc-message-queue').evaluate(element => element.getBoundingClientRect().height);
+  assert.ok(resizedHeight <= 101, 'queue cap must follow viewport resizing');
+  assert.deepEqual(p.errors, []);
+  await p.close();
+});
+
 test('queue stays inside the composer and viewport as the chat column narrows', async () => {
   const p = await fixture({ active: true });
   await enqueue(p, 'Keep this queued draft visible in a compact window');

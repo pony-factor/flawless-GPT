@@ -4,6 +4,8 @@
   const STORAGE_KEY = "queuedChatMessages";
   const PAUSED_STORAGE_KEY = "queuedChatMessagesPaused";
   const QUEUE_BUTTON_SETTING_KEY = "showMessageQueueButton";
+  const QUEUE_MAX_HEIGHT_SETTING_KEY = "messageQueueMaxHeightPercent";
+  const DEFAULT_QUEUE_MAX_HEIGHT_PERCENT = 60;
   const PANEL_ID = "ghrc-message-queue";
   const QUEUE_BUTTON_ID = "ghrc-message-queue-button";
   const INTERRUPT_BUTTON_ID = "ghrc-message-interrupt-button";
@@ -34,6 +36,7 @@
   let enqueueRunning = false;
   let queuePaused = false;
   let showQueueButton = false;
+  let queueMaxHeightPercent = DEFAULT_QUEUE_MAX_HEIGHT_PERCENT;
   let persistPending = Promise.resolve();
   const pendingQueueStorageWrites = new Set();
   let queueStateRequest = null;
@@ -320,10 +323,19 @@
     return hidden ? "timeout" : "frame";
   }
 
+  function normalizeQueueMaxHeightPercent(value) {
+    const parsed = (typeof value === "number" || (typeof value === "string" && value.trim()))
+      ? Number(value) : NaN;
+    return Number.isFinite(parsed)
+      ? Math.min(90, Math.max(20, Math.round(parsed)))
+      : DEFAULT_QUEUE_MAX_HEIGHT_PERCENT;
+  }
+
   const testApi = {
     COMPLETE_SETTLE_MS,
     conversationIdFromPath,
     normalizeQueueItems,
+    normalizeQueueMaxHeightPercent,
     pumpSchedulingMode,
     queueCanAdvance,
     queueSendCanProceed,
@@ -784,9 +796,11 @@
       [STORAGE_KEY]: {},
       [PAUSED_STORAGE_KEY]: {},
       [QUEUE_BUTTON_SETTING_KEY]: false,
+      [QUEUE_MAX_HEIGHT_SETTING_KEY]: DEFAULT_QUEUE_MAX_HEIGHT_PERCENT,
     });
     if (!context.active()) return;
     showQueueButton = Boolean(stored[QUEUE_BUTTON_SETTING_KEY]);
+    queueMaxHeightPercent = normalizeQueueMaxHeightPercent(stored[QUEUE_MAX_HEIGHT_SETTING_KEY]);
     storageState = stored[STORAGE_KEY] && typeof stored[STORAGE_KEY] === "object"
       ? stored[STORAGE_KEY]
       : {};
@@ -1156,6 +1170,10 @@
       return;
     }
     if (!panel) panel = createPanel();
+    const maxHeight = `${queueMaxHeightPercent}dvh`;
+    if (panel.style.getPropertyValue("--ghrc-queue-max-height") !== maxHeight) {
+      panel.style.setProperty("--ghrc-queue-max-height", maxHeight);
+    }
     const title = panel.querySelector(".ghrc-message-queue-title");
     const list = panel.querySelector(".ghrc-message-queue-list");
     title.textContent = `Queue · ${queue.length}`;
@@ -2032,6 +2050,10 @@
     if (changes[QUEUE_BUTTON_SETTING_KEY]) {
       showQueueButton = Boolean(changes[QUEUE_BUTTON_SETTING_KEY].newValue);
       scheduleMount();
+    }
+    if (changes[QUEUE_MAX_HEIGHT_SETTING_KEY]) {
+      queueMaxHeightPercent = normalizeQueueMaxHeightPercent(changes[QUEUE_MAX_HEIGHT_SETTING_KEY].newValue);
+      renderQueue();
     }
     if (changes[PAUSED_STORAGE_KEY]
       && queuePaused !== Boolean(changes[PAUSED_STORAGE_KEY].newValue?.[activeKey])) {

@@ -1,6 +1,7 @@
 const DEFAULT_OWNER_ORDER = [];
 const DEFAULT_HIDDEN_OWNERS = [];
 const DEFAULT_OWNER_GROUPS_PER_PAGE = 6;
+const DEFAULT_MESSAGE_QUEUE_MAX_HEIGHT_PERCENT = 60;
 const form = document.getElementById("settings-form");
 const tokenSettings = document.getElementById("token-settings");
 const tokenSummary = document.getElementById("token-summary");
@@ -65,6 +66,7 @@ const pinnedRepositoryList = document.getElementById("pinned-repositories");
 const pinnedRepositoryTemplate = document.getElementById("pinned-repository-template");
 const hideDictationButtonInput = document.getElementById("hide-dictation-button");
 const preserveScrollPositionOnSendInput = document.getElementById("preserve-scroll-position-on-send");
+const messageQueueMaxHeightPercentInput = document.getElementById("message-queue-max-height-percent");
 const hideShareLabelInput = document.getElementById("hide-share-label");
 const compactNewChatHeaderInput = document.getElementById("compact-new-chat-header");
 const disableWorkModeInput = document.getElementById("disable-work-mode");
@@ -269,6 +271,14 @@ function normalizedOwnerGroupsPerPage(value) {
   return Math.min(24, Math.max(1, parsed));
 }
 
+function normalizedMessageQueueMaxHeightPercent(value) {
+  const parsed = (typeof value === "number" || (typeof value === "string" && value.trim()))
+    ? Number(value) : NaN;
+  return Number.isFinite(parsed)
+    ? Math.min(90, Math.max(20, Math.round(parsed)))
+    : DEFAULT_MESSAGE_QUEUE_MAX_HEIGHT_PERCENT;
+}
+
 function showStatus(message, state = "") {
   status.textContent = message;
   status.dataset.state = state;
@@ -424,6 +434,7 @@ async function loadSettings() {
     pinnedRepositories: [],
     hideDictationButton: false,
     preserveScrollPositionOnSend: false,
+    messageQueueMaxHeightPercent: DEFAULT_MESSAGE_QUEUE_MAX_HEIGHT_PERCENT,
     hideShareLabel: false,
     compactNewChatHeader: true,
     disableManualWebSearch: false,
@@ -489,6 +500,7 @@ async function loadSettings() {
   showYoutubeSearchInput.checked = settings.showYoutubeSearch !== false;
   hideDictationButtonInput.checked = Boolean(settings.hideDictationButton);
   preserveScrollPositionOnSendInput.checked = Boolean(settings.preserveScrollPositionOnSend);
+  messageQueueMaxHeightPercentInput.value = normalizedMessageQueueMaxHeightPercent(settings.messageQueueMaxHeightPercent);
   hideShareLabelInput.checked = Boolean(settings.hideShareLabel);
   compactNewChatHeaderInput.checked = Boolean(settings.compactNewChatHeader);
   disableWorkModeInput.checked = Boolean(settings.disableWorkMode);
@@ -602,6 +614,7 @@ async function saveSettings() {
       pinnedRepositories: pinnedRepositoriesFromList(),
       hideDictationButton: hideDictationButtonInput.checked,
       preserveScrollPositionOnSend: preserveScrollPositionOnSendInput.checked,
+      messageQueueMaxHeightPercent: normalizedMessageQueueMaxHeightPercent(messageQueueMaxHeightPercentInput.value),
       hideShareLabel: hideShareLabelInput.checked,
       compactNewChatHeader: compactNewChatHeaderInput.checked,
       disableWorkMode: disableWorkModeInput.checked,
@@ -644,6 +657,7 @@ async function saveSettings() {
     });
     ownerListDirty = false;
     ownerGroupsPerPageInput.value = ownerGroupsPerPage;
+    messageQueueMaxHeightPercentInput.value = normalizedMessageQueueMaxHeightPercent(messageQueueMaxHeightPercentInput.value);
     deepResearchHomepageWindowDaysInput.value = normalizedResearchWindowDays(deepResearchHomepageWindowDaysInput.value);
     updateTokenSummary();
     showStatus(

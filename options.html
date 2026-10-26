@@ -304,6 +304,9 @@
               <small>Prevents ChatGPT from jumping to the bottom after you send a message, keeping your current reading position.</small>
             </span>
           </label>
+          <label for="message-queue-max-height-percent">Maximum queue height (% of viewport)</label>
+          <input id="message-queue-max-height-percent" type="number" min="20" max="90" step="1" value="60" aria-describedby="message-queue-max-height-help" />
+          <p id="message-queue-max-height-help" class="help">Caps the entire queue panel at this share of the browser window's height. Longer queues scroll inside the panel. Default: 60%.</p>
           <label class="preference">
             <input id="hide-message-queue-button" type="checkbox" checked />
             <span>
