@@ -79,6 +79,29 @@ const showDeepResearchHomepageResetInput = document.getElementById("show-deep-re
 const showDeepResearchUsagePieInput = document.getElementById("show-deep-research-usage-pie");
 const deepResearchUsagePieTotalInput = document.getElementById("deep-research-usage-pie-total");
 const deepResearchAllowanceModeInput = document.getElementById("deep-research-allowance-mode");
+let researchPieTotals = { full: null, all: null };
+
+function normalizedResearchPieTotal(value) {
+  const input = String(value ?? "").trim();
+  const total = Number(input);
+  return /^\d+$/.test(input) && Number.isSafeInteger(total) && total >= 1 && total <= 10000
+    ? total : null;
+}
+
+function loadedResearchPieTotals(settings) {
+  const scoped = settings.deepResearchUsagePieTotals;
+  if (scoped && typeof scoped === "object" && !Array.isArray(scoped)) {
+    return { full: normalizedResearchPieTotal(scoped.full), all: normalizedResearchPieTotal(scoped.all) };
+  }
+  // Migrate the old total only to the previously selected allowance mode.
+  const mode = settings.deepResearchAllowanceMode === "all" ? "all" : "full";
+  return { full: mode === "full" ? normalizedResearchPieTotal(settings.deepResearchUsagePieTotal) : null,
+    all: mode === "all" ? normalizedResearchPieTotal(settings.deepResearchUsagePieTotal) : null };
+}
+
+function renderSelectedResearchPieTotal() {
+  deepResearchUsagePieTotalInput.value = researchPieTotals[deepResearchAllowanceModeInput.value] ?? "";
+}
 const deepResearchHomepageVisibilityInput = document.getElementById("deep-research-homepage-visibility");
 const deepResearchHomepageWindowDaysInput = document.getElementById("deep-research-homepage-window-days");
 const stripUtmTrackingInput = document.getElementById("strip-utm-tracking");
@@ -414,6 +437,7 @@ async function loadSettings() {
     showDeepResearchHomepageReset: true,
     showDeepResearchUsagePie: false,
     deepResearchUsagePieTotal: null,
+    deepResearchUsagePieTotals: null,
     deepResearchAllowanceMode: "full",
     deepResearchHomepageVisibility: "near-reset",
     deepResearchHomepageWindowDays: 5,
@@ -478,9 +502,8 @@ async function loadSettings() {
   showDeepResearchHomepageResetInput.checked = settings.showDeepResearchHomepageReset !== false;
   showDeepResearchUsagePieInput.checked = settings.showDeepResearchUsagePie === true;
   deepResearchAllowanceModeInput.value = settings.deepResearchAllowanceMode === "all" ? "all" : "full";
-  deepResearchUsagePieTotalInput.value = Number.isSafeInteger(settings.deepResearchUsagePieTotal)
-    && settings.deepResearchUsagePieTotal > 0 && settings.deepResearchUsagePieTotal <= 10000
-    ? String(settings.deepResearchUsagePieTotal) : "";
+  researchPieTotals = loadedResearchPieTotals(settings);
+  renderSelectedResearchPieTotal();
   deepResearchHomepageVisibilityInput.value =
     settings.deepResearchHomepageVisibility === "always" ? "always" : "near-reset";
   deepResearchHomepageWindowDaysInput.value = normalizedResearchWindowDays(settings.deepResearchHomepageWindowDays);
@@ -592,10 +615,8 @@ async function saveSettings() {
       showDeepResearchHomepageReset: showDeepResearchHomepageResetInput.checked,
       showDeepResearchUsagePie: showDeepResearchUsagePieInput.checked,
       deepResearchAllowanceMode: deepResearchAllowanceModeInput.value,
-      deepResearchUsagePieTotal: /^\d+$/.test(deepResearchUsagePieTotalInput.value.trim())
-        && Number(deepResearchUsagePieTotalInput.value) >= 1
-        && Number(deepResearchUsagePieTotalInput.value) <= 10000
-        ? Number(deepResearchUsagePieTotalInput.value) : null,
+      deepResearchUsagePieTotals: { ...researchPieTotals },
+      deepResearchUsagePieTotal: null, // Retire the legacy shared total.
       deepResearchHomepageVisibility: deepResearchHomepageVisibilityInput.value,
       deepResearchHomepageWindowDays: normalizedResearchWindowDays(deepResearchHomepageWindowDaysInput.value),
       stripUtmTracking: stripUtmTrackingInput.checked,
@@ -647,6 +668,12 @@ form.addEventListener("submit", (event) => {
 });
 
 form.addEventListener("change", (event) => {
+  if (event.target === deepResearchUsagePieTotalInput) {
+    researchPieTotals[deepResearchAllowanceModeInput.value] =
+      normalizedResearchPieTotal(deepResearchUsagePieTotalInput.value);
+  } else if (event.target === deepResearchAllowanceModeInput) {
+    renderSelectedResearchPieTotal();
+  }
   updateResearchSettingsControls();
   if (event.target.closest(".token-row")) tokenInputsDirty = true;
   if (event.target.closest(".github-account")) ownerListDirty = true;

@@ -308,6 +308,27 @@ test('Research composer shares homepage allowance fields whenever the homepage r
     await page.waitForFunction(() => document.getElementById('ghrc-deep-research-tracker')?.textContent.includes('13 left'));
     assert.equal(await homepage.evaluate(node => node.classList.contains('ghrc-research-near-reset')), false);
 
+    // A custom combined allowance must not change the full-only pie denominator.
+    await page.evaluate(() => {
+      window.changeResearchSetting('showDeepResearchUsagePie', true);
+      window.changeResearchSetting('deepResearchUsagePieTotals', { full: 20, all: 200 });
+      document.documentElement.setAttribute('data-ghrc-deep-research-usage', JSON.stringify({
+        remaining: 13, miniRemaining: 7,
+        resetAt: Date.now() + 10 * 24 * 3600_000, observedAt: Date.now(),
+      }));
+    });
+    await page.waitForFunction(() => document.querySelector('#ghrc-deep-research-tracker')?.title.includes('13 of 20 full reports'));
+    await page.evaluate(() => window.changeResearchSetting('deepResearchAllowanceMode', 'all'));
+    await page.waitForFunction(() => document.querySelector('#ghrc-deep-research-tracker')?.title.includes('20 of 200 full + lightweight reports'));
+    await page.evaluate(() => window.changeResearchSetting('deepResearchAllowanceMode', 'full'));
+    await page.waitForFunction(() => document.querySelector('#ghrc-deep-research-tracker')?.title.includes('13 of 20 full reports'));
+    await page.evaluate(() => window.changeResearchSetting('deepResearchUsagePieTotals', { full: null, all: 200 }));
+    await page.waitForFunction(() => document.querySelector('#ghrc-deep-research-tracker')?.title.includes('13 of 25 full reports'));
+    await page.evaluate(() => {
+      window.changeResearchSetting('showDeepResearchUsagePie', false);
+      window.changeResearchSetting('deepResearchUsagePieTotals', { full: null, all: null });
+    });
+
     await page.evaluate(() => window.changeResearchSetting('deepResearchHomepageWindowDays', 14));
     await page.waitForFunction(() => document.getElementById('ghrc-deep-research-tracker').classList.contains('ghrc-research-near-reset'));
     assert.equal(await composer.count(), 0);

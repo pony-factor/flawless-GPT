@@ -1,6 +1,6 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { parseAllowance, selectedResearchQuota, usagePieTotal, usagePiePercent } = require('../js/research/deep-research-tracker.js');
+const { parseAllowance, selectedResearchQuota, selectedResearchPieTotal, usagePieTotal, usagePiePercent } = require('../js/research/deep-research-tracker.js');
 const { quotaFromResponse } = require('../js/research/deep-research-usage.js');
 
 test('usage pie accepts reported or custom totals and estimates common tiers', () => {
@@ -41,6 +41,24 @@ test('both settings views default to full-only counter and share the same prefer
   assert.match(settings, /deepResearchAllowanceMode: "full"/);
   assert.match(settings, /deepResearchAllowanceMode: deepResearchAllowanceModeInput\.value/);
   assert.doesNotMatch(settings, /showDeepResearchComposer(?:Count|Reset)/);
+  assert.match(settings, /deepResearchUsagePieTotals: \{ \.\.\.researchPieTotals \}/);
+  assert.match(settings, /renderSelectedResearchPieTotal\(\)/);
+});
+
+test('custom pie totals stay mode-specific and old totals migrate to their prior mode', () => {
+  const settings = { deepResearchAllowanceMode: 'full', deepResearchUsagePieTotal: 250,
+    deepResearchUsagePieTotals: { full: 20, all: 200 } };
+  assert.equal(selectedResearchPieTotal(settings, 'full'), 20);
+  assert.equal(selectedResearchPieTotal(settings, 'all'), 200);
+  assert.equal(usagePiePercent(13, usagePieTotal(13, null, selectedResearchPieTotal(settings, 'full'))), 65);
+  assert.equal(usagePiePercent(100, usagePieTotal(100, null, selectedResearchPieTotal(settings, 'all'))), 50);
+  assert.equal(selectedResearchPieTotal({ ...settings, deepResearchUsagePieTotals: { full: null, all: 200 } }, 'full'), null);
+  assert.equal(selectedResearchPieTotal({ deepResearchAllowanceMode: 'full', deepResearchUsagePieTotal: 20 }, 'full'), 20);
+  assert.equal(selectedResearchPieTotal({ deepResearchAllowanceMode: 'full', deepResearchUsagePieTotal: 20 }, 'all'), null);
+  assert.equal(selectedResearchPieTotal({ deepResearchAllowanceMode: 'all', deepResearchUsagePieTotal: 200 }, 'all'), 200);
+  assert.equal(selectedResearchPieTotal({ deepResearchAllowanceMode: 'all', deepResearchUsagePieTotal: 200 }, 'full'), null);
+  assert.equal(selectedResearchPieTotal({ deepResearchUsagePieTotals: { full: 10001, all: -1 } }, 'full'), null);
+  assert.equal(selectedResearchPieTotal({ deepResearchUsagePieTotals: { full: 10001, all: -1 } }, 'all'), null);
 });
 
 test('full-only default and combined selection keep research pools distinct', () => {
