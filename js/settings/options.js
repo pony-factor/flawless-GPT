@@ -118,6 +118,7 @@ const skipExternalSiteWarningInput = document.getElementById("skip-external-site
 const dismissHistoryRateLimitModalInput = document.getElementById("dismiss-history-rate-limit-modal");
 const hideUsageCardInput = document.getElementById("hide-usage-card");
 const hideUpgradePromotionsInput = document.getElementById("hide-upgrade-promotions");
+const hideScheduledRecommendationsInput = document.getElementById("hide-scheduled-recommendations");
 const blockChatgptDesktopNotificationsInput = document.getElementById("block-chatgpt-desktop-notifications");
 const hideHomeSuggestionsInput = document.getElementById("hide-home-suggestions");
 const hideModelControlsInput = document.getElementById("hide-model-controls");
@@ -464,6 +465,7 @@ async function loadSettings() {
     dismissHistoryRateLimitModal: true,
     hideUsageCard: true,
     hideUpgradePromotions: true,
+    hideScheduledRecommendations: true,
     blockChatgptDesktopNotifications: true,
     hideCookiePreferences: false,
     showChatgptDisclaimer: false,
@@ -532,6 +534,7 @@ async function loadSettings() {
   dismissHistoryRateLimitModalInput.checked = Boolean(settings.dismissHistoryRateLimitModal);
   hideUsageCardInput.checked = settings.hideUsageCard !== false;
   hideUpgradePromotionsInput.checked = Boolean(settings.hideUpgradePromotions);
+  hideScheduledRecommendationsInput.checked = settings.hideScheduledRecommendations !== false;
   blockChatgptDesktopNotificationsInput.checked = settings.blockChatgptDesktopNotifications !== false;
   hideHomeSuggestionsInput.checked = settings.hideHomeSuggestions !== false;
   hideModelControlsInput.checked = settings.hideModelControls !== false;
@@ -644,6 +647,7 @@ async function saveSettings() {
       dismissHistoryRateLimitModal: dismissHistoryRateLimitModalInput.checked,
       hideUsageCard: hideUsageCardInput.checked,
       hideUpgradePromotions: hideUpgradePromotionsInput.checked,
+      hideScheduledRecommendations: hideScheduledRecommendationsInput.checked,
       blockChatgptDesktopNotifications: blockChatgptDesktopNotificationsInput.checked,
       hideCookiePreferences: hideCookiePreferencesInput.checked,
       showChatgptDisclaimer: !hideChatgptDisclaimerInput.checked,

@@ -113,6 +113,7 @@
         "js/chat/hide-background-completion-notifications.js",
         "js/chat/hide-usage-card.js",
         "js/chat/hide-upgrade-promotions.js",
+        "js/chat/hide-scheduled-recommendations.js",
         "js/links/external-links.js",
         "js/research/research-report-host.js",
         "js/research/research-import-dialog.js",
