@@ -158,6 +158,49 @@ test(`${page} publisher settings default off, confirm on enable, and recheck on 
 });
 }
 
+
+test('publisher settings remain usable when an older popup lacks the telescope checkbox', async () => {
+  const elements = new Map();
+  for (const id of ['research-publisher-enabled', 'research-publisher-controls', 'check-research-publisher', 'research-publisher-status']) {
+    elements.set(id, { listeners: {}, addEventListener(type, fn) { this.listeners[type] = fn; } });
+  }
+  const saved = {};
+  let sends = 0;
+  let onChange;
+  const chrome = {
+    storage: {
+      local: { get: async defaults => defaults, set: async values => Object.assign(saved, values) },
+      onChanged: { addListener(fn) { onChange = fn; } },
+    },
+    runtime: { sendMessage: async () => { sends++; return { ok: true, repository: 'research', branch: 'main' }; } },
+  };
+  vm.runInNewContext(fs.readFileSync('js/settings/research-publisher-options.js', 'utf8'), {
+    chrome, document: { getElementById: id => elements.get(id) || null },
+  });
+  await new Promise(setImmediate);
+  const checkbox = elements.get('research-publisher-enabled');
+  const controls = elements.get('research-publisher-controls');
+  assert.equal(checkbox.disabled, false);
+  assert.equal(checkbox.checked, false);
+  assert.equal(controls.hidden, true);
+
+  checkbox.checked = true;
+  await checkbox.listeners.change();
+  assert.equal(saved.researchPublisherEnabled, true);
+  assert.equal(sends, 1);
+  assert.match(elements.get('research-publisher-status').textContent, /Add to repo is available/);
+  onChange({ showWritingResearchButton: { newValue: false } }, 'local');
+  await elements.get('check-research-publisher').listeners.click();
+  assert.equal(sends, 2);
+});
+
+test('publisher options ignore pages without publisher controls', () => {
+  assert.doesNotThrow(() => vm.runInNewContext(
+    fs.readFileSync('js/settings/research-publisher-options.js', 'utf8'),
+    { document: { getElementById: () => null } },
+  ));
+});
+
 test('import launcher stays available while the enabled publisher is disconnected', () => {
   const source = fs.readFileSync('js/research/research-publisher.js', 'utf8');
   const boundary = source.indexOf('  chrome.storage.local.get');

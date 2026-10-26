@@ -98,7 +98,7 @@
     section.append(heading, row);
 
     syncLayout(widget, section);
-    const anchor = document.getElementById("ghrc-pinned-issues") || document.getElementById('ghrc-deep-research-dashboard') || widget;
+    const anchor = document.getElementById("ghrc-pinned-issues") || widget;
     anchor.insertAdjacentElement("afterend", section);
   }
 
@@ -131,7 +131,7 @@
       section?.remove();
       return;
     }
-    const anchor = document.getElementById("ghrc-pinned-issues") || document.getElementById('ghrc-deep-research-dashboard') || widget;
+    const anchor = document.getElementById("ghrc-pinned-issues") || widget;
     if (section && anchor.nextElementSibling === section) {
       syncLayout(widget, section);
       return;

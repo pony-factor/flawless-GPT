@@ -4,8 +4,8 @@ import Security
 let app = NSApplication.shared
 app.setActivationPolicy(.accessory)
 let alert = NSAlert()
-alert.messageText = "Configure Flawless ChatGPT login"
-alert.informativeText = "Generate a client secret in your flawless-chatgpt GitHub App settings, then paste it here. It will be saved in macOS Keychain for the local login service. It will not be saved in the extension or repository."
+alert.messageText = "Configure Flawless Pony login"
+alert.informativeText = "Generate a client secret in the Flawless Pony GitHub App settings, then paste it here. It will be saved in macOS Keychain for the local login service. It will not be saved in the extension or repository."
 alert.addButton(withTitle: "Save to Keychain")
 alert.addButton(withTitle: "Cancel")
 let field = NSSecureTextField(frame: NSRect(x: 0, y: 0, width: 420, height: 28))

@@ -12,7 +12,19 @@
     const quota = data?.limits_progress?.find(item => item.feature_name === 'deep_research');
     if (!Number.isSafeInteger(quota?.remaining) || quota.remaining < 0) return null;
     const resetAt = typeof quota.reset_after === 'string' ? Date.parse(quota.reset_after) : NaN;
-    return { remaining: quota.remaining, resetAt: Number.isFinite(resetAt) ? resetAt : null, observedAt: now };
+    // Some account responses may include a total/limit, while others publish
+    // only the remaining number. Never combine full and mini quotas.
+    const reportedTotal = [quota.total, quota.limit, quota.max]
+      .find(value => Number.isSafeInteger(value) && value > 0 && value >= quota.remaining);
+    const mini = data?.limits_progress?.find(item => item.feature_name === 'deep_research_mini');
+    const miniRemaining = Number.isSafeInteger(mini?.remaining) && mini.remaining >= 0
+      ? mini.remaining : null;
+    const miniTotal = miniRemaining === null ? undefined : [mini.total, mini.limit, mini.max]
+      .find(value => Number.isSafeInteger(value) && value > 0 && value >= miniRemaining);
+    return { remaining: quota.remaining, resetAt: Number.isFinite(resetAt) ? resetAt : null,
+      observedAt: now, ...(reportedTotal === undefined ? {} : { total: reportedTotal }),
+      ...(miniRemaining === null ? {} : { miniRemaining }),
+      ...(miniTotal === undefined ? {} : { miniTotal }) };
   }
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = { quotaFromResponse };
@@ -20,12 +32,12 @@
   }
   const nativeFetch = window.fetch;
 
-  async function publish(response, requestGeneration) {
+  async function publish(response, requestGeneration, force = false) {
     if (!response.ok || generation !== requestGeneration) return;
     try {
       const quota = quotaFromResponse(await response.json());
       if (generation !== requestGeneration) return;
-      if (quota) document.documentElement.setAttribute(ATTRIBUTE, JSON.stringify(quota));
+      if (quota) document.documentElement.setAttribute(ATTRIBUTE, JSON.stringify(force ? { ...quota, force: true } : quota));
       else document.documentElement.removeAttribute(ATTRIBUTE);
     } catch { /* Leave the native response and last successful observation alone. */ }
   }
@@ -51,7 +63,7 @@
     return result;
   };
 
-  window.addEventListener(REFRESH_EVENT, async () => {
+  window.addEventListener(REFRESH_EVENT, async event => {
     if (!latestRequest || refreshing || Date.now() - lastRefresh < 30_000) return;
     refreshing = true;
     lastRefresh = Date.now();
@@ -61,7 +73,7 @@
       const response = await nativeFetch.call(window, new Request(latestRequest.clone(), {
         signal: AbortSignal.timeout(10_000),
       }));
-      await publish(response, currentGeneration);
+      await publish(response, currentGeneration, event.detail?.manual === true);
     } catch { /* Failed refreshes must not become a fabricated balance. */ }
     finally { refreshing = false; }
   });

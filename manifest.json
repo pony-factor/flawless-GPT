@@ -117,6 +117,7 @@
         "js/research/research-report-host.js",
         "js/research/research-import-dialog.js",
         "js/research/research-launcher.js",
+        "js/research/research-manual-import.js",
         "js/chat/hide-cookie-preferences.js",
         "js/chat/chatgpt-disclaimer.js",
         "js/chat/block-voice-prompts.js",
@@ -125,6 +126,7 @@
         "js/dashboard/repository-fast-ui.js",
         "js/dashboard/owner-grid.js",
         "js/dashboard/repository-search-shortcut.js",
+        "js/dashboard/dashboard-colors.js",
         "js/dashboard/content.js"
       ],
       "run_at": "document_start"

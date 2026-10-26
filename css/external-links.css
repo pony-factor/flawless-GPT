@@ -18,9 +18,10 @@ html[data-ghrc-link-preview="left"] {
 }
 
 .ghrc-link-with-actions {
+  /* Keep one text baseline; nested inline boxes otherwise shift the button. */
   display: inline-block;
   max-width: 100%;
-  vertical-align: text-bottom;
+  vertical-align: baseline;
 }
 
 /* ChatGPT's link wrapper can reserve only one line even after the URL wraps. */
@@ -29,6 +30,14 @@ main span:has(> a + .ghrc-link-with-actions) {
   height: auto !important;
   max-height: none !important;
   white-space: normal !important;
+}
+
+/* Keep a details citation and its action together at the end of a paragraph. */
+main span:has(> a[data-testid="chatgpt-citation"] + .ghrc-link-with-actions) {
+  display: inline-flex !important;
+  align-items: center;
+  max-width: 100%;
+  vertical-align: middle;
 }
 
 a:has(+ .ghrc-link-with-actions) {
@@ -49,7 +58,8 @@ a.bg-media-control-background + .ghrc-link-with-actions {
   align-items: center;
 }
 
-a.ghrc-source-citation:has(+ .ghrc-link-with-actions) {
+/* React replaces the chip's class list on hover; its test ID stays stable. */
+a[data-testid="chatgpt-citation"]:has(+ .ghrc-link-with-actions) {
   display: inline-flex !important;
   max-width: min(15rem, calc(100% - 32px));
   vertical-align: middle;
@@ -57,7 +67,10 @@ a.ghrc-source-citation:has(+ .ghrc-link-with-actions) {
   padding-inline-end: calc(var(--spacing, 4px) * 2) !important;
 }
 
-a.ghrc-source-citation + .ghrc-link-with-actions {
+a[data-testid="chatgpt-citation"] + .ghrc-link-with-actions {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
   margin-inline: 0;
   vertical-align: middle;
 }
@@ -92,8 +105,9 @@ a:has(+ .ghrc-link-has-punctuation) {
   display: inline-flex;
   align-items: stretch;
   height: 20px;
+  box-sizing: border-box;
   margin-inline: 3px 1px;
-  vertical-align: text-bottom;
+  vertical-align: middle;
   overflow: hidden;
   border: 1px solid color-mix(in srgb, currentColor 24%, transparent);
   border-radius: 5px;
@@ -105,7 +119,7 @@ a:has(+ .ghrc-link-has-punctuation) {
   align-items: center;
   justify-content: center;
   min-width: 20px;
-  height: 20px;
+  height: 100%;
   box-sizing: border-box;
 }
 
@@ -152,6 +166,8 @@ a:has(+ .ghrc-link-has-punctuation) {
   visibility: hidden;
 }
 
+.ghrc-citation-sources:hover > .ghrc-citation-actions .ghrc-link-copy-button,
+.ghrc-citation-sources:focus-within > .ghrc-citation-actions .ghrc-link-copy-button,
 .ghrc-citation-source:hover + .ghrc-citation-actions .ghrc-link-copy-button,
 .ghrc-citation-source:focus + .ghrc-citation-actions .ghrc-link-copy-button,
 .ghrc-citation-actions:hover .ghrc-link-copy-button,

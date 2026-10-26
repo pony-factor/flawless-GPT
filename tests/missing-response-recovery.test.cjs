@@ -1,6 +1,6 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { missingAnswer, answerForTurn, entryFor } = require('../js/chat/missing-response-recovery.js');
+const { missingAnswer, answerForTurn, entryFor, shouldCoolDown } = require('../js/chat/missing-response-recovery.js');
 
 const prefix = () => ({ errorMessage: null, turn: { status: 'complete', items: [
   { type: 'user-message' },
@@ -81,4 +81,82 @@ test('reads the current React tree rather than stale host-fiber props', () => {
   const root = { stateNode: { current: {} } }; old.return = root;
   assert.equal(entryFor({ '__reactFiber$fixture': old }), currentEntry);
   assert.equal(entryFor({}), null);
+});
+
+test('missing-response polling cools down only after fifteen minutes without prompting', () => {
+  const now = 1_000_000;
+  const elapsed = 15 * 60_000;
+  assert.equal(shouldCoolDown(now, now), false);
+  assert.equal(shouldCoolDown(now, now + elapsed - 1), false);
+  assert.equal(shouldCoolDown(now, now + elapsed), true);
+  assert.equal(shouldCoolDown(now, now + elapsed + 100_000), true);
+  // A new composer interaction establishes a fresh 15-minute active window.
+  const resumedAt = now + elapsed + 100_000;
+  assert.equal(shouldCoolDown(resumedAt, resumedAt + elapsed - 1), false);
+  assert.equal(shouldCoolDown(resumedAt, resumedAt + elapsed), true);
+});
+
+test('recovery timers stay asleep on the homepage and restart only for prompt activity', () => {
+  const fs = require('node:fs');
+  const vm = require('node:vm');
+  const path = require('node:path');
+  const events = new Map();
+  const intervals = new Map();
+  let nextInterval = 0;
+  let now = 1_000;
+  class FakeElement {
+    closest(selector) { return selector.includes('#prompt-textarea') ? this : null; }
+  }
+  const location = { pathname: '/' };
+  const window = { addEventListener: (name, listener) => events.set('window:' + name, listener) };
+  const document = {
+    addEventListener: (name, listener) => events.set('document:' + name, listener),
+    querySelectorAll: () => [],
+  };
+  vm.runInNewContext(
+    fs.readFileSync(path.join(__dirname, '../js/chat/missing-response-recovery.js'), 'utf8'),
+    {
+      module: undefined, window, document, location, Element: FakeElement,
+      Date: { now: () => now },
+      setInterval: (callback, ms) => {
+        assert.equal(ms, 2_000);
+        const id = ++nextInterval;
+        intervals.set(id, callback);
+        return id;
+      },
+      clearInterval: id => intervals.delete(id),
+    },
+  );
+  const input = () => events.get('document:input')({
+    isTrusted: true, target: new FakeElement(),
+  });
+  const route = pathname => {
+    location.pathname = pathname;
+    events.get('window:ghrc:route-change')();
+  };
+  assert.equal(intervals.size, 0, 'a new-chat homepage has no idle recovery timer');
+  input();
+  assert.equal(intervals.size, 1, 'typing a new prompt wakes the scanner');
+  route('/c/another');
+  assert.equal(intervals.size, 0, 'navigation without a submitted prompt suspends recovery');
+
+  route('/');
+  input();
+  events.get('document:click')({
+    isTrusted: true, type: 'click',
+    target: { closest: selector => selector.startsWith('button')
+      ? { closest: () => ({}) } : null },
+  });
+  route('/c/created');
+  assert.equal(intervals.size, 1, 'submitted new-chat prompts keep polling across URL creation');
+
+  now += 15 * 60_000;
+  for (const callback of [...intervals.values()]) callback();
+  assert.equal(intervals.size, 0, 'fifteen minutes without prompting cancels the recurring timer');
+  input();
+  assert.equal(intervals.size, 1, 'typing again wakes an idle conversation');
+  route('/c/unrelated');
+  assert.equal(intervals.size, 0, 'navigating to another conversation immediately stops checks');
+  events.get('window:pagehide')();
+  assert.equal(intervals.size, 0);
 });

@@ -87,3 +87,21 @@ test("updates only guidance while preserving other personalization fields", asyn
   assert.equal(body.about_user_message, "About the user");
   assert.equal(body.traits_model_message, "Pragmatic");
 });
+
+
+test("rejects oversized guidance before reading auth or posting, without truncating", async () => {
+  const state = fixture();
+  const response = await state.request("set", "x".repeat(7492));
+  assert.equal(response.ok, false);
+  assert.match(response.error, /7,492.*2,492/);
+  assert.equal(state.calls.length, 0);
+  assert.equal(state.stored().about_model_message, "Old guidance");
+});
+
+test("accepts the 5000 character boundary, counting Unicode code points", async () => {
+  const state = fixture();
+  const guidance = "😀".repeat(5000);
+  const response = await state.request("set", guidance);
+  assert.equal(response.ok, true);
+  assert.equal(state.stored().about_model_message, guidance);
+});

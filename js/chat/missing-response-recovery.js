@@ -3,7 +3,13 @@
 
   const POLL_MS = 2_000;
   const REFRESH_MS = 15_000;
+  const ACTIVE_MS = 15 * 60_000;
   const TURN_SELECTOR = "[data-turn-key]";
+  const COMPOSER_SELECTOR = '#prompt-textarea, [data-composer-markdown][contenteditable="true"]';
+
+  function shouldCoolDown(lastPromptAt, now = Date.now()) {
+    return now - lastPromptAt >= ACTIVE_MS;
+  }
 
   function missingAnswer(entry) {
     const turn = entry?.turn;
@@ -62,7 +68,7 @@
   }
 
   if (typeof module !== "undefined" && module.exports) {
-    module.exports = { missingAnswer, answerForTurn, entryFor };
+    module.exports = { missingAnswer, answerForTurn, entryFor, shouldCoolDown };
     return;
   }
 
@@ -72,15 +78,22 @@
   let retryAfter = 0;
   let savedConversation = null;
   let savedId = "";
+  let pollingTimer = null;
+  let lastPromptAt = Date.now();
+  let previousPath = location.pathname;
+  let submittedFromNewChat = false;
+  let generation = 0;
+  let activeRequest = null;
 
   const conversationId = () => location.pathname.match(/^\/c\/([a-zA-Z0-9-]+)$/)?.[1] || "";
   const scroller = () => document.querySelector("[data-app-action-timeline-scroll]");
 
-  async function loadSavedConversation(id) {
+  async function loadSavedConversation(id, signal) {
     // Keep authentication inside the page, as with personalization reads.
     // Never persist or bridge credentials or conversation contents.
     const sessionResponse = await fetch("/api/auth/session", {
-      credentials: "include", cache: "no-store", signal: AbortSignal.timeout(10_000),
+      credentials: "include", cache: "no-store",
+      signal: AbortSignal.any([signal, AbortSignal.timeout(10_000)]),
     });
     if (!sessionResponse.ok) return null;
     const session = await sessionResponse.json();
@@ -88,7 +101,7 @@
     const response = await fetch(`/backend-api/conversation/${id}`, {
       credentials: "include", cache: "no-store",
       headers: { authorization: `Bearer ${session.accessToken}` },
-      signal: AbortSignal.timeout(10_000),
+      signal: AbortSignal.any([signal, AbortSignal.timeout(10_000)]),
     });
     return response.ok ? response.json() : null;
   }
@@ -173,6 +186,7 @@
   }
 
   async function check() {
+    const requestGeneration = generation;
     const id = conversationId();
     if (!id) return;
     const turns = [...document.querySelectorAll(TURN_SELECTOR)];
@@ -196,24 +210,110 @@
     if (pending || Date.now() < retryAfter) return;
     pending = true;
     retryAfter = Date.now() + REFRESH_MS;
+    const requestController = new AbortController();
+    activeRequest = requestController;
     try {
-      const saved = await loadSavedConversation(id);
-      if (conversationId() !== id) return;
+      const saved = await loadSavedConversation(id, requestController.signal);
+      if (generation !== requestGeneration || conversationId() !== id) return;
       if (!saved?.mapping) { retryAfter = Date.now() + 60_000; return; }
       savedConversation = saved;
       // Repair only the completed missing turns. Drafts, the queue, and the
       // currently streaming turn are never changed or interrupted.
       repair(elements, saved);
     } catch {
-      retryAfter = Date.now() + 60_000;
-    } finally { pending = false; }
+      // Cancelled reads must not rate-limit a new prompt after navigation.
+      if (generation === requestGeneration) retryAfter = Date.now() + 60_000;
+    } finally {
+      if (activeRequest === requestController) activeRequest = null;
+      // An old request must not clear the pending flag of a newer session.
+      if (generation === requestGeneration) pending = false;
+    }
   }
 
-  window.addEventListener("ghrc:route-change", () => {
+  function stopPolling() {
+    if (pollingTimer !== null) clearInterval(pollingTimer);
+    pollingTimer = null;
+    // A settled tab must not retain fetched content or an in-flight read.
+    generation++;
+    activeRequest?.abort();
+    activeRequest = null;
+    pending = false;
     savedId = "";
     savedConversation = null;
     retryAfter = 0;
-  });
-  // No navigation or reload is needed; recover while other work continues.
-  setInterval(() => { void check(); }, POLL_MS);
+  }
+
+  function poll() {
+    if (shouldCoolDown(lastPromptAt)) {
+      stopPolling();
+      return;
+    }
+    void check();
+  }
+
+  function startPolling() {
+    if (pollingTimer !== null) return;
+    pollingTimer = setInterval(poll, POLL_MS);
+  }
+
+  function promptActivity() {
+    lastPromptAt = Date.now();
+    startPolling();
+  }
+
+  function inComposer(target) {
+    return target instanceof Element && Boolean(target.closest(COMPOSER_SELECTOR));
+  }
+
+  // A real user editing their prompt wakes a stable conversation, without
+  // waking the scanner for clicks and DOM updates elsewhere on the page.
+  function onComposerInput(event) {
+    if (event.isTrusted && inComposer(event.target)) promptActivity();
+  }
+
+  function onPromptSend(event) {
+    if (!event.isTrusted) return;
+    let submitted = false;
+    if (event.type === "keydown") {
+      submitted = event.key === "Enter" && !event.shiftKey && !event.isComposing
+        && !event.ctrlKey && !event.metaKey && !event.altKey && inComposer(event.target);
+    } else if (event.type === "click") {
+      const button = event.target.closest?.(
+        'button[data-testid="send-button"], button[data-testid="composer-submit-button"], '
+        + 'button#composer-submit-button, button[aria-label^="Send" i], button[type="submit"]',
+      );
+      submitted = Boolean(button && button.closest('form, [data-type="unified-composer"]'));
+    } else if (event.type === "submit") {
+      submitted = Boolean(event.target.querySelector?.(COMPOSER_SELECTOR));
+    }
+    if (!submitted) return;
+    promptActivity();
+    if (location.pathname === "/") submittedFromNewChat = true;
+  }
+
+  function onRouteChange() {
+    const currentPath = location.pathname;
+    if (currentPath === previousPath) return;
+    const continueNewChat = previousPath === "/" && Boolean(conversationId())
+      && submittedFromNewChat && !shouldCoolDown(lastPromptAt);
+    previousPath = currentPath;
+    submittedFromNewChat = false;
+    // Navigating to another chat immediately ends the old conversation's
+    // polling and abandons any in-flight saved-answer read.
+    stopPolling();
+    // A just-submitted prompt may transform / into /c/<id>. It must keep
+    // monitoring that new response, rather than treating it as navigation away.
+    if (continueNewChat) promptActivity();
+  }
+
+  document.addEventListener("input", onComposerInput, true);
+  document.addEventListener("keydown", onPromptSend, true);
+  document.addEventListener("click", onPromptSend, true);
+  document.addEventListener("submit", onPromptSend, true);
+  window.addEventListener("ghrc:route-change", onRouteChange);
+  window.addEventListener("pagehide", stopPolling);
+  // Existing conversations retain immediate recovery after a reload. A
+  // brand-new homepage has nothing to recover and needs no idle timer.
+  // After cooldown or navigation, only the next prompt wakes the scanner.
+  if (conversationId()) startPolling();
 })();

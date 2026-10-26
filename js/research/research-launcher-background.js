@@ -96,8 +96,8 @@
   }
   function publicJob(job) {
     if (!job) return null;
-    const { id, state, title, category, error, result, windowId, tabId, retryAt } = job;
-    return { id, state, title, category, error, result, windowId, tabId, retryAt };
+    const { id, state, title, category, error, result, windowId, tabId, retryAt, manual, repository, branch } = job;
+    return { id, state, title, category, error, result, windowId, tabId, retryAt, manual: Boolean(manual), repository, branch };
   }
   function categoryValid(category) {
     return typeof category === 'string' && category.length <= 240
@@ -135,7 +135,7 @@
   chrome.runtime.onMessage.addListener((message, sender, respond) => {
     if (!['start-research-launch', 'research-launch-job', 'claim-research-launch',
       'research-launch-sending', 'research-launch-submitted', 'research-launch-error',
-      'research-launch-status'].includes(message?.type)) return false;
+      'research-launch-status', 'start-manual-research', 'set-research-launch-category'].includes(message?.type)) return false;
     (async () => {
       if (message.type === 'research-launch-job') {
         if (!chatSender(sender) && !reportSender(sender)) throw new Error('Open research in ChatGPT.');
@@ -150,7 +150,39 @@
           return { ok: true, job: publicJob(job) };
         });
       }
-      if (!chatSender(sender)) throw new Error('Launch research from a ChatGPT writing block.');
+      if (!chatSender(sender)) throw new Error('Start research from the ChatGPT main frame.');
+      if (message.type === 'start-manual-research') {
+        if (typeof message.title !== 'string' || !message.title.trim() || message.title.length > 500)
+          throw new Error('The first research message is missing.');
+        return serial(async () => {
+          const current = conversation(sender.url);
+          const existing = await get(sender.tab.id);
+          if (existing && (!existing.manual || (current && existing.conversationUrl === current)
+            || (!current && !['complete', 'import-error'].includes(existing.state))))
+            return { ok: true, job: publicJob(existing) };
+          const settings = await chrome.storage.local.get({ researchPublisherEnabled: false });
+          if (!settings.researchPublisherEnabled) throw new Error('Enable Deep research publisher in settings first.');
+          const connection = await globalThis.__ghrcResearchPublisher.checkConnection();
+          const job = { id: crypto.randomUUID(), tabId: sender.tab.id, windowId: sender.tab.windowId,
+            manual: true, title: message.title, category: '', repository: connection.repository,
+            branch: connection.branch, state: 'submitted', conversationUrl: current, createdAt: Date.now() };
+          await put(job);
+          return { ok: true, job: publicJob(job) };
+        });
+      }
+      if (message.type === 'set-research-launch-category') {
+        if (!categoryValid(message.category)) throw new Error('Choose a valid repository folder.');
+        return serial(async () => {
+          const job = await get(sender.tab.id);
+          if (!job || job.id !== message.id || !['submitted', 'import-retry'].includes(job.state)
+            || (job.conversationUrl && job.conversationUrl !== conversation(sender.url)))
+            throw new Error('This report is already importing or belongs to another chat.');
+          const connection = await globalThis.__ghrcResearchPublisher.checkConnection();
+          if (connection.repository !== job.repository || connection.branch !== job.branch)
+            throw new Error('The linked repository changed. The queued destination was not modified.');
+          return { ok: true, job: publicJob(await put({ ...job, category: message.category })) };
+        });
+      }
       if (message.type === 'research-launch-status') {
         return serial(async () => {
           const job = await get(message.tabId);

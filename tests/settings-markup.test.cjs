@@ -25,3 +25,20 @@ test("web commit guidance sync status is centered below the editor", () => {
   assert.match(html, /<p\s+id="web-commit-guidance-status"[^>]*role="status"/);
   assert.match(css, /#web-commit-guidance-status\s*\{\s*text-align:\s*center\s*;/);
 });
+
+test("standalone settings section headings are centered", () => {
+  const html = fs.readFileSync(path.join(root, "options.html"), "utf8");
+  const css = fs.readFileSync(path.join(root, "css/options.css"), "utf8");
+  assert.match(html, /<legend>Interaction<\/legend>/);
+  assert.match(html, /<legend>Display<\/legend>/);
+  assert.match(css, /\.standalone-options fieldset > legend,\s*\.standalone-options fieldset > h3\s*\{\s*text-align:\s*center;/);
+  assert.match(css, /\.standalone-options fieldset > legend\s*\{[^}]*width:\s*100%;/);
+});
+
+test("both settings pages expose the queue height percentage control", () => {
+  for (const page of ["popup.html", "options.html"]) {
+    const html = fs.readFileSync(path.join(root, page), "utf8");
+    assert.match(html, /id="message-queue-max-height-percent" type="number" min="20" max="90" step="1" value="60"/);
+    assert.match(html, /id="message-queue-max-height-help"/);
+  }
+});

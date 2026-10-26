@@ -6,7 +6,7 @@ const path = require('node:path');
 
 const source = fs.readFileSync(path.join(__dirname, '../js/launchers/spellcheck-launcher.js'), 'utf8');
 
-function fixture({ clipboard = 'clipboard text', draft = '', suggestionAvailable = true, adjacentDescription = false, externalAppChip = false, rejectInlineInsertion = false } = {}) {
+function fixture({ clipboard = 'clipboard text', draft = '', suggestionAvailable = true, adjacentDescription = false, externalAppChip = false, nativeSendWithoutTestId = false, rejectInlineInsertion = false } = {}) {
   let now = 0;
   let suggestionOpen = false;
   let pluginSelected = false;
@@ -24,6 +24,9 @@ function fixture({ clipboard = 'clipboard text', draft = '', suggestionAvailable
 
   const send = makeAction('Send', () => { send.clicks++; });
   send.clicks = 0;
+  const clipboardSend = makeAction('Send clipboard or queue as prompt', () => { clipboardSend.clicks++; });
+  clipboardSend.id = 'ghrc-clipboard-send-button';
+  clipboardSend.clicks = 0;
 
   const mention = {
     textContent: 'Spellcheck Only',
@@ -66,7 +69,8 @@ function fixture({ clipboard = 'clipboard text', draft = '', suggestionAvailable
       if (selector.includes('[app-mention-path]') || selector.includes('[app-mention-display-name]')) {
         return externalAppChip && pluginSelected ? [mention] : [];
       }
-      if (/send-button|aria-label\^="Send"|composer-submit-button/.test(selector)) return [send];
+      if (selector.includes('aria-label^="Send"')) return [clipboardSend, send];
+      if (/send-button|composer-submit-button/.test(selector)) return nativeSendWithoutTestId ? [] : [send];
       return [];
     },
   };
@@ -139,7 +143,7 @@ function fixture({ clipboard = 'clipboard text', draft = '', suggestionAvailable
   })();`, context);
 
   return {
-    context, composer, send, api: context.api,
+    context, composer, send, clipboardSend, api: context.api,
     get pluginSelected() { return pluginSelected; },
     get pluginSuggestionClicks() { return pluginSuggestionClicks; },
     get pickerLookups() { return pickerLookups; },
@@ -163,6 +167,16 @@ test('resolves a suggestion whose adjacent description has no text separator', a
   await new Promise((resolve) => setImmediate(resolve));
   assert.equal(f.pluginSelected, true);
   assert.equal(f.send.clicks, 1);
+});
+
+test('native Send without a test ID wins over the clipboard button and preserves the plugin', async () => {
+  const f = fixture({ nativeSendWithoutTestId: true });
+  await f.api.launchSpellcheck();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(f.clipboardSend.clicks, 0);
+  assert.equal(f.send.clicks, 1);
+  assert.equal(f.pluginSelected, true);
+  assert.equal(f.composer.innerText, 'Spellcheck Only\nclipboard text');
 });
 
 test('replaces an existing homepage draft before resolving the plugin mention', async () => {
