@@ -65,7 +65,7 @@ test("intercepts a new research prompt and opens exactly one temporary split", a
   const begun = await f.message("ghrc-research-spellcheck-begin", { prompt: "Reserch thsi" });
   assert.equal(begun.ok, true);
   assert.deepEqual(f.calls.find(call => call[0] === "split")[1], [10, 20]);
-  assert.deepEqual(f.calls.find(call => call[0] === "update")[2],
+  assert.deepEqual({ ...f.calls.find(call => call[0] === "update")[2] },
     { url: "https://chatgpt.com/", active: true });
   const second = await f.message("ghrc-research-spellcheck-begin", { prompt: "Other" });
   assert.equal(second.ok, false);
