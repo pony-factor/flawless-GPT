@@ -37,12 +37,30 @@ test('sidebar toggles stay in their tab while new documents start collapsed', as
       </script>`,
       });
     });
+    const settings = await context.newPage();
+    await settings.goto('http://sidebar.test/codex/settings/general');
+    assert.equal(await settings.evaluate(() => sidebar), 'expanded');
+    await settings.close();
+    requestCookies.length = 0;
+    await context.addCookies([{
+      name: 'codex_sidebar_state', value: 'expanded', url: 'http://sidebar.test/',
+    }]);
     const first = await context.newPage();
     const second = await context.newPage();
     await first.goto('http://sidebar.test/');
     await second.goto('http://sidebar.test/');
     assert.match(requestCookies[0], /codex_sidebar_state=expanded/);
     assert.match(requestCookies[1], /codex_sidebar_state=collapsed/);
+    await first.evaluate(() => {
+      history.pushState({}, '', '/codex/settings');
+      window.dispatchEvent(new Event('focus'));
+    });
+    assert.equal(await first.evaluate(() => sidebar), 'expanded');
+    await first.evaluate(() => {
+      history.pushState({}, '', '/');
+      window.dispatchEvent(new Event('focus'));
+    });
+    assert.equal(await first.evaluate(() => sidebar), 'collapsed');
     await first.click('#toggle');
     // A subsequent preference acts as a delivery barrier on the same channel.
     await first.evaluate(() => {

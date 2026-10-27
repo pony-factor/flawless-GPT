@@ -163,6 +163,10 @@ are labeled as last checked rather than being presented as fresh balances.
 
 Under **ChatGPT → Chat bar colors**, choose independent opt-in colors for the composer background, border, focus ring, typed text, caret, placeholder, selection, toolbar, send/stop buttons, and attachments. Unchecked swatches use ChatGPT's own theme, including dark-mode changes. Colors are stored locally under `composerColors`, update live in open chats, and can all be reset with **Restore ChatGPT colors**.
 
+### Dashboard accent and repository link colors
+
+Under **Dashboard → Dashboard colors** in both the extension popup and full settings, set independent light- and dark-mode colors for dashboard accents and repository names. Each swatch has a **custom HEX field** accepting six digits with or without the `#` prefix. Changes are stored locally under `dashboardColors` and update open dashboards immediately. Repository names follow the accent unless customized; **Default** restores an individual color and **Restore dashboard colors** clears all four overrides. Existing **Chat bar colors** continue to support HEX entry independently.
+
 ### Token storage
 
 GitHub token values are encrypted with AES-GCM before being written to
@@ -355,6 +359,23 @@ The setting works in both the browser popup and Full settings, updates the
 shortcut hint immediately, and includes **Reset** to restore Alt+R. A plain
 shortcut key leaves normal typing, deletion, and editing alone while a text
 field is active. Browser-reserved keyboard combinations may be unavailable.
+
+## Automated tests
+
+Pull requests and pushes to `main` require all Node.js unit tests and focused
+user-message / sidebar-icon browser regressions. The full external-link browser
+suite also runs as an advisory check while unrelated existing browser failures
+are addressed. On Linux browser checks use Playwright's Chromium; macOS uses
+Brave by default or `BRAVE_PATH` when set.
+
+```sh
+node --test tests/*.test.cjs
+npm install --no-save --package-lock=false playwright@1.56.1
+npx playwright install chromium
+node --test tests/external-links.browser.cjs
+```
+
+Other browser suites are not yet enforced by CI.
 
 ## JavaScript organization
 
