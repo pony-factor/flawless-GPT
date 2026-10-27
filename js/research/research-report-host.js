@@ -22,6 +22,7 @@
   const REPORT_ORIGIN = /^https:\/\/(connector-openai-deep-research|mcp-app-[a-f0-9]+)\.web-sandbox\.oaiusercontent\.com$/;
   let observer = null;
   let scheduled = false;
+  let disposed = false;
 
   // No full-document observer runs on ChatGPT tabs without active report frames.
   function stopObserving() {
@@ -31,7 +32,7 @@
   }
   function update() {
     scheduled = false;
-    if (context && !context.active()) return;
+    if (disposed || (context && !context.active())) return;
     let expanded = false;
     for (const frame of reports.keys()) {
       if (!frame.isConnected) { reports.delete(frame); continue; }
@@ -46,7 +47,7 @@
     if (!reports.size) stopObserving();
   }
   function schedule() {
-    if (scheduled || (context && !context.active())) return;
+    if (disposed || scheduled || (context && !context.active())) return;
     scheduled = true;
     requestAnimationFrame(update);
   }
@@ -70,7 +71,7 @@
     window.addEventListener('resize', schedule);
   }
   function handleReportMessage(event) {
-    if (context && !context.active()) return;
+    if (disposed || (context && !context.active())) return;
     if (!REPORT_ORIGIN.test(event.origin) || ![
       'ghrc-research-report-state', 'ghrc-research-report-finalized',
     ].includes(event.data?.type)) return;
@@ -98,12 +99,19 @@
     stopObserving();
     document.documentElement.removeAttribute(ATTRIBUTE);
   }
-  window.addEventListener('pagehide', cleanup);
-  context?.onStop(() => {
+  function dispose() {
+    if (disposed) return;
+    disposed = true;
     cleanup();
-    chrome.runtime.onMessage.removeListener?.(handleResearchContext);
+    globalThis.chrome?.runtime?.onMessage?.removeListener?.(handleResearchContext);
     window.removeEventListener('message', handleReportMessage);
-    window.removeEventListener('pagehide', cleanup);
+    window.removeEventListener('pagehide', onPageHide);
     style.remove();
-  });
+  }
+  function onPageHide(event) {
+    if (event.persisted) cleanup();
+    else dispose();
+  }
+  window.addEventListener('pagehide', onPageHide);
+  context?.onStop?.(dispose);
 })();

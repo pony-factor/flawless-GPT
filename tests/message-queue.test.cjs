@@ -168,3 +168,45 @@ test("normalizes the queue viewport-height percentage", () => {
   assert.equal(normalize(1), 20);
   assert.equal(normalize(100), 90);
 });
+
+
+test("prunes orphaned captured files but preserves active composer uploads", () => {
+  const { retainOnlyCapturedFiles } = api();
+  const stale = { name: "old.pdf" }, active = { name: "active.png" };
+  const files = new Map([[stale.name, stale], [active.name, active]]);
+  retainOnlyCapturedFiles(files, [active]);
+  assert.deepEqual([...files.keys()], ["active.png"]);
+  retainOnlyCapturedFiles(files, []);
+  assert.equal(files.size, 0);
+});
+
+test("preserves an unresolved upload until its chip settles", () => {
+  const { retainOnlyCapturedFiles } = api();
+  const file = { name: "large.pdf" };
+  const files = new Map([[file.name, file]]);
+  retainOnlyCapturedFiles(files, [], true);
+  assert.equal(files.get(file.name), file);
+  retainOnlyCapturedFiles(files, []);
+  assert.equal(files.size, 0);
+});
+
+test("releases a queued file without discarding a newer upload with the same name", () => {
+  const { releaseCapturedSnapshotFiles } = api();
+  const oldFile = { name: "report.pdf" }, newFile = { name: "report.pdf" };
+  const files = new Map([[newFile.name, newFile]]);
+  releaseCapturedSnapshotFiles(files, [oldFile]);
+  assert.equal(files.get(newFile.name), newFile);
+  releaseCapturedSnapshotFiles(files, [newFile]);
+  assert.equal(files.size, 0);
+});
+
+test("keeps storage signatures compact while tracking attachment changes", () => {
+  const { queueStorageSignature } = api();
+  const url = "data:application/pdf;base64," + "a".repeat(400_000);
+  const before = { one: [{ id: "item", attachments: [{ dataUrl: url }] }], two: [] };
+  const reordered = { two: [], one: before.one };
+  const changed = { one: [{ id: "item", attachments: [{ dataUrl: url.slice(0, -1) + "b" }] }], two: [] };
+  assert.equal(queueStorageSignature(before), queueStorageSignature(reordered));
+  assert.notEqual(queueStorageSignature(before), queueStorageSignature(changed));
+  assert.ok(queueStorageSignature(before).length < 64);
+});

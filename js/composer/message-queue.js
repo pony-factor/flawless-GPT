@@ -19,7 +19,6 @@
 
   let activeKey = conversationKey();
   let queue = [];
-  let storageState = {};
   let stateLoaded = false;
   let routeSyncRunning = false;
   let lastHref = location.href;
@@ -45,6 +44,8 @@
   const pendingEnterTexts = new Set();
   let nativeSubmission = null;
   const capturedFiles = new Map();
+  const CAPTURED_FILE_SWEEP_MS = 30_000;
+  let capturedFilesSweepTimer = null;
 
   // ChatGPT sometimes mounts the upload input in a portal outside the form.
   // Prefer the composer's own input; use an orphaned input only if unambiguous.
@@ -176,7 +177,9 @@
     for (const button of [...current.files, current.quoteButton, ...current.selections.map(selection => selection.button),
       ...current.standaloneMentions.map(app => app.remove)].filter(Boolean)) button.click();
     await new Promise(resolve => window.setTimeout(resolve, 80));
-    return !hasComposerContext(composer);
+    const cleared = !hasComposerContext(composer);
+    if (cleared) releaseCapturedSnapshotFiles(capturedFiles, snapshot.state.fileTokens);
+    return cleared;
   }
 
   function contextMatches(snapshot, composer) {
@@ -371,6 +374,20 @@
       : DEFAULT_QUEUE_MAX_HEIGHT_PERCENT;
   }
 
+  // Queued items have their own saved attachment bytes; retain originals
+  // only for upload chips that could still be added to the queue.
+  function retainOnlyCapturedFiles(files, activeFiles, uncertain = false) {
+    if (uncertain) return;
+    const active = new Set(activeFiles);
+    for (const [name, file] of files) if (!active.has(file)) files.delete(name);
+  }
+
+  function releaseCapturedSnapshotFiles(files, snapshotFiles) {
+    for (const file of snapshotFiles) {
+      if (file && files.get(file.name) === file) files.delete(file.name);
+    }
+  }
+
   const testApi = {
     COMPLETE_SETTLE_MS,
     conversationIdFromPath,
@@ -380,6 +397,9 @@
     queueCanAdvance,
     queueSendCanProceed,
     shouldQueueComposerEnter,
+    retainOnlyCapturedFiles,
+    releaseCapturedSnapshotFiles,
+    queueStorageSignature,
   };
 
   if (globalThis.__GHRC_TEST__) {
@@ -390,6 +410,25 @@
   const context = globalThis.__ghrcExtensionContext;
   if (!context?.active()) return;
 
+  // Native sends can remove upload chips without involving the queue. The
+  // sweep releases stale File objects even after a tab has been idle for days.
+  function scheduleCapturedFileSweep() {
+    if (!capturedFiles.size || capturedFilesSweepTimer !== null) return;
+    capturedFilesSweepTimer = window.setTimeout(() => {
+      capturedFilesSweepTimer = null;
+      if (!context.active()) {
+        capturedFiles.clear();
+        return;
+      }
+      const state = composerContext();
+      const uploading = Boolean(findComposerForm()?.querySelector('[role="progressbar"], [aria-busy="true"]'));
+      // Preserve bytes for uploads still in progress or not yet recognized.
+      const uncertain = uploading || state.files.some((_, index) => !state.fileTokens[index]);
+      retainOnlyCapturedFiles(capturedFiles, (state.fileTokens || []).filter(Boolean), uncertain);
+      scheduleCapturedFileSweep();
+    }, CAPTURED_FILE_SWEEP_MS);
+  }
+
   // Keep the original bytes: uploaded chips alone cannot recreate a file.
   for (const type of ["change", "drop", "paste"]) {
     document.addEventListener(type, event => {
@@ -399,6 +438,7 @@
       if (!form || !(form.contains(target) || (type === "change" && target === composerInput))) return;
       const files = target?.files || event.dataTransfer?.files || event.clipboardData?.files;
       for (const file of files || []) capturedFiles.set(file.name, file);
+      scheduleCapturedFileSweep();
     }, true);
   }
 
@@ -781,7 +821,25 @@
 
   function queueStorageSignature(state) {
     if (!state || typeof state !== "object") return "";
-    return JSON.stringify(Object.keys(state).sort().map((key) => [key, state[key]]));
+    // Avoid retaining the entire Base64 payload in echo-suppression signatures.
+    let hashA = 2166136261;
+    let hashB = 2246822519;
+    let length = 0;
+    const add = (value) => {
+      length += value.length;
+      for (let i = 0; i < value.length; i++) {
+        const code = value.charCodeAt(i);
+        hashA = Math.imul(hashA ^ code, 16777619);
+        hashB = Math.imul(hashB ^ code, 3266489917);
+      }
+    };
+    for (const key of Object.keys(state).sort()) {
+      add(JSON.stringify(key));
+      add(":");
+      add(JSON.stringify(state[key]));
+      add(";");
+    }
+    return `${length}:${(hashA >>> 0).toString(16)}:${(hashB >>> 0).toString(16)}`;
   }
 
   function persistQueue() {
@@ -841,11 +899,10 @@
     if (!context.active()) return;
     showQueueButton = Boolean(stored[QUEUE_BUTTON_SETTING_KEY]);
     queueMaxHeightPercent = normalizeQueueMaxHeightPercent(stored[QUEUE_MAX_HEIGHT_SETTING_KEY]);
-    storageState = stored[STORAGE_KEY] && typeof stored[STORAGE_KEY] === "object"
-      ? stored[STORAGE_KEY]
-      : {};
+    const storedQueues = stored[STORAGE_KEY] && typeof stored[STORAGE_KEY] === "object"
+      ? stored[STORAGE_KEY] : {};
     queuePaused = Boolean(stored[PAUSED_STORAGE_KEY]?.[activeKey]);
-    queue = normalizeQueueItems(storageState[activeKey]);
+    queue = normalizeQueueItems(storedQueues[activeKey]);
     stateLoaded = true;
     renderQueue();
     scheduleMount();
@@ -893,7 +950,6 @@
 
       activeKey = nextKey;
       queuePaused = Boolean(stored[PAUSED_STORAGE_KEY]?.[nextKey]);
-      storageState = nextState;
       queue = normalizeQueueItems(nextState[nextKey]);
       completionCandidateSince = null;
       renderQueue();
@@ -2113,12 +2169,10 @@
     const nextQueue = normalizeQueueItems(nextState[activeKey]);
     const queueWriteSignature = queueStorageSignature(nextState);
     if (pendingQueueStorageWrites.delete(queueWriteSignature)) {
-      storageState = nextState;
       return;
     }
     if (JSON.stringify(nextQueue) === JSON.stringify(storageCopy())) return;
 
-    storageState = nextState;
     queue = nextQueue;
     completionCandidateSince = null;
     renderQueue();
@@ -2154,6 +2208,8 @@
     queueResizeObserver?.disconnect();
     window.removeEventListener("resize", scheduleMount);
     clearInterval(pumpInterval);
+    if (capturedFilesSweepTimer !== null) clearTimeout(capturedFilesSweepTimer);
+    capturedFiles.clear();
     clearScheduledPump();
     document.removeEventListener("visibilitychange", reschedulePumpForVisibility);
     if (saveTimer !== null) clearTimeout(saveTimer);

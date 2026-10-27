@@ -221,6 +221,59 @@ test('disabled publishing does not start a one-second background scanner', async
   } finally { await browser.close(); }
 });
 
+test('automatic report publishing stops its recovery timer and DOM observers after Git success', async () => {
+  const browser = await chromium.launch({ executablePath: '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser', headless: true });
+  try {
+    const page = await browser.newPage();
+    await page.setContent('<section><div><button aria-label="Export">Export</button></div><article class="_reportPage_fixture"><h1>Finished report</h1><p>Evidence and references.</p></article></section>');
+    await page.evaluate(() => {
+      window.observerStats = { started: 0, stopped: 0 };
+      const NativeObserver = MutationObserver;
+      window.MutationObserver = class extends NativeObserver {
+        observe(...args) { observerStats.started++; return super.observe(...args); }
+        disconnect() { observerStats.stopped++; return super.disconnect(); }
+      };
+      const createInterval = window.setInterval.bind(window);
+      const cancelInterval = window.clearInterval.bind(window);
+      window.startedIntervals = [];
+      window.stoppedIntervals = [];
+      window.setInterval = (...args) => {
+        const handle = createInterval(...args);
+        startedIntervals.push(handle);
+        return handle;
+      };
+      window.clearInterval = id => {
+        if (startedIntervals.includes(id)) stoppedIntervals.push(id);
+        return cancelInterval(id);
+      };
+      window.job = { id: 'research-1', state: 'submitted' };
+      window.imports = 0;
+      window.chrome = { storage: { local: { async get(defaults) {
+        return { ...defaults, researchPublisherEnabled: true };
+      } }, onChanged: { addListener() {}, removeListener() {} } },
+        runtime: { async sendMessage(message) {
+          if (message.type === 'research-launch-job') return { ok: true, job };
+          if (message.type === 'publish-research-report') {
+            imports++;
+            job.state = 'complete';
+            return { ok: true, repository: 'Research', branch: 'main', path: 'report.md' };
+          }
+          return { ok: true };
+        } } };
+    });
+    for (const file of ['vendor/turndown.js', 'vendor/turndown-plugin-gfm.js',
+      'js/research/research-import-dialog.js', 'js/research/research-publisher.js']) {
+      await page.addScriptTag({ content: fs.readFileSync(file, 'utf8') });
+    }
+    await page.waitForFunction(() => imports === 1, null, { timeout: 15000 });
+    await page.waitForFunction(() => observerStats.stopped > 0 && startedIntervals.length > 0
+      && startedIntervals.every(id => stoppedIntervals.includes(id)));
+    await page.evaluate(() => document.querySelector('article').append(document.createElement('p')));
+    await page.waitForTimeout(1200);
+    assert.equal(await page.evaluate(() => imports), 1, 'no additional imports after finalization');
+  } finally { await browser.close(); }
+});
+
 test('import confirmation links open through the bridge inside a sandbox frame', async () => {
   const browser = await chromium.launch({ executablePath: '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser', headless: true });
   try {
