@@ -231,7 +231,8 @@ test('idle recovery stops after fifteen minutes and wakes on a new composer edit
   // The inactivity cutoff clears the cached conversation and cancels polling.
   await f.p.locator('[data-ghrc-recovered-answer]').evaluate(node => node.remove());
   const reads = f.reads();
-  await f.p.locator('#answer').click();
+  // The empty answer placeholder has no click target after recovery is removed.
+  await f.p.locator('[data-turn-key]').click({ position: { x: 10, y: 10 } });
   await f.p.clock.runFor(8_000);
   assert.equal(await f.p.locator('[data-ghrc-recovered-answer]').count(), 0,
     'unrelated UI interactions cannot restart an idle recovery scan');
