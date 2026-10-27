@@ -219,6 +219,8 @@ split support use an embedded preview; close that preview with **Close** or
 
 On conversation pages, **Refresh view** requests an in-place refresh through ChatGPT's existing router without reloading the document. It asks you to wait for active responses to finish and spaces manual requests at least 30 seconds apart. If the router is unavailable, it uses the conversation error screen's native retry when available and reports unsupported refreshes explicitly. Server rate limits can still prevent a conversation from loading. Missing-answer recovery retains only the final text needed for broken turns, rather than the full fetched conversation.
 
+Automatic answer recovery is capped at three saved-conversation reads for the same group of broken turns. It skips hidden and offline tabs, backs off after failures, and honors the server's `Retry-After` cooldown even across navigation or manual refresh. **Refresh view** can open a new recovery attempt window after cooldown. Research quota data updates through normal ChatGPT activity or an explicit click on the tracker; its periodic local redraw makes no automatic quota requests.
+
 The history setting hides the known conversation-history rate-limit modal, clears the page locks it
 leaves behind, and preserves native wheel and touch scrolling if stale modal
 listeners remain. Link previews load the destination in a sandboxed iframe.

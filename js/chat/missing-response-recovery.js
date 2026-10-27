@@ -4,11 +4,18 @@
   const POLL_MS = 2_000;
   const REFRESH_MS = 15_000;
   const ACTIVE_MS = 15 * 60_000;
+  const MAX_AUTO_READS = 3;
   const TURN_SELECTOR = "[data-turn-key]";
   const COMPOSER_SELECTOR = '#prompt-textarea, [data-composer-markdown][contenteditable="true"]';
 
   function shouldCoolDown(lastPromptAt, now = Date.now()) {
     return now - lastPromptAt >= ACTIVE_MS;
+  }
+
+  function retryDelay(value, now = Date.now()) {
+    const seconds = value === null ? NaN : Number(value);
+    const delay = Number.isFinite(seconds) ? seconds * 1000 : Date.parse(value) - now;
+    return Number.isFinite(delay) ? Math.max(60_000, delay) : 60_000;
   }
 
   function missingAnswer(entry) {
@@ -83,7 +90,7 @@
   }
 
   if (typeof module !== "undefined" && module.exports) {
-    module.exports = { missingAnswer, answerForTurn, entryFor, shouldCoolDown, savedAnswers };
+    module.exports = { missingAnswer, answerForTurn, entryFor, shouldCoolDown, savedAnswers, retryDelay };
     return;
   }
 
@@ -99,6 +106,9 @@
   let submittedFromNewChat = false;
   let generation = 0;
   let activeRequest = null;
+  let attemptedTurns = "";
+  let networkAttempts = 0;
+  let serverRetryAfter = 0;
 
   const conversationId = () => location.pathname.match(/^\/c\/([a-zA-Z0-9-]+)$/)?.[1] || "";
   const scroller = () => document.querySelector("[data-app-action-timeline-scroll]");
@@ -110,7 +120,10 @@
       credentials: "include", cache: "no-store",
       signal: AbortSignal.any([signal, AbortSignal.timeout(10_000)]),
     });
-    if (!sessionResponse.ok) return null;
+    if (!sessionResponse.ok) {
+      if (sessionResponse.status === 429) serverRetryAfter = Date.now() + retryDelay(sessionResponse.headers.get("Retry-After"));
+      return null;
+    }
     const session = await sessionResponse.json();
     if (!session.accessToken) return null;
     const response = await fetch(`/backend-api/conversation/${id}`, {
@@ -118,6 +131,7 @@
       headers: { authorization: `Bearer ${session.accessToken}` },
       signal: AbortSignal.any([signal, AbortSignal.timeout(10_000)]),
     });
+    if (response.status === 429) serverRetryAfter = Date.now() + retryDelay(response.headers.get("Retry-After"));
     return response.ok ? response.json() : null;
   }
 
@@ -199,6 +213,7 @@
   }
 
   async function check() {
+    if (document.hidden || globalThis.navigator?.onLine === false) return;
     const requestGeneration = generation;
     const id = conversationId();
     if (!id) return;
@@ -210,7 +225,14 @@
     const elements = turns.filter(element => missingAnswer(entryFor(element)));
     if (!elements.length) {
       savedConversation = null;
+      attemptedTurns = "";
+      networkAttempts = 0;
       return;
+    }
+    const turnKey = elements.map(element => element.getAttribute("data-turn-key")).sort().join("|");
+    if (turnKey !== attemptedTurns) {
+      attemptedTurns = turnKey;
+      networkAttempts = 0;
     }
     if (savedConversation) {
       const missingIds = new Set(elements.map(element => element.getAttribute("data-turn-key")));
@@ -224,18 +246,20 @@
     if (savedConversation) {
       repair(elements, savedConversation);
       // A successfully saved final message can still be a partial snapshot.
-      // Refresh while native rendering remains broken, even when every turn
-      // already has a cached answer, so later saved text replaces that snapshot.
+      // Allow a bounded follow-up window for later saved text, rather than
+      // fetching the whole conversation for as long as native rendering is broken.
     }
-    if (pending || Date.now() < retryAfter) return;
+    if (pending || networkAttempts >= MAX_AUTO_READS
+        || Date.now() < Math.max(retryAfter, serverRetryAfter)) return;
     pending = true;
+    networkAttempts++;
     retryAfter = Date.now() + REFRESH_MS;
     const requestController = new AbortController();
     activeRequest = requestController;
     try {
       const saved = await loadSavedConversation(id, requestController.signal);
       if (generation !== requestGeneration || conversationId() !== id) return;
-      if (!saved?.mapping) { retryAfter = Date.now() + 60_000; return; }
+      if (!saved?.mapping) { retryAfter = Date.now() + 60_000 * 2 ** Math.max(0, networkAttempts - 1); return; }
       const currentElements = [...document.querySelectorAll(TURN_SELECTOR)]
         .filter(element => missingAnswer(entryFor(element)));
       savedConversation = savedAnswers(saved, currentElements.map(element => element.getAttribute("data-turn-key")));
@@ -244,7 +268,7 @@
       repair(currentElements, savedConversation);
     } catch {
       // Cancelled reads must not rate-limit a new prompt after navigation.
-      if (generation === requestGeneration) retryAfter = Date.now() + 60_000;
+      if (generation === requestGeneration) retryAfter = Date.now() + 60_000 * 2 ** Math.max(0, networkAttempts - 1);
     } finally {
       if (activeRequest === requestController) activeRequest = null;
       // An old request must not clear the pending flag of a newer session.
@@ -263,6 +287,8 @@
     savedId = "";
     savedConversation = null;
     retryAfter = 0;
+    attemptedTurns = "";
+    networkAttempts = 0;
   }
 
   function poll() {
@@ -336,6 +362,7 @@
   window.addEventListener("pagehide", stopPolling);
   window.addEventListener("ghrc:refresh-view", () => {
     // Respect pending reads and server cooldowns even on repeated manual clicks.
+    networkAttempts = 0;
     promptActivity();
     void check();
   });
