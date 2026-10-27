@@ -247,6 +247,17 @@ legend {
   font-size: 15px;
 }
 
+/* Center settings section headings without shifting individual preferences. */
+.standalone-options fieldset > legend,
+.standalone-options fieldset > h3 {
+  text-align: center;
+}
+
+.standalone-options fieldset > legend {
+  box-sizing: border-box;
+  width: 100%;
+}
+
 .standalone-options .section-divider {
   border: 0;
   border-top: 1px solid light-dark(#d0d7de, #3d444d);
@@ -638,18 +649,18 @@ button.secondary {
 
 
 /* Direct, opt-in-on-edit composer-color controls */
-#composer-color-settings .composer-color-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,330px),1fr)); gap:8px 16px; margin:12px 0; }
-#composer-color-settings .composer-color-row { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px 12px; }
-#composer-color-settings .composer-color-label { font-size:13px; font-weight:400; margin:0; }
-#composer-color-settings .composer-color-source { margin-left:2px; font-weight:600; cursor:help; }
-#composer-color-settings .composer-color-source[hidden] { display:none; }
-#composer-color-settings .composer-color-controls { display:flex; flex:0 1 auto; align-items:center; gap:6px; }
-#composer-color-settings input[type="color"] { cursor:pointer; flex:0 0 42px; height:30px; width:42px; padding:2px; }
-#composer-color-settings .composer-color-hex { width:92px; height:30px; padding:4px 7px; font-size:12px; }
-#composer-color-settings .composer-color-hex[aria-invalid="true"] { border-color:#c73737; box-shadow:0 0 0 1px #c73737; }
-#composer-color-settings .composer-color-clear { font-size:12px; padding:4px 6px; min-height:30px; }
-#composer-color-settings .composer-color-clear[hidden] { display:none; }
-#composer-color-reset:disabled { opacity:0.45; cursor:default; }
+:is(#composer-color-settings, #dashboard-color-settings) .composer-color-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,330px),1fr)); gap:8px 16px; margin:12px 0; }
+:is(#composer-color-settings, #dashboard-color-settings) .composer-color-row { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px 12px; }
+:is(#composer-color-settings, #dashboard-color-settings) .composer-color-label { font-size:13px; font-weight:400; margin:0; }
+:is(#composer-color-settings, #dashboard-color-settings) .composer-color-source { margin-left:2px; font-weight:600; cursor:help; }
+:is(#composer-color-settings, #dashboard-color-settings) .composer-color-source[hidden] { display:none; }
+:is(#composer-color-settings, #dashboard-color-settings) .composer-color-controls { display:flex; flex:0 1 auto; align-items:center; gap:6px; }
+:is(#composer-color-settings, #dashboard-color-settings) input[type="color"] { cursor:pointer; flex:0 0 42px; height:30px; width:42px; padding:2px; }
+:is(#composer-color-settings, #dashboard-color-settings) .composer-color-hex { width:92px; height:30px; padding:4px 7px; font-size:12px; }
+:is(#composer-color-settings, #dashboard-color-settings) .composer-color-hex[aria-invalid="true"] { border-color:#c73737; box-shadow:0 0 0 1px #c73737; }
+:is(#composer-color-settings, #dashboard-color-settings) .composer-color-clear { font-size:12px; padding:4px 6px; min-height:30px; }
+:is(#composer-color-settings, #dashboard-color-settings) .composer-color-clear[hidden] { display:none; }
+#composer-color-reset:disabled, #dashboard-color-reset:disabled { opacity:0.45; cursor:default; }
 
 .repository-shortcut-setting {
   margin: 14px 0;

@@ -6,6 +6,9 @@
   const controls = document.getElementById('research-publisher-controls');
   const launch = document.getElementById('check-research-publisher');
   const status = document.getElementById('research-publisher-status');
+  // The telescope preference may not be present in an older popup layout.
+  if (!checkbox || !controls || !launch || !status) return;
+
   let busy = false;
   let checkGeneration = 0;
 
@@ -47,15 +50,17 @@
     }
   }
 
-  researchButton.disabled = true;
+  if (researchButton) researchButton.disabled = true;
   checkbox.disabled = true;
   chrome.storage.local.get({
     researchPublisherEnabled: false,
     [RESEARCH_BUTTON_KEY]: true,
     [CONNECTION_KEY]: null,
   }).then((settings) => {
-    researchButton.checked = settings[RESEARCH_BUTTON_KEY] !== false;
-    researchButton.disabled = false;
+    if (researchButton) {
+      researchButton.checked = settings[RESEARCH_BUTTON_KEY] !== false;
+      researchButton.disabled = false;
+    }
     render(Boolean(settings.researchPublisherEnabled));
     renderConnection(settings[CONNECTION_KEY]);
     checkbox.disabled = false;
@@ -63,7 +68,7 @@
     status.textContent = 'Could not load publisher settings. Reopen settings to retry.';
   });
 
-  researchButton.addEventListener('change', async () => {
+  researchButton?.addEventListener('change', async () => {
     const enabled = researchButton.checked;
     researchButton.disabled = true;
     try { await chrome.storage.local.set({ [RESEARCH_BUTTON_KEY]: enabled }); }
@@ -91,7 +96,7 @@
 
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== 'local') return;
-    if (changes[RESEARCH_BUTTON_KEY]) researchButton.checked = changes[RESEARCH_BUTTON_KEY].newValue !== false;
+    if (changes[RESEARCH_BUTTON_KEY] && researchButton) researchButton.checked = changes[RESEARCH_BUTTON_KEY].newValue !== false;
     if (changes.researchPublisherEnabled) {
       render(Boolean(changes.researchPublisherEnabled.newValue));
     }

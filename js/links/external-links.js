@@ -2,7 +2,7 @@
   const EXTERNAL_WARNING_SETTING_KEY = "skipExternalSiteWarning";
   const HISTORY_MODAL_SETTING_KEY = "dismissHistoryRateLimitModal";
   const STRIP_UTM_TRACKING_SETTING_KEY = "stripUtmTracking";
-  const USER_MESSAGE_SELECTOR = '[data-message-author-role="user"], [data-author-role="user"], [data-testid="user-message"]';
+  const USER_MESSAGE_SELECTOR = '[data-message-author-role="user"], [data-conversation-role="user"], [data-author-role="user"], [data-testid="user-message"], [data-markdown-text-tone="user-message"]';
   const MODAL_ID = "modal-conversation-history-rate-limit";
   const DIALOG_SELECTOR = '[role="dialog"], [role="alertdialog"]';
   const EXTERNAL_DIALOG_TITLE = "External site";
@@ -178,6 +178,31 @@
     return true;
   }
 
+  // DIL document/source cards are React pressables without an href. When the
+  // same document is already open beside chat, React can treat another card
+  // click as selecting the current item instead of opening its external URL.
+  function openExternalCard(event) {
+    if (!newTabsEnabled || !isPlainPrimaryActivation(event)) return false;
+    const card = event.target.closest?.('[data-d-component="pressable"]');
+    if (!card || !card.closest('main, [role="dialog"]')
+        || card.closest('#ghrc-link-preview, .ghrc-link-actions')
+        || event.target.closest?.('a[href], input, textarea, select, [contenteditable="true"]')) return false;
+    // Nested buttons retain their own actions, such as expanding card details.
+    const control = event.target.closest?.('button, [role="button"]');
+    if (control && control !== card) return false;
+
+    card.dispatchEvent(new Event(card.closest('[role="dialog"]')
+      ? "ghrc-resolve-citation-url" : "ghrc-resolve-item-url", { bubbles: true }));
+    let url;
+    try { url = new URL(card.getAttribute("data-ghrc-citation-url")); } catch { return false; }
+    if (!["http:", "https:"].includes(url.protocol) || url.origin === window.location.origin
+        || url.username || url.password) return false;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    window.open(stripTrackingFromUrl(url).href, "_blank", "noopener,noreferrer");
+    return true;
+  }
+
   function closeLinkPreview(restoreFocus = true) {
     const hadPreview = Boolean(previewPanel);
     nativeSplitRequest += 1;
@@ -210,6 +235,96 @@
       const delta = anchor.getBoundingClientRect().top - before;
       if (Math.abs(delta) > 0.5) window.scrollBy(0, delta);
     });
+  }
+
+  // Browser-native split view narrows the *tab* rather than our page panel.
+  // ChatGPT can reflow messages or replace its scroll pane at that breakpoint.
+  // Keep the first visible reading block in place across that brief transition.
+  function preserveConversationScrollForNativeSplit(link) {
+    const blocksSelector = "p, li, pre, h1, h2, h3, h4, h5, h6";
+    const conversationRoot = () => document.querySelector('[aria-label="Conversation"]')
+      || link?.closest?.("main") || document.querySelector("main");
+    const scrollContainer = element => {
+      for (let node = element; node; node = node.parentElement) {
+        if (node === document.scrollingElement) return node;
+        const overflow = getComputedStyle(node).overflowY;
+        if (/^(auto|scroll|overlay)$/.test(overflow) && node.scrollHeight > node.clientHeight + 1) {
+          return node;
+        }
+      }
+      return document.scrollingElement;
+    };
+    const root = conversationRoot();
+    if (!root) return { restore() {}, stop() {} };
+    const originalContainer = scrollContainer(link?.closest?.("main") ? link : root);
+    const viewport = originalContainer === document.scrollingElement
+      ? { top: 0, bottom: innerHeight } : originalContainer.getBoundingClientRect();
+    const blocks = [...root.querySelectorAll(blocksSelector)];
+    const anchor = blocks.find(block => {
+      const rect = block.getBoundingClientRect();
+      return rect.height > 0 && rect.bottom > viewport.top + 8 && rect.top < viewport.bottom - 8;
+    }) || (link?.isConnected ? link : null);
+    if (!anchor) return { restore() {}, stop() {} };
+
+    const originalTop = anchor.getBoundingClientRect().top;
+    const originalScrollTop = originalContainer.scrollTop;
+    const path = location.pathname;
+    const turn = anchor.closest('[data-testid^="conversation-turn-"]');
+    const turnId = turn?.getAttribute("data-testid");
+    const turnIndex = turn ? [...turn.querySelectorAll(blocksSelector)].indexOf(anchor) : -1;
+    const blockIndex = blocks.indexOf(anchor);
+    const currentAnchor = () => {
+      if (anchor.isConnected) return anchor;
+      if (turnId && turnIndex >= 0) {
+        const matchingTurn = [...document.querySelectorAll('[data-testid^="conversation-turn-"]')]
+          .find(node => node.getAttribute("data-testid") === turnId);
+        const matchingBlock = matchingTurn?.querySelectorAll(blocksSelector)[turnIndex];
+        if (matchingBlock) return matchingBlock;
+      }
+      return conversationRoot()?.querySelectorAll(blocksSelector)[blockIndex] || null;
+    };
+
+    let stopped = false;
+    let scheduled = false;
+    const abort = new AbortController();
+    let observer;
+    let timeout;
+    function stop() {
+      if (stopped) return;
+      stopped = true;
+      abort.abort();
+      observer?.disconnect();
+      clearTimeout(timeout);
+    }
+    function apply() {
+      if (stopped) return;
+      if (location.pathname !== path) { stop(); return; }
+      const block = currentAnchor();
+      const container = scrollContainer(block || conversationRoot());
+      if (!container) return;
+      if (!block) {
+        if (container !== originalContainer) container.scrollTop = originalScrollTop;
+        return;
+      }
+      const delta = block.getBoundingClientRect().top - originalTop;
+      if (Math.abs(delta) > 1) container.scrollTop += delta / (container.currentCSSZoom || 1);
+    }
+    function restore() {
+      if (stopped || scheduled) return;
+      scheduled = true;
+      requestAnimationFrame(() => { scheduled = false; apply(); });
+    }
+    window.addEventListener("resize", restore, { signal: abort.signal });
+    for (const type of ["wheel", "touchstart", "pointerdown", "keydown"]) {
+      window.addEventListener(type, stop, { capture: true, signal: abort.signal });
+    }
+    // Observe replacement of the conversation DOM as well as resize. The
+    // bounded timeout prevents a delayed split from pinning subsequent reads.
+    observer = new MutationObserver(restore);
+    observer.observe(document.body, { childList: true, subtree: true });
+    timeout = setTimeout(stop, 1600);
+    for (const delay of [0, 80, 250, 600, 1100]) setTimeout(restore, delay);
+    return { restore, stop };
   }
 
   function previewWidthBounds() {
@@ -351,6 +466,7 @@
     header.append(close, copy, open, destination);
     panel.append(resizer, header);
 
+
     if (nativeGuide) {
       const content = document.createElement("div");
       content.className = "ghrc-preview-content";
@@ -450,12 +566,45 @@
     });
   }
 
-  function handleBlockedPreview(error) {
+  function handleBlockedPreview(error, destinationUrl) {
     if (!previewWatch) return;
-    const { href, link, panel } = previewWatch;
+    const { href, panel } = previewWatch;
     const hostname = new URL(href).hostname;
     if (hostname !== "github.com" && hostname !== "www.github.com") {
-      void openNativeSplitView(href, link);
+      const watch = previewWatch;
+      previewWatch = null;
+      void (async () => {
+        try {
+          const result = await chrome.runtime.sendMessage({
+            type: "open-blocked-link-preview", url: href, previewId: watch.id,
+          });
+          if (!result?.ok) throw new Error("Could not open this website in a separate tab.");
+          if (previewPanel === panel) closeLinkPreview(false);
+        } catch {
+          if (!panel.isConnected) return;
+          panel.querySelector("iframe")?.remove();
+          const content = document.createElement("div");
+          content.className = "ghrc-preview-content";
+          content.setAttribute("role", "status");
+          content.textContent = "This website cannot load in the sidebar. Use Open in new tab to complete verification or view the page.";
+          try {
+            const target = new URL(destinationUrl || href);
+            if (["https:", "http:"].includes(target.protocol) && !target.username && !target.password) {
+              const open = document.createElement("a");
+              open.href = target.href;
+              open.target = "_blank";
+              open.rel = "noopener noreferrer";
+              open.textContent = "Open this link in a new tab";
+              content.append(document.createElement("br"), open);
+            }
+          } catch {
+            // The existing header control remains usable for the original URL.
+          }
+          panel.append(content);
+        } finally {
+          void unwatchLinkPreview(watch.id);
+        }
+      })();
       return;
     }
     if (!["net::ERR_BLOCKED_BY_RESPONSE", "net::ERR_BLOCKED_BY_CSP"].includes(error)) return;
@@ -623,15 +772,17 @@
     href = stripTrackingFromUrl(new URL(href)).href;
     closeLinkPreview(false);
     const request = ++nativeSplitRequest;
+    const readingPosition = preserveConversationScrollForNativeSplit(link);
     try {
       const result = await chrome.runtime.sendMessage({
         type: "open-native-split-view", url: href, onLeft: splitViewOnLeft,
       });
-      if (request !== nativeSplitRequest) return;
-      if (result?.ok) return;
+      if (request !== nativeSplitRequest) { readingPosition.stop(); return; }
+      if (result?.ok) { readingPosition.restore(); return; }
     } catch {
       // Older browsers cannot create a native split through the extension API.
     }
+    readingPosition.stop();
     if (request === nativeSplitRequest) showLinkPreview(href, link, nativeGuide);
   }
 
@@ -888,7 +1039,7 @@
   chrome.runtime.onMessage.addListener(message => {
     if (message?.type !== "link-preview-navigation-error" || !previewWatch
         || message.previewId !== previewWatch.id || message.url !== previewWatch.href) return;
-    handleBlockedPreview(message.error);
+    handleBlockedPreview(message.error, message.destinationUrl);
   });
 
   function preserveNativeScroll(event) {
@@ -976,7 +1127,7 @@
       characterData: true,
       subtree: true,
       attributes: true,
-      attributeFilter: ["href", "data-message-author-role", "data-author-role", "data-testid"],
+      attributeFilter: ["href", "data-message-author-role", "data-conversation-role", "data-author-role", "data-testid", "data-markdown-text-tone"],
     });
   }
 
@@ -1075,7 +1226,7 @@
     }
     const link = event.target.closest?.("a[href]");
     stripTrackingFromLink(link);
-    openExternalLink(event, link);
+    if (!openExternalLink(event, link)) openExternalCard(event);
   }, true);
 
   document.addEventListener("keydown", (event) => {

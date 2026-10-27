@@ -2,7 +2,7 @@
   "use strict";
   const STORAGE_KEY = "composerColors";
   const SOURCE_KEY = "composerColorSource";
-  const SPECS = [["surface","Bar background","#303030"],["surface-border","Bar border","#666666"],["focus-ring","Focus border and ring","#a97dee"],["text","Typed text","#ffffff"],["caret","Typing cursor","#a97dee"],["placeholder","Placeholder text","#a1a1aa"],["selection-background","Selected text background","#8556c6"],["selection-text","Selected text","#ffffff"],["toolbar-background","Toolbar button backgrounds","#444444"],["toolbar-icon","Toolbar icons and labels","#ffffff"],["toolbar-hover","Toolbar hover","#555555"],["send-background","Send button background","#ffffff"],["send-icon","Send button icon","#202020"],["send-hover","Send button hover","#dadada"],["stop-background","Stop button background","#ffffff"],["stop-icon","Stop button icon","#202020"],["plus-background","+ button background","#444444"],["plus-icon","+ button icon","#ffffff"],["plus-hover","+ button hover","#555555"],["clipboard-background","Clipboard paste background","#444444"],["clipboard-icon","Clipboard paste icon","#ffffff"],["clipboard-hover","Clipboard paste hover","#555555"],["attachment-background","Attachment background","#404040"],["attachment-text","Attachment text","#ffffff"],["attachment-border","Attachment border","#747474"]];
+  const SPECS = [["surface","Bar background","#303030"],["surface-border","Bar border","#666666"],["focus-ring","Focus border and ring","#a97dee"],["text","Typed text","#ffffff"],["caret","Typing cursor","#a97dee"],["placeholder","Placeholder text","#a1a1aa"],["selection-background","Selected text background","#8556c6"],["selection-text","Selected text","#ffffff"],["toolbar-background","Toolbar button backgrounds","#444444"],["toolbar-icon","Toolbar icons and labels","#ffffff"],["toolbar-hover","Toolbar hover","#555555"],["send-background","Send button background","#ffffff"],["send-icon","Send button icon","#202020"],["send-hover","Send button hover","#dadada"],["stop-background","Stop button background","#ffffff"],["stop-icon","Stop button icon","#202020"],["plus-background","+ button background","#444444"],["plus-icon","+ button icon","#ffffff"],["plus-hover","+ button hover","#555555"],["clipboard-background","Clipboard paste background","#444444"],["clipboard-icon","Clipboard paste icon","#ffffff"],["clipboard-hover","Clipboard paste hover","#555555"],["attachment-background","Attachment background","#404040"],["attachment-text","Attachment text","#ffffff"],["attachment-border","Attachment border","#747474"],["edit-cancel-background","Edit message Cancel background","#303030"],["edit-cancel-text","Edit message Cancel text","#f5f5f5"],["edit-cancel-hover","Edit message Cancel hover","#454545"],["edit-send-background","Edit message Send background","#f5f5f5"],["edit-send-text","Edit message Send text","#202020"],["edit-send-hover","Edit message Send hover","#dadada"]];
   const HEX = /^#[0-9a-f]{6}$/i;
   const normalizeHex = input => {
     const text = typeof input === "string" ? input.trim() : "";
@@ -150,6 +150,49 @@
   const context = globalThis.__ghrcExtensionContext;
   if (!context?.active()) return;
   const root = document.documentElement;
+  // Native inline message editing is outside the bottom composer. Tag only
+  // the two labeled actions in an active user-message editor, not other buttons
+  // (such as message actions, navigation, or unrelated Send dialogs).
+  if (typeof MutationObserver === "function" && typeof document.querySelectorAll === "function") {
+    const attr = "data-ghrc-message-edit-action";
+    let pendingScan = null;
+    const scanEditActions = () => {
+      pendingScan = null;
+      if (!context.active()) return;
+      const expected = new Map();
+      const turns = document.querySelectorAll('[data-message-author-role="user"], [data-conversation-role="user"]');
+      for (const turn of turns) {
+        if (!turn.querySelector?.('textarea, [contenteditable="true"]')) continue;
+        const buttons = Array.from(turn.querySelectorAll("button"));
+        const matching = label => buttons.filter(button =>
+          button.textContent?.trim().toLowerCase() === label ||
+          button.getAttribute("aria-label")?.trim().toLowerCase() === label);
+        const cancel = matching("cancel");
+        const send = matching("send");
+        if (cancel.length !== 1 || send.length !== 1 ||
+            cancel[0].parentElement !== send[0].parentElement) continue;
+        expected.set(cancel[0], "cancel");
+        expected.set(send[0], "send");
+      }
+      for (const button of document.querySelectorAll(`[${attr}]`)) {
+        if (button.getAttribute(attr) !== expected.get(button)) button.removeAttribute(attr);
+      }
+      for (const [button, action] of expected) {
+        if (button.getAttribute(attr) !== action) button.setAttribute(attr, action);
+      }
+    };
+    const scheduleScan = () => {
+      if (pendingScan === null) pendingScan = setTimeout(scanEditActions, 80);
+    };
+    const observer = new MutationObserver(scheduleScan);
+    observer.observe(root, { childList: true, subtree: true });
+    scheduleScan();
+    context.onStop(() => {
+      observer.disconnect();
+      if (pendingScan !== null) clearTimeout(pendingScan);
+      for (const button of document.querySelectorAll(`[${attr}]`)) button.removeAttribute(attr);
+    });
+  }
   function apply(input) {
     const colors = valid(input);
     for (const [key] of SPECS) {

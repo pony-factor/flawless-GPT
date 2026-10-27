@@ -21,6 +21,7 @@ The dashboard:
 - can skip ChatGPT's external-site warning and dismiss its history rate-limit
   modal independently;
 - hides ChatGPT's usage remaining / credits card by default;
+- offers an opt-in, Sweetiebot-style 12px pie for Deep Research; the counter defaults to full research only and can switch to full + lightweight when both quotas are reported. The pie uses a reported limit or an optional user-configured maximum, falling back to an explicitly labeled estimated scale of 25 or 250. Colors inherit Chat bar preferences;
 - hides promotional ChatGPT plan-upgrade banners such as the Astra Pro upsell by default, without removing conversation content;
 - queues follow-up messages locally while ChatGPT is responding, keeps them editable and reorderable, and sends them FIFO only after the active response fully completes;
 - adds columns for any other GitHub accounts the connected tokens can access;
@@ -76,14 +77,14 @@ the current tab; this feature does not upload its contents.
 
 ### GitHub App login
 
-Connect GitHub opens the Flawless ChatGPT app's browser authorization page and returns to the extension automatically. Choose repositories to install the app on a personal account or organization and select its repository access.
+Connect GitHub opens the Flawless Pony GitHub App's browser authorization page and returns to the extension automatically. Choose repositories to install the app on a personal account or organization and select its repository access.
 
 The small local login service exchanges GitHub's authorization code; the extension stores the resulting session in its encrypted browser vault. The service listens only on `127.0.0.1:8787`, accepts the configured extension identity, and keeps access tokens out of redirect URLs.
 
 To configure it on macOS:
 
-1. In the app settings, set the callback URL to `http://127.0.0.1:8787/github/callback` and generate a client secret. App settings: https://github.com/settings/apps/flawless-chatgpt
-2. Run `swift auth/configure-secret.swift` and paste the secret into the secure local dialog. It saves the credential in macOS Keychain; do not put it in the repository or extension settings.
+1. In the Flawless Pony GitHub App settings (under the owning account's **Developer settings → GitHub Apps**), set the callback URL to `http://127.0.0.1:8787/github/callback` and generate a client secret. Public app page: https://github.com/apps/flawless-pony
+2. Run `swift auth/configure-secret.swift` and paste the secret into the secure local dialog. It saves the credential in macOS Keychain; do not put it in the repository or extension settings. Renaming or transferring the existing GitHub App does not require replacing the Client ID or its stored Keychain credential.
 3. Run `python3 auth/install.py` to install the login service, which starts automatically at login. Run the installer again after changing the Keychain credential to restart it.
 4. Reload the extension and select Connect GitHub.
 
@@ -127,9 +128,9 @@ Hovering the age or icon still reveals the absolute creation date.
 ### Deep Research allowance tracker
 
 Under **Research** in either the compact extension menu or Full settings, customize
-Deep Research allowance tracking separately for the homepage and the active research
-composer. The master **Enable Deep Research allowance trackers** switch continues
-to disable both locations when turned off.
+Deep Research allowance tracking for the homepage and active research composer.
+The master **Enable Deep Research allowance trackers** switch continues to disable
+both locations when turned off.
 
 The homepage has independent settings for its tracker, **Show reports remaining**,
 and **Show reset countdown**. By default the homepage tracker appears only within
@@ -137,8 +138,17 @@ and **Show reset countdown**. By default the homepage tracker appears only withi
 **Always show on homepage** to see the report count throughout the cycle, or
 adjust the reset window from 1 to 365 days. To show only the report count,
 enable homepage tracking and reports remaining, then disable **Show reset
-countdown**. The composer has independent visibility, count, and countdown
-settings. Changes save automatically and update existing ChatGPT tabs.
+countdown**. The composer has an independent on/off switch, but shares the
+homepage's count and reset-countdown choices—even when the homepage tracker is
+hidden or outside its visibility window. Changes save automatically and update
+existing ChatGPT tabs.
+
+The **Counter allowance** setting defaults to **Full research only**, using
+ChatGPT's `deep_research` quota and excluding the `deep_research_mini` lightweight
+pool. Switch to **Full + lightweight** to display the sum only when both buckets
+are available. The pie and exact accessible count use the same selection. When no total is available, either mode uses an estimated scale of 25 or 250,
+identified as an estimate in the tooltip. Enter your actual maximum under
+**Pie allowance total** for an accurate percentage. A missing combined quota is shown as unavailable, not invented.
 
 Counts come from ChatGPT's native Deep Research allowance; stale observations
 are labeled as last checked rather than being presented as fresh balances.
@@ -146,6 +156,10 @@ are labeled as last checked rather than being presented as fresh balances.
 ### Chat bar colors
 
 Under **ChatGPT → Chat bar colors**, choose independent opt-in colors for the composer background, border, focus ring, typed text, caret, placeholder, selection, toolbar, send/stop buttons, and attachments. Unchecked swatches use ChatGPT's own theme, including dark-mode changes. Colors are stored locally under `composerColors`, update live in open chats, and can all be reset with **Restore ChatGPT colors**.
+
+### Dashboard accent and repository link colors
+
+Under **Dashboard → Dashboard colors** in both the extension popup and full settings, set independent light- and dark-mode colors for dashboard accents and repository names. Each swatch has a **custom HEX field** accepting six digits with or without the `#` prefix. Changes are stored locally under `dashboardColors` and update open dashboards immediately. Repository names follow the accent unless customized; **Default** restores an individual color and **Restore dashboard colors** clears all four overrides. Existing **Chat bar colors** continue to support HEX entry independently.
 
 ### Token storage
 
@@ -339,6 +353,23 @@ The setting works in both the browser popup and Full settings, updates the
 shortcut hint immediately, and includes **Reset** to restore Alt+R. A plain
 shortcut key leaves normal typing, deletion, and editing alone while a text
 field is active. Browser-reserved keyboard combinations may be unavailable.
+
+## Automated tests
+
+Pull requests and pushes to `main` require all Node.js unit tests and focused
+user-message / sidebar-icon browser regressions. The full external-link browser
+suite also runs as an advisory check while unrelated existing browser failures
+are addressed. On Linux browser checks use Playwright's Chromium; macOS uses
+Brave by default or `BRAVE_PATH` when set.
+
+```sh
+node --test tests/*.test.cjs
+npm install --no-save --package-lock=false playwright@1.56.1
+npx playwright install chromium
+node --test tests/external-links.browser.cjs
+```
+
+Other browser suites are not yet enforced by CI.
 
 ## JavaScript organization
 

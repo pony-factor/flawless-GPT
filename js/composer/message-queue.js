@@ -4,6 +4,8 @@
   const STORAGE_KEY = "queuedChatMessages";
   const PAUSED_STORAGE_KEY = "queuedChatMessagesPaused";
   const QUEUE_BUTTON_SETTING_KEY = "showMessageQueueButton";
+  const QUEUE_MAX_HEIGHT_SETTING_KEY = "messageQueueMaxHeightPercent";
+  const DEFAULT_QUEUE_MAX_HEIGHT_PERCENT = 60;
   const PANEL_ID = "ghrc-message-queue";
   const QUEUE_BUTTON_ID = "ghrc-message-queue-button";
   const INTERRUPT_BUTTON_ID = "ghrc-message-interrupt-button";
@@ -34,6 +36,7 @@
   let enqueueRunning = false;
   let queuePaused = false;
   let showQueueButton = false;
+  let queueMaxHeightPercent = DEFAULT_QUEUE_MAX_HEIGHT_PERCENT;
   let persistPending = Promise.resolve();
   const pendingQueueStorageWrites = new Set();
   let queueStateRequest = null;
@@ -360,10 +363,19 @@
     return hidden ? "timeout" : "frame";
   }
 
+  function normalizeQueueMaxHeightPercent(value) {
+    const parsed = (typeof value === "number" || (typeof value === "string" && value.trim()))
+      ? Number(value) : NaN;
+    return Number.isFinite(parsed)
+      ? Math.min(90, Math.max(20, Math.round(parsed)))
+      : DEFAULT_QUEUE_MAX_HEIGHT_PERCENT;
+  }
+
   const testApi = {
     COMPLETE_SETTLE_MS,
     conversationIdFromPath,
     normalizeQueueItems,
+    normalizeQueueMaxHeightPercent,
     pumpSchedulingMode,
     queueCanAdvance,
     queueSendCanProceed,
@@ -824,9 +836,11 @@
       [STORAGE_KEY]: {},
       [PAUSED_STORAGE_KEY]: {},
       [QUEUE_BUTTON_SETTING_KEY]: false,
+      [QUEUE_MAX_HEIGHT_SETTING_KEY]: DEFAULT_QUEUE_MAX_HEIGHT_PERCENT,
     });
     if (!context.active()) return;
     showQueueButton = Boolean(stored[QUEUE_BUTTON_SETTING_KEY]);
+    queueMaxHeightPercent = normalizeQueueMaxHeightPercent(stored[QUEUE_MAX_HEIGHT_SETTING_KEY]);
     storageState = stored[STORAGE_KEY] && typeof stored[STORAGE_KEY] === "object"
       ? stored[STORAGE_KEY]
       : {};
@@ -910,6 +924,134 @@
     void context.run(() => persistQueue());
     renderQueue();
     schedulePump();
+  }
+
+  function attachmentRail(row) {
+    let rail = row.querySelector(".ghrc-message-queue-attachments");
+    if (!rail) {
+      rail = document.createElement("div");
+      rail.className = "ghrc-message-queue-attachments";
+      row.querySelector(".ghrc-message-queue-index").after(rail);
+    }
+    return rail;
+  }
+
+  function updateAttachmentThumbnails(row, item) {
+    const images = (item.attachments || []).filter(file =>
+      /^data:image\//i.test(file.dataUrl || "")
+    );
+    let previews = row.querySelector(".ghrc-message-queue-thumbnails");
+    row.classList.toggle("ghrc-message-queue-has-images", images.length > 0);
+    if (!images.length) {
+      previews?.remove();
+      return;
+    }
+    if (!previews) {
+      previews = document.createElement("div");
+      previews.className = "ghrc-message-queue-thumbnails";
+      attachmentRail(row).append(previews);
+    }
+    // Keep loaded previews mounted during text edits and queue reordering.
+    if (previews.children.length === images.length && images.every((file, index) =>
+      previews.children[index].getAttribute("src") === file.dataUrl
+      && previews.children[index].alt === file.name
+    )) return;
+    previews.replaceChildren(...images.map(file => {
+      const image = document.createElement("img");
+      image.src = file.dataUrl;
+      image.alt = file.name;
+      image.title = file.name;
+      image.draggable = false;
+      return image;
+    }));
+  }
+
+
+  function queuedAttachmentSize(file) {
+    if (Number.isSafeInteger(file.size) && file.size >= 0) return file.size;
+    const dataUrl = file.dataUrl;
+    if (typeof dataUrl !== "string") return null;
+    const comma = dataUrl.indexOf(",");
+    if (comma < 0 || !/;base64$/i.test(dataUrl.slice(0, comma))) return null;
+    const length = dataUrl.length - comma - 1;
+    if (length % 4) return null;
+    return Math.max(0, length / 4 * 3 - (dataUrl.endsWith("==") ? 2 : dataUrl.endsWith("=") ? 1 : 0));
+  }
+
+  function formatQueuedAttachmentSize(bytes) {
+    if (!Number.isFinite(bytes) || bytes < 0) return "";
+    if (bytes < 1024) return bytes + " B";
+    const units = ["KB", "MB", "GB"];
+    let value = bytes;
+    let index = -1;
+    do {
+      value /= 1024;
+      index += 1;
+    } while (value >= 1024 && index < units.length - 1);
+    return (value < 10 ? Math.round(value * 10) / 10 : Math.round(value)) + " " + units[index];
+  }
+
+  function queuedAttachmentType(file) {
+    const extension = /\.([a-z\d]{1,8})$/i.exec(file.name || "")?.[1];
+    if (extension) return extension.toUpperCase();
+    if (file.type === "application/pdf") return "PDF";
+    if (/^text\//i.test(file.type || "")) return "TEXT";
+    return "FILE";
+  }
+
+  function updateAttachmentCards(row, item) {
+    const files = (item.attachments || []).filter(file =>
+      file && !/^data:image\//i.test(file.dataUrl || "")
+    );
+    let list = row.querySelector(".ghrc-message-queue-files");
+    row.classList.toggle("ghrc-message-queue-has-files", files.length > 0);
+    if (!files.length) {
+      list?.remove();
+      return;
+    }
+    if (!list) {
+      list = document.createElement("div");
+      list.className = "ghrc-message-queue-files";
+      list.setAttribute("role", "group");
+      list.setAttribute("aria-label", "Queued file attachments");
+      attachmentRail(row).append(list);
+    }
+    const entries = files.map(file => ({
+      name: typeof file.name === "string" && file.name ? file.name : "Unnamed file",
+      mime: typeof file.type === "string" ? file.type : "",
+      label: queuedAttachmentType(file),
+      size: formatQueuedAttachmentSize(queuedAttachmentSize(file)),
+    }));
+    // Reuse cards on text edits, moves, and unrelated queue updates.
+    if (list.children.length === entries.length && entries.every((file, index) => {
+      const card = list.children[index];
+      return card.dataset.name === file.name && card.dataset.mime === file.mime
+        && card.dataset.size === file.size;
+    })) return;
+    list.replaceChildren(...entries.map(file => {
+      const card = document.createElement("div");
+      card.className = "ghrc-message-queue-file-card";
+      card.setAttribute("role", "group");
+      card.dataset.name = file.name;
+      card.dataset.mime = file.mime;
+      card.dataset.size = file.size;
+      const summary = file.label + (file.size ? " · " + file.size : "");
+      card.title = file.name + " (" + (file.mime || "unknown type")
+        + (file.size ? ", " + file.size : "") + ")";
+      card.setAttribute("aria-label", "Queued attachment: " + file.name + ", " + summary);
+      const icon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      icon.setAttribute("viewBox", "0 0 24 24");
+      icon.setAttribute("aria-hidden", "true");
+      icon.innerHTML = '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/>';
+      const name = document.createElement("span");
+      name.className = "ghrc-message-queue-file-name";
+      name.textContent = file.name;
+      const meta = document.createElement("span");
+      meta.className = "ghrc-message-queue-file-meta";
+      meta.textContent = summary;
+      card.append(icon, name, meta);
+      return card;
+    }));
   }
 
   function createItemRow(item, index) {
@@ -1068,6 +1210,10 @@
       return;
     }
     if (!panel) panel = createPanel();
+    const maxHeight = `${queueMaxHeightPercent}dvh`;
+    if (panel.style.getPropertyValue("--ghrc-queue-max-height") !== maxHeight) {
+      panel.style.setProperty("--ghrc-queue-max-height", maxHeight);
+    }
     const title = panel.querySelector(".ghrc-message-queue-title");
     const list = panel.querySelector(".ghrc-message-queue-list");
     title.textContent = `Queue · ${queue.length}`;
@@ -1103,6 +1249,10 @@
       if (names) editor.setAttribute("aria-description", `Attachments: ${names}`);
       else editor.removeAttribute("aria-description");
       row.title = names ? `Attachments: ${names}` : "";
+      updateAttachmentThumbnails(row, item);
+      updateAttachmentCards(row, item);
+      const rail = row.querySelector(".ghrc-message-queue-attachments");
+      if (rail && !rail.childElementCount) rail.remove();
       const [up, down] = row.querySelectorAll(".ghrc-message-queue-move-controls button");
       up.disabled = index === 0 || sending;
       down.disabled = index === queue.length - 1 || sending;
@@ -1302,9 +1452,12 @@
     return true;
   }
 
-  async function sendClipboardText(text) {
+  async function sendClipboardText(text, mentions = []) {
     if (!context.active() || !stateLoaded || routeSyncRunning || conversationKey() !== activeKey) return false;
     text = normalizedText(text);
+    const validMentions = normalizeMentions(mentions, text);
+    if (validMentions.length !== mentions.length) return false;
+    mentions = validMentions;
     if (!text.trim()) return false;
     const composer = findComposerInput();
     if (!composer) return false;
@@ -1312,9 +1465,9 @@
     // Use the same completion gate as the FIFO, rather than treating a missing
     // Stop/streaming indicator as permission to submit and interrupt that work.
     if (queue.length || !queueCanAdvance(lifecycleSnapshot(), COMPLETE_SETTLE_MS) || nativeSubmissionPending(composer)
-      || sendingItemId || enqueueRunning || interruptRunning) return enqueueText(text);
+      || sendingItemId || enqueueRunning || interruptRunning) return enqueueText(text, [], mentions);
     // Preserve attachments and selected context for the existing draft.
-    if (hasComposerContext(composer)) return enqueueText(text);
+    if (hasComposerContext(composer)) return enqueueText(text, [], mentions);
 
     const key = activeKey;
     const draft = composerText(composer);
@@ -1327,13 +1480,14 @@
     scheduleMount();
     try {
       replaced = true;
-      if (!await replaceComposerText(composer, text)) return false;
+      if (!await replaceComposerText(composer, text, mentions)) return false;
       const deadline = Date.now() + SUBMIT_TIMEOUT_MS;
       while (Date.now() < deadline) {
         if (!context.active() || key !== activeKey || conversationKey() !== key || routeSyncRunning
           || composer !== findComposerInput() || !composer.isConnected
-          || !textMatchesComposer(composer, text) || hasComposerContext(composer)) return false;
-        if (!queueCanAdvance(lifecycleSnapshot(), COMPLETE_SETTLE_MS) || queue.length) return enqueueText(text);
+          || !textMatchesComposer(composer, text) || !mentionsMatch(composer, mentions)
+          || hasComposerContext(composer)) return false;
+        if (!queueCanAdvance(lifecycleSnapshot(), COMPLETE_SETTLE_MS) || queue.length) return enqueueText(text, [], mentions);
         const sendButton = findSendButton(composer);
         if (sendButton && !sendButton.disabled && sendButton.getAttribute("aria-disabled") !== "true") {
           sendButton.click();
@@ -1363,7 +1517,7 @@
   // when idle, and otherwise join the FIFO without clicking Stop.
   globalThis.__ghrcMessageQueue = {
     enqueueText: text => context.run(() => enqueueText(text)),
-    sendClipboardText: text => context.run(() => sendClipboardText(text)),
+    sendClipboardText: (text, mentions) => context.run(() => sendClipboardText(text, mentions)),
     enqueueComposerMessage: () => context.run(enqueueComposerMessage),
     // Research spellcheck yields to the FIFO while ChatGPT is still busy.
     shouldQueueResearchPrompt: composer => Boolean(composer === findComposerInput()
@@ -1465,16 +1619,38 @@
     }
     field.style.color = appearance.color;
     field.style.backgroundColor = sendingDraftSurface(composer);
+    const sizingProperties = ["box-sizing", "height", "min-height", "max-height", "overflow-y"];
+    const originalSizing = sizingProperties.map(property => [property,
+      composer.style.getPropertyValue(property), composer.style.getPropertyPriority(property)]);
+    const minimumHeight = Math.max(parseFloat(appearance.minHeight) || 0,
+      (parseFloat(appearance.lineHeight) || parseFloat(appearance.fontSize) * 1.5)
+      + (parseFloat(appearance.paddingTop) || 0) + (parseFloat(appearance.paddingBottom) || 0));
+    const originalMaximumHeight = appearance.maxHeight.endsWith("px") ? parseFloat(appearance.maxHeight) : 240;
     const position = () => {
       if (!composer.isConnected) return;
       const rect = composer.getBoundingClientRect();
-      field.style.left = `${rect.left}px`;
-      field.style.top = `${rect.top}px`;
       field.style.width = `${rect.width}px`;
-      field.style.height = `${rect.height}px`;
+      // The native editor temporarily contains the queued payload. Reserve
+      // space for the independent draft instead, including as the user types.
+      const scrollTop = field.scrollTop;
+      field.style.height = "0px";
+      const maximumHeight = Math.max(minimumHeight,
+        Math.min(originalMaximumHeight, window.innerHeight * 0.4));
+      const height = `${Math.min(maximumHeight, Math.max(minimumHeight, field.scrollHeight))}px`;
+      field.style.height = height;
+      field.scrollTop = scrollTop;
+      composer.style.setProperty("box-sizing", "border-box");
+      for (const property of ["height", "min-height", "max-height"]) {
+        if (composer.style.getPropertyValue(property) !== height) composer.style.setProperty(property, height);
+      }
+      composer.style.setProperty("overflow-y", "hidden");
+      const positioned = composer.getBoundingClientRect();
+      field.style.left = `${positioned.left}px`;
+      field.style.top = `${positioned.top}px`;
     };
     document.body.append(field);
     position();
+    field.addEventListener("input", position);
     const resize = typeof ResizeObserver === "function" ? new ResizeObserver(position) : null;
     resize?.observe(composer);
     window.addEventListener("resize", position);
@@ -1508,13 +1684,18 @@
       // Reset immediately so subsequent typing is a distinct message, but
       // recover the text if persistence fails before this overlay is closed.
       field.value = "";
+      position();
       const request = Promise.resolve().then(() => context.run(() => enqueueText(entered)))
         .then(saved => {
           if (!saved && field.isConnected) {
             field.value = entered + (field.value ? `\n${field.value}` : "");
+            position();
           }
         }, () => {
-          if (field.isConnected) field.value = entered + (field.value ? `\n${field.value}` : "");
+          if (field.isConnected) {
+            field.value = entered + (field.value ? `\n${field.value}` : "");
+            position();
+          }
         });
       pendingEntries.add(request);
       void request.finally(() => pendingEntries.delete(request));
@@ -1532,6 +1713,10 @@
         resize?.disconnect();
         window.removeEventListener("resize", position);
         window.removeEventListener("scroll", position, true);
+        for (const [property, value, priority] of originalSizing) {
+          if (value) composer.style.setProperty(property, value, priority);
+          else composer.style.removeProperty(property);
+        }
         field.remove();
       },
     };
@@ -1910,6 +2095,10 @@
     if (changes[QUEUE_BUTTON_SETTING_KEY]) {
       showQueueButton = Boolean(changes[QUEUE_BUTTON_SETTING_KEY].newValue);
       scheduleMount();
+    }
+    if (changes[QUEUE_MAX_HEIGHT_SETTING_KEY]) {
+      queueMaxHeightPercent = normalizeQueueMaxHeightPercent(changes[QUEUE_MAX_HEIGHT_SETTING_KEY].newValue);
+      renderQueue();
     }
     if (changes[PAUSED_STORAGE_KEY]
       && queuePaused !== Boolean(changes[PAUSED_STORAGE_KEY].newValue?.[activeKey])) {

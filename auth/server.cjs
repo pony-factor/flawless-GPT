@@ -4,7 +4,7 @@ const { execFileSync } = require("node:child_process");
 const { localExtensionId } = require("./extension-identity.cjs");
 
 const CLIENT_ID = "Iv23liukJaqMAIiIIfOz";
-const APP_SLUG = "flawless-chatgpt";
+const APP_SLUG = "flawless-pony";
 const random = () => randomBytes(32).toString("base64url");
 const hash = (value) => createHash("sha256").update(value).digest("base64url");
 const validValue = (value) => typeof value === "string" && /^[A-Za-z0-9_-]{43,128}$/.test(value);

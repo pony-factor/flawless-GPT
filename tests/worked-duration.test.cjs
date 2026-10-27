@@ -7,11 +7,13 @@ const vm = require("node:vm");
 const source = fs.readFileSync(path.join(__dirname, "../js/chat/worked-duration.js"), "utf8");
 const style = fs.readFileSync(path.join(__dirname, "../css/worked-duration.css"), "utf8");
 
-function fixture(text = "Worked for 8m 41s", { excluded = false, dotsEnabled = false } = {}) {
+function fixture(text = "Worked for 8m 41s", { excluded = false, dotsEnabled = false, splitText = false, ariaLabel = null, portal = false } = {}) {
   const attributes = new Map();
   const properties = new Map();
   const frames = [];
-  const textNode = { nodeValue: text, parentElement: null };
+  const textNode = { nodeValue: splitText ? "Worked for " : text, parentElement: null };
+  const remainder = { nodeValue: splitText ? text.replace(/^Worked\s+for\s+/i, "") : "", parentElement: null };
+  let observerOptions;
   let stop;
   let notify;
   let storageChangeListener;
@@ -23,36 +25,44 @@ function fixture(text = "Worked for 8m 41s", { excluded = false, dotsEnabled = f
       setProperty(name, value) { properties.set(name, value); },
       removeProperty(name) { properties.delete(name); },
     },
-    get textContent() { return textNode.nodeValue; },
+    get textContent() { return textNode.nodeValue + remainder.nodeValue; },
     children: [],
+    querySelectorAll() { return []; },
     closest() { return excluded ? this : null; },
     getAttribute(name) { return attributes.get(name) ?? null; },
     setAttribute(name, value) { attributes.set(name, String(value)); },
     hasAttribute(name) { return attributes.has(name); },
     removeAttribute(name) { attributes.delete(name); },
   };
-  textNode.parentElement = element;
+  const inner = {
+    parentElement: element,
+    get textContent() { return textNode.nodeValue; },
+    closest() { return null; },
+  };
+  textNode.parentElement = splitText ? inner : element;
+  remainder.parentElement = element;
+  if (ariaLabel) attributes.set("aria-label", ariaLabel);
   const root = {
     querySelectorAll(selector) {
-      return selector === "[data-ghrc-worked-duration]" && attributes.has("data-ghrc-worked-duration")
-        ? [element] : [];
+      if (selector === "[data-ghrc-worked-duration]" && attributes.has("data-ghrc-worked-duration")) return [element];
+      if (selector === "[aria-label]" && attributes.has("aria-label")) return [element];
+      return [];
     },
   };
   const document = {
-    querySelector(selector) { return selector === "main" ? root : null; },
-    querySelectorAll(selector) { return root.querySelectorAll(selector); },
+    querySelector(selector) { return selector === "main" && !portal ? root : null; },
+    querySelectorAll(selector) {
+      if (selector === '[role="status"], [aria-live="polite"], [aria-live="assertive"]') return portal ? [element] : [];
+      return root.querySelectorAll(selector);
+    },
     createTreeWalker() {
-      let first = true;
-      return { nextNode() {
-        if (!first) return null;
-        first = false;
-        return textNode;
-      }};
+      const nodes = splitText ? [textNode, remainder] : [textNode];
+      return { nextNode() { return nodes.shift() ?? null; } };
     },
   };
   class MutationObserver {
     constructor(callback) { notify = callback; }
-    observe() {}
+    observe(target, options) { observerOptions = options; }
     disconnect() { disconnected = true; }
   }
   vm.runInNewContext(source, {
@@ -86,7 +96,15 @@ function fixture(text = "Worked for 8m 41s", { excluded = false, dotsEnabled = f
       flush();
     },
     get listening() { return Boolean(storageChangeListener); },
-    update(text) { textNode.nodeValue = text; notify(); flush(); },
+    update(text) {
+      if (splitText) {
+        textNode.nodeValue = "Worked for ";
+        remainder.nodeValue = text.replace(/^Worked\s+for\s+/i, "");
+      } else textNode.nodeValue = text;
+      notify(); flush();
+    },
+    updateAria(text) { element.setAttribute("aria-label", text); notify(); flush(); },
+    get observerOptions() { return observerOptions; },
     stop() { stop(); },
     get disconnected() { return disconnected; },
   };
@@ -122,6 +140,39 @@ test("sub-minute values hide the time and show minutes starting at one minute", 
   assert.equal(f.element.getAttribute("data-ghrc-worked-minutes"), "63m");
   f.update("Worked for 0m 30s");
   assert.equal(f.element.getAttribute("data-ghrc-worked-minutes"), "");
+});
+
+test("sub-minute live labels suppress the entire empty disclosure until one full minute", () => {
+  // The badge may be on the native disclosure or on a nested label next to
+  // its chevron. Both DOM shapes must be hidden while the badge is blank.
+  const f = fixture("Worked for 0m 59s", { splitText: true });
+  f.flush();
+  assert.equal(f.element.getAttribute("data-ghrc-worked-minutes"), "");
+  assert.match(style, /\[data-ghrc-worked-duration\]\[data-ghrc-worked-minutes=""\],/);
+  assert.match(style, /:is\(button, \[role="button"\], summary\):has\(\[data-ghrc-worked-duration\]\[data-ghrc-worked-minutes=""\]\)/);
+  assert.match(style, /display: none !important;/);
+  f.update("Worked for 1m");
+  assert.equal(f.element.getAttribute("data-ghrc-worked-minutes"), "1m");
+  f.update("Worked for 59s");
+  assert.equal(f.element.getAttribute("data-ghrc-worked-minutes"), "");
+  f.stop();
+});
+
+test("cannon replaces the chevron without removing native disclosure interaction", () => {
+  // Match badges directly on native controls and nested within them. Only
+  // SVG chevrons are hidden; the button stays visible/clickable after 1m.
+  const block = style.split("/* The native disclosure remains the click and keyboard target.")[1]
+    ?.split("/* Optional one-dot-per-minute display")[0];
+  assert.ok(block, "dedicated disclosure styling is present");
+  assert.match(block, /:is\(button, \[role="button"\], summary\)\[data-ghrc-worked-duration\]/);
+  assert.match(block, /:has\(\[data-ghrc-worked-duration\]/);
+  assert.match(block, /:not\(\[data-ghrc-worked-minutes=""\]\)/);
+  assert.match(block, /\) svg\s*\{\s*display: none !important;/);
+  assert.match(block, /cursor: pointer;/);
+  assert.doesNotMatch(block, /pointer-events: none|visibility: hidden/);
+  // Preserve native click and keyboard event handling rather than creating
+  // a second synthetic toggle or replacing native buttons.
+  assert.doesNotMatch(source, /\.click\(\)|\.dispatchEvent\(/);
 });
 
 test("unrelated messages and quoted prose are left unchanged", () => {
@@ -193,4 +244,40 @@ test("cannonballs flow across the chat width instead of breaking at twelve", () 
   assert.match(style, /min-width:\s*0/);
   assert.match(style, /white-space:\s*normal/);
   assert.doesNotMatch(source, /start \+= 12/);
+});
+
+test("live split-node work labels display cannon and advance during generation", () => {
+  const f = fixture("Worked for 1m 3s", { splitText: true });
+  f.flush();
+  assert.equal(f.element.getAttribute("data-ghrc-worked-minutes"), "1m");
+  assert.equal(f.element.getAttribute("title"), "Worked for 1m 3s");
+  f.update("Worked for 2m 11s");
+  assert.equal(f.element.getAttribute("data-ghrc-worked-minutes"), "2m");
+  assert.equal(f.element.getAttribute("title"), "Worked for 2m 11s");
+  assert.equal(f.element.textContent, "Worked for 2m 11s");
+  f.stop();
+});
+
+test("aria-label driven live changes are observed without rewriting chat content", () => {
+  const f = fixture("Active task", { ariaLabel: "Worked for 1m 12s" });
+  f.flush();
+  assert.equal(f.element.getAttribute("data-ghrc-worked-minutes"), "1m");
+  f.updateAria("Worked for 3m 6s");
+  assert.equal(f.element.getAttribute("data-ghrc-worked-minutes"), "3m");
+  assert.equal(f.element.getAttribute("title"), "Worked for 3m 6s");
+  assert.deepEqual(Array.from(f.observerOptions.attributeFilter), ["aria-label"]);
+  f.stop();
+});
+
+test("live duration styles hide nested native labels", () => {
+  assert.match(style, /\[data-ghrc-worked-duration\] :where\(span, time\)/);
+});
+
+test("live status portal outside main receives and updates the cannon", () => {
+  const f = fixture("Worked for 2m 8s", { portal: true });
+  f.flush();
+  assert.equal(f.element.getAttribute("data-ghrc-worked-minutes"), "2m");
+  f.update("Worked for 4m 10s");
+  assert.equal(f.element.getAttribute("data-ghrc-worked-minutes"), "4m");
+  f.stop();
 });

@@ -201,7 +201,7 @@
       left.className = "ghrc-2048-footer-left";
       footer.prepend(left);
     }
-    left.prepend(createLauncher());
+    left.append(createLauncher());
   }
 
   function setLauncherEnabled(enabled) {

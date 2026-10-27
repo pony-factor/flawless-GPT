@@ -63,6 +63,55 @@ test("HTTP URLs keep working and javascript URLs are rejected", async () => {
   assert.deepEqual(bad.messages, []);
 });
 
+test("clipboard URL button strips surrounding punctuation and repairs spaces after the scheme", async () => {
+  for (const [input, expected] of [
+    ['", https:// cyber.harvard.edu/openlaw/contribute.html.', "https://cyber.harvard.edu/openlaw/contribute.html"],
+    ['“https://example.org/docs?x=1&y=2.”', "https://example.org/docs?x=1&y=2"],
+    ["(https://example.org/article).", "https://example.org/article"],
+    ["https://\nexample.org/article", "https://example.org/article"],
+  ]) {
+    const f = clipboard(input);
+    await f.run();
+    assert.deepEqual(f.navigations, [expected], input);
+  }
+});
+
+test("clipboard URLs keep meaningful punctuation inside paths, queries and fragments", async () => {
+  for (const url of [
+    "https://en.wikipedia.org/wiki/Function_(mathematics)",
+    "https://example.org/foo?a=1,b=2#part",
+    "https://example.org/path%20with%20spaces",
+  ]) {
+    const f = clipboard(url);
+    await f.run();
+    assert.deepEqual(f.navigations, [url]);
+  }
+  const wrapped = clipboard("(https://en.wikipedia.org/wiki/Function_(mathematics)).");
+  await wrapped.run();
+  assert.deepEqual(wrapped.navigations, ["https://en.wikipedia.org/wiki/Function_(mathematics)"]);
+});
+
+test("clipboard navigation refuses arbitrary prose or a non-URL scheme", async () => {
+  for (const input of [
+    "See https://example.org/article",
+    "https://example.org/article and other text",
+    "javascript:alert(1)",
+    "https://",
+  ]) {
+    const f = clipboard(input);
+    await f.run();
+    assert.deepEqual(f.navigations, [], input);
+    assert.deepEqual(f.messages, [], input);
+  }
+});
+
+test("punctuation around local file URLs does not alter the worker destination", async () => {
+  const f = clipboard('"' + fileUrl + '".');
+  await f.run();
+  assert.deepEqual(f.messages, [{ type: "open-local-clipboard-url", url: fileUrl }]);
+  assert.deepEqual(f.navigations, []);
+});
+
 test("worker opens permitted local files in the originating tab", async () => {
   const f = worker(); assert.equal((await f.send(fileUrl)).ok, true);
   assert.deepEqual(f.navigations, [[4, fileUrl]]);
