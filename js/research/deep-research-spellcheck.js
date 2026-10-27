@@ -135,6 +135,17 @@
       && (button.matches('[data-testid="composer-submit-button"], [data-testid="send-button"], button[aria-label^="Send" i], button[type="submit"]'))
       && !/stop|voice/i.test(button.getAttribute("aria-label") || "");
     if (!submit && !key && !clickedSend) return;
+    const queue = globalThis.__ghrcMessageQueue;
+    // Give ChatGPT's plugin picker priority while autocomplete is visible.
+    if (key && queue?.composerAutocompleteIsOpen?.(input)) return;
+    // Busy replies and pending messages take precedence over spellcheck.
+    if (queue?.shouldQueueResearchPrompt?.(input)) {
+      if (key) return; // The queue's capture listener handles Enter.
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      void queue.enqueueComposerMessage();
+      return;
+    }
     // Exactly the reviewed version gets one ordinary, user-initiated submission.
     if (!running && prompt === approvedText && location.pathname === approvedPath) return;
     event.preventDefault();

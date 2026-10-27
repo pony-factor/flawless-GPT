@@ -78,14 +78,51 @@
     return matches.length === 1 ? matches[0] : null;
   }
 
+  // ChatGPT may keep an app selection in a chip outside its text editor.
+  function standaloneAppMentions(composer) {
+    const form = findComposerForm(composer);
+    if (!form || !composer) return [];
+    return [...form.querySelectorAll("[app-mention-path]")].filter(node => !composer.contains(node))
+      .flatMap(node => {
+        const label = (node.getAttribute("app-mention-display-name") || node.textContent || "").trim();
+        const path = node.getAttribute("app-mention-path") || "";
+        if (!label || !/^app:\/\//.test(path)) return [];
+        const attributes = Object.fromEntries(MENTION_ATTRIBUTES
+          .filter(name => node.hasAttribute(name)).map(name => [name, node.getAttribute(name)]));
+        // Use only a native removal control; otherwise pause instead of
+        // mutating ChatGPT's React state or losing the selected plugin.
+        const remove = node.querySelector('button[aria-label*="Remove" i], button[aria-label*="Clear" i]')
+          || node.parentElement?.querySelector('button[aria-label*="Remove" i], button[aria-label*="Clear" i]');
+        return [{ label, attributes, remove }];
+      });
+  }
+
+  function queuedComposerPayload(text, snapshot) {
+    const content = textWithQuote(text, snapshot.quote);
+    let prefix = "";
+    const mentions = snapshot.state.standaloneMentions.map(app => {
+      const start = prefix.length;
+      prefix += app.label + " ";
+      return { start, end: start + app.label.length, label: app.label, attributes: app.attributes };
+    });
+    const queuedText = (prefix + content).trimEnd();
+    const offset = prefix.length + content.length - text.length;
+    mentions.push(...snapshot.mentions.map(mention => ({
+      ...mention, start: mention.start + offset, end: mention.end + offset,
+    })));
+    return { text: queuedText, mentions };
+  }
+
   function composerContext(composer = findComposerInput()) {
     const form = findComposerForm(composer);
-    if (!form) return { files: [], selections: [], quote: null, mentions: [] };
+    if (!form) return { files: [], selections: [], quote: null, mentions: [], standaloneMentions: [] };
+    const standaloneMentions = standaloneAppMentions(composer);
     const attachmentSurface = form.querySelector('[data-composer-attachments], [data-testid="composer-attachments"]');
     const files = [...form.querySelectorAll('button[aria-label*="Remove" i]')]
       .filter(button => {
         const label = button.getAttribute("aria-label") || "";
         return !/selected text|quote|quoted/i.test(label)
+          && !standaloneMentions.some(app => app.remove === button)
           && (/file|attachment|image|upload/i.test(label) || attachmentSurface?.contains(button));
       });
     const fileTokens = files.map(capturedFileForButton);
@@ -99,12 +136,12 @@
         root: button.parentElement,
         text: button.parentElement?.querySelector('.whitespace-pre-wrap')?.textContent || "",
       }));
-    return { files, fileTokens, selections, quote, quoteButton, mentions: composerMentions(composer), unknown: Boolean(attachmentSurface?.childElementCount && !files.length && !quote && !selections.length) };
+    return { files, fileTokens, selections, quote, quoteButton, mentions: composerMentions(composer), standaloneMentions, unknown: Boolean(attachmentSurface?.childElementCount && !files.length && !quote && !selections.length && !standaloneMentions.length) };
   }
 
   function hasComposerContext(composer) {
     const state = composerContext(composer);
-    return Boolean(state.files.length || state.selections.length || state.quote || state.unknown);
+    return Boolean(state.files.length || state.selections.length || state.quote || state.unknown || state.standaloneMentions.length);
   }
 
   async function captureComposerContext(composer) {
@@ -137,7 +174,8 @@
     // Click the current controls only if they still represent this snapshot.
     if (!contextMatches(snapshot.state, composer)) return false;
     const current = composerContext(composer);
-    for (const button of [...current.files, current.quoteButton, ...current.selections.map(selection => selection.button)].filter(Boolean)) button.click();
+    for (const button of [...current.files, current.quoteButton, ...current.selections.map(selection => selection.button),
+      ...current.standaloneMentions.map(app => app.remove)].filter(Boolean)) button.click();
     await new Promise(resolve => window.setTimeout(resolve, 80));
     const cleared = !hasComposerContext(composer);
     if (cleared) releaseCapturedSnapshotFiles(capturedFiles, snapshot.state.fileTokens);
@@ -148,6 +186,8 @@
     const current = composerContext(composer);
     return current.quote === snapshot.quote && current.unknown === snapshot.unknown
       && JSON.stringify(current.mentions) === JSON.stringify(snapshot.mentions)
+      && JSON.stringify(current.standaloneMentions.map(({ label, attributes }) => ({ label, attributes })))
+        === JSON.stringify(snapshot.standaloneMentions.map(({ label, attributes }) => ({ label, attributes })))
       && current.selections.length === snapshot.selections.length
       && current.selections.every((selection, index) => selection.button === snapshot.selections[index].button
         && selection.root === snapshot.selections[index].root && selection.text === snapshot.selections[index].text)
@@ -1534,6 +1574,14 @@
   globalThis.__ghrcMessageQueue = {
     enqueueText: text => context.run(() => enqueueText(text)),
     sendClipboardText: (text, mentions) => context.run(() => sendClipboardText(text, mentions)),
+    enqueueComposerMessage: () => context.run(enqueueComposerMessage),
+    // Research spellcheck yields to the FIFO while ChatGPT is still busy.
+    shouldQueueResearchPrompt: composer => Boolean(composer === findComposerInput()
+      && stateLoaded && activeKey === conversationKey() && !routeSyncRunning
+      && (queue.length || (conversationIdFromPath() && (
+        nativeSubmissionPending(composer)
+        || !queueCanAdvance(lifecycleSnapshot(), COMPLETE_SETTLE_MS))))),
+    composerAutocompleteIsOpen,
     findComposerInput,
     findActionButton,
   };
@@ -1550,10 +1598,8 @@
       if (!composer) return false;
       const snapshot = await captureComposerContext(composer);
       if (!snapshot || !contextMatches(snapshot.state, composer)) return false;
-      const queuedText = textWithQuote(text, snapshot.quote);
-      const queued = await enqueueText(queuedText, snapshot.attachments, snapshot.mentions.map(mention => ({
-        ...mention, start: mention.start + queuedText.length - text.length, end: mention.end + queuedText.length - text.length,
-      })));
+      const payload = queuedComposerPayload(text, snapshot);
+      const queued = await enqueueText(payload.text, snapshot.attachments, payload.mentions);
       if (queued && !await clearComposerContext(snapshot, composer)) {
         queuePaused = true;
         await persistQueue();
@@ -1979,10 +2025,8 @@
       if (context.active() && activeKey === key && composer === findComposerInput()) {
         const snapshot = await contextRequest;
         if (!snapshot || !contextMatches(snapshot.state, composer)) return;
-        const queuedText = textWithQuote(text, snapshot.quote);
-        const queued = await enqueueText(queuedText, snapshot.attachments, snapshot.mentions.map(mention => ({
-          ...mention, start: mention.start + queuedText.length - text.length, end: mention.end + queuedText.length - text.length,
-        })));
+        const payload = queuedComposerPayload(text, snapshot);
+        const queued = await enqueueText(payload.text, snapshot.attachments, payload.mentions);
         if (queued && !await clearComposerContext(snapshot, composer)) {
           queuePaused = true;
           await persistQueue();
@@ -2079,7 +2123,8 @@
     }
     const snapshot = lifecycleSnapshot();
     const composerState = composerContext(composer);
-    const hasMessage = Boolean(text.trim() || composerState.files.length || composerState.quote || composerState.selections.length);
+    const hasMessage = Boolean(text.trim() || composerState.files.length || composerState.quote
+      || composerState.selections.length || composerState.standaloneMentions.length);
     if (hasMessage && !nativeSubmissionPending(composer) && stateLoaded
       && activeKey === conversationKey() && !queue.length && !enterPending && !routeSyncRunning
       && queueCanAdvance(snapshot, COMPLETE_SETTLE_MS)) {
