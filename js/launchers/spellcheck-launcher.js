@@ -290,31 +290,38 @@
     window.setTimeout(() => submitWhenReady(composer, text, deadline, shortcutAttempted), SUBMIT_RETRY_MS);
   }
 
-  async function launchSpellcheck() {
-    if (launchStarted || !isHomePage()) return;
+  async function runSpellcheckText(text) {
+    if (launchStarted || !isHomePage() || !text?.trim()) return false;
     launchStarted = true;
     try {
-      const text = await navigator.clipboard.readText();
-      if (!text.trim()) return;
-
-      const composer = findComposerInput();
-      if (!composer) return;
-      if (!await activateSpellcheckPlugin(composer)) {
+      const composer = await waitUntil(findComposerInput);
+      if (!composer || !await activateSpellcheckPlugin(composer)) {
         console.warn("Spellcheck Only plugin could not be resolved through the app mention service.");
-        return;
+        return false;
       }
       const activeComposer = findComposerInput();
       if (!activeComposer || !await appendSpellcheckText(activeComposer, text)) {
-        console.warn("Spellcheck Only: app selected but clipboard text could not be inserted.");
-        return;
+        console.warn("Spellcheck Only: app selected but text could not be inserted.");
+        return false;
       }
-
       const deadline = Date.now() + SUBMIT_TIMEOUT_MS;
       window.setTimeout(() => submitWhenReady(activeComposer, text, deadline), SUBMIT_RETRY_MS);
-    } catch (error) {
-      console.warn("Spellcheck Only could not read the system clipboard:", error);
+      return true;
     } finally {
       launchStarted = false;
+    }
+  }
+
+  // The temporary Deep Research split uses the exact same verified app launcher,
+  // without reading or changing the user's clipboard.
+  globalThis.__ghrcSpellcheckAutomation = { runText: runSpellcheckText };
+
+  async function launchSpellcheck() {
+    try {
+      const text = await navigator.clipboard.readText();
+      await runSpellcheckText(text);
+    } catch (error) {
+      console.warn("Spellcheck Only could not read the system clipboard:", error);
     }
   }
 

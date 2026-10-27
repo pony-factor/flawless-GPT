@@ -1,6 +1,7 @@
 const DEFAULT_OWNER_ORDER = [];
 const DEFAULT_HIDDEN_OWNERS = [];
 const DEFAULT_OWNER_GROUPS_PER_PAGE = 6;
+const DEFAULT_MESSAGE_QUEUE_MAX_HEIGHT_PERCENT = 60;
 const form = document.getElementById("settings-form");
 const tokenSettings = document.getElementById("token-settings");
 const tokenSummary = document.getElementById("token-summary");
@@ -65,12 +66,14 @@ const pinnedRepositoryList = document.getElementById("pinned-repositories");
 const pinnedRepositoryTemplate = document.getElementById("pinned-repository-template");
 const hideDictationButtonInput = document.getElementById("hide-dictation-button");
 const preserveScrollPositionOnSendInput = document.getElementById("preserve-scroll-position-on-send");
+const messageQueueMaxHeightPercentInput = document.getElementById("message-queue-max-height-percent");
 const hideShareLabelInput = document.getElementById("hide-share-label");
 const compactNewChatHeaderInput = document.getElementById("compact-new-chat-header");
 const disableWorkModeInput = document.getElementById("disable-work-mode");
 const disableManualWebSearchInput = document.getElementById("disable-manual-web-search");
 const showSpellcheckGptLauncherInput = document.getElementById("show-spellcheck-gpt-launcher");
 const show2048LauncherInput = document.getElementById("show-2048-launcher");
+const deepResearchSpellcheckEnabledInput = document.getElementById("deep-research-spellcheck-enabled");
 const showDeepResearchTrackerInput = document.getElementById("show-deep-research-tracker");
 const showDeepResearchHomepageInput = document.getElementById("show-deep-research-homepage");
 const showDeepResearchComposerInput = document.getElementById("show-deep-research-composer");
@@ -78,9 +81,33 @@ const showDeepResearchHomepageCountInput = document.getElementById("show-deep-re
 const showDeepResearchHomepageResetInput = document.getElementById("show-deep-research-homepage-reset");
 const showDeepResearchComposerCountInput = document.getElementById("show-deep-research-composer-count");
 const showDeepResearchComposerResetInput = document.getElementById("show-deep-research-composer-reset");
-const showDeepResearchUsagePieInput = document.getElementById("show-deep-research-usage-pie");
+const showDeepResearchHomepagePieInput = document.getElementById("show-deep-research-homepage-pie");
+const showDeepResearchComposerPieInput = document.getElementById("show-deep-research-composer-pie");
 const deepResearchUsagePieTotalInput = document.getElementById("deep-research-usage-pie-total");
 const deepResearchAllowanceModeInput = document.getElementById("deep-research-allowance-mode");
+let researchPieTotals = { full: null, all: null };
+
+function normalizedResearchPieTotal(value) {
+  const input = String(value ?? "").trim();
+  const total = Number(input);
+  return /^\d+$/.test(input) && Number.isSafeInteger(total) && total >= 1 && total <= 10000
+    ? total : null;
+}
+
+function loadedResearchPieTotals(settings) {
+  const scoped = settings.deepResearchUsagePieTotals;
+  if (scoped && typeof scoped === "object" && !Array.isArray(scoped)) {
+    return { full: normalizedResearchPieTotal(scoped.full), all: normalizedResearchPieTotal(scoped.all) };
+  }
+  // Migrate the old total only to the previously selected allowance mode.
+  const mode = settings.deepResearchAllowanceMode === "all" ? "all" : "full";
+  return { full: mode === "full" ? normalizedResearchPieTotal(settings.deepResearchUsagePieTotal) : null,
+    all: mode === "all" ? normalizedResearchPieTotal(settings.deepResearchUsagePieTotal) : null };
+}
+
+function renderSelectedResearchPieTotal() {
+  deepResearchUsagePieTotalInput.value = researchPieTotals[deepResearchAllowanceModeInput.value] ?? "";
+}
 const deepResearchHomepageVisibilityInput = document.getElementById("deep-research-homepage-visibility");
 const deepResearchHomepageWindowDaysInput = document.getElementById("deep-research-homepage-window-days");
 const stripUtmTrackingInput = document.getElementById("strip-utm-tracking");
@@ -95,6 +122,7 @@ const skipExternalSiteWarningInput = document.getElementById("skip-external-site
 const dismissHistoryRateLimitModalInput = document.getElementById("dismiss-history-rate-limit-modal");
 const hideUsageCardInput = document.getElementById("hide-usage-card");
 const hideUpgradePromotionsInput = document.getElementById("hide-upgrade-promotions");
+const hideScheduledRecommendationsInput = document.getElementById("hide-scheduled-recommendations");
 const blockChatgptDesktopNotificationsInput = document.getElementById("block-chatgpt-desktop-notifications");
 const hideHomeSuggestionsInput = document.getElementById("hide-home-suggestions");
 const hideModelControlsInput = document.getElementById("hide-model-controls");
@@ -236,19 +264,29 @@ function updateResearchSettingsControls() {
   showDeepResearchComposerInput.disabled = !enabled;
   showDeepResearchHomepageCountInput.disabled = !homepage;
   showDeepResearchHomepageResetInput.disabled = !homepage;
+  showDeepResearchHomepagePieInput.disabled = !homepage;
   deepResearchHomepageVisibilityInput.disabled = !homepage;
   deepResearchHomepageWindowDaysInput.disabled = !homepage;
   showDeepResearchComposerCountInput.disabled = !composer;
   showDeepResearchComposerResetInput.disabled = !composer;
-  showDeepResearchUsagePieInput.disabled = !enabled;
+  showDeepResearchComposerPieInput.disabled = !composer;
   deepResearchAllowanceModeInput.disabled = !enabled;
-  deepResearchUsagePieTotalInput.disabled = !enabled || !showDeepResearchUsagePieInput.checked;
+  deepResearchUsagePieTotalInput.disabled = !enabled || !(homepage && showDeepResearchHomepagePieInput.checked
+    || composer && showDeepResearchComposerPieInput.checked);
 }
 
 function normalizedOwnerGroupsPerPage(value) {
   const parsed = Number.parseInt(value, 10);
   if (!Number.isFinite(parsed)) return DEFAULT_OWNER_GROUPS_PER_PAGE;
   return Math.min(24, Math.max(1, parsed));
+}
+
+function normalizedMessageQueueMaxHeightPercent(value) {
+  const parsed = (typeof value === "number" || (typeof value === "string" && value.trim()))
+    ? Number(value) : NaN;
+  return Number.isFinite(parsed)
+    ? Math.min(90, Math.max(20, Math.round(parsed)))
+    : DEFAULT_MESSAGE_QUEUE_MAX_HEIGHT_PERCENT;
 }
 
 function showStatus(message, state = "") {
@@ -406,12 +444,14 @@ async function loadSettings() {
     pinnedRepositories: [],
     hideDictationButton: false,
     preserveScrollPositionOnSend: false,
+    messageQueueMaxHeightPercent: DEFAULT_MESSAGE_QUEUE_MAX_HEIGHT_PERCENT,
     hideShareLabel: false,
     compactNewChatHeader: true,
     disableManualWebSearch: false,
     disableWorkMode: false,
     showSpellcheckGptLauncher: false,
     show2048Launcher: false,
+    deepResearchSpellcheckEnabled: true,
     showDeepResearchTracker: true,
     showDeepResearchHomepage: true,
     showDeepResearchComposer: true,
@@ -419,8 +459,11 @@ async function loadSettings() {
     showDeepResearchHomepageReset: true,
     showDeepResearchComposerCount: true,
     showDeepResearchComposerReset: true,
+    showDeepResearchHomepagePie: null,
+    showDeepResearchComposerPie: null,
     showDeepResearchUsagePie: false,
     deepResearchUsagePieTotal: null,
+    deepResearchUsagePieTotals: null,
     deepResearchAllowanceMode: "full",
     deepResearchHomepageVisibility: "near-reset",
     deepResearchHomepageWindowDays: 5,
@@ -436,6 +479,7 @@ async function loadSettings() {
     dismissHistoryRateLimitModal: true,
     hideUsageCard: true,
     hideUpgradePromotions: true,
+    hideScheduledRecommendations: true,
     blockChatgptDesktopNotifications: true,
     hideCookiePreferences: false,
     showChatgptDisclaimer: false,
@@ -472,12 +516,14 @@ async function loadSettings() {
   showYoutubeSearchInput.checked = settings.showYoutubeSearch !== false;
   hideDictationButtonInput.checked = Boolean(settings.hideDictationButton);
   preserveScrollPositionOnSendInput.checked = Boolean(settings.preserveScrollPositionOnSend);
+  messageQueueMaxHeightPercentInput.value = normalizedMessageQueueMaxHeightPercent(settings.messageQueueMaxHeightPercent);
   hideShareLabelInput.checked = Boolean(settings.hideShareLabel);
   compactNewChatHeaderInput.checked = Boolean(settings.compactNewChatHeader);
   disableWorkModeInput.checked = Boolean(settings.disableWorkMode);
   disableManualWebSearchInput.checked = Boolean(settings.disableManualWebSearch);
   showSpellcheckGptLauncherInput.checked = Boolean(settings.showSpellcheckGptLauncher);
   show2048LauncherInput.checked = Boolean(settings.show2048Launcher);
+  deepResearchSpellcheckEnabledInput.checked = settings.deepResearchSpellcheckEnabled !== false;
   showDeepResearchTrackerInput.checked = settings.showDeepResearchTracker !== false;
   showDeepResearchHomepageInput.checked = settings.showDeepResearchHomepage !== false;
   showDeepResearchComposerInput.checked = settings.showDeepResearchComposer !== false;
@@ -485,11 +531,14 @@ async function loadSettings() {
   showDeepResearchHomepageResetInput.checked = settings.showDeepResearchHomepageReset !== false;
   showDeepResearchComposerCountInput.checked = settings.showDeepResearchComposerCount !== false;
   showDeepResearchComposerResetInput.checked = settings.showDeepResearchComposerReset !== false;
-  showDeepResearchUsagePieInput.checked = settings.showDeepResearchUsagePie === true;
+  // Preserve the previous shared pie preference until the new controls save.
+  showDeepResearchHomepagePieInput.checked = settings.showDeepResearchHomepagePie == null
+    ? settings.showDeepResearchUsagePie === true : settings.showDeepResearchHomepagePie === true;
+  showDeepResearchComposerPieInput.checked = settings.showDeepResearchComposerPie == null
+    ? settings.showDeepResearchUsagePie === true : settings.showDeepResearchComposerPie === true;
   deepResearchAllowanceModeInput.value = settings.deepResearchAllowanceMode === "all" ? "all" : "full";
-  deepResearchUsagePieTotalInput.value = Number.isSafeInteger(settings.deepResearchUsagePieTotal)
-    && settings.deepResearchUsagePieTotal > 0 && settings.deepResearchUsagePieTotal <= 10000
-    ? String(settings.deepResearchUsagePieTotal) : "";
+  researchPieTotals = loadedResearchPieTotals(settings);
+  renderSelectedResearchPieTotal();
   deepResearchHomepageVisibilityInput.value =
     settings.deepResearchHomepageVisibility === "always" ? "always" : "near-reset";
   deepResearchHomepageWindowDaysInput.value = normalizedResearchWindowDays(settings.deepResearchHomepageWindowDays);
@@ -506,6 +555,7 @@ async function loadSettings() {
   dismissHistoryRateLimitModalInput.checked = Boolean(settings.dismissHistoryRateLimitModal);
   hideUsageCardInput.checked = settings.hideUsageCard !== false;
   hideUpgradePromotionsInput.checked = Boolean(settings.hideUpgradePromotions);
+  hideScheduledRecommendationsInput.checked = settings.hideScheduledRecommendations !== false;
   blockChatgptDesktopNotificationsInput.checked = settings.blockChatgptDesktopNotifications !== false;
   hideHomeSuggestionsInput.checked = settings.hideHomeSuggestions !== false;
   hideModelControlsInput.checked = settings.hideModelControls !== false;
@@ -588,12 +638,14 @@ async function saveSettings() {
       pinnedRepositories: pinnedRepositoriesFromList(),
       hideDictationButton: hideDictationButtonInput.checked,
       preserveScrollPositionOnSend: preserveScrollPositionOnSendInput.checked,
+      messageQueueMaxHeightPercent: normalizedMessageQueueMaxHeightPercent(messageQueueMaxHeightPercentInput.value),
       hideShareLabel: hideShareLabelInput.checked,
       compactNewChatHeader: compactNewChatHeaderInput.checked,
       disableWorkMode: disableWorkModeInput.checked,
       disableManualWebSearch: disableManualWebSearchInput.checked,
       showSpellcheckGptLauncher: showSpellcheckGptLauncherInput.checked,
       show2048Launcher: show2048LauncherInput.checked,
+      deepResearchSpellcheckEnabled: deepResearchSpellcheckEnabledInput.checked,
       showDeepResearchTracker: showDeepResearchTrackerInput.checked,
       showDeepResearchHomepage: showDeepResearchHomepageInput.checked,
       showDeepResearchComposer: showDeepResearchComposerInput.checked,
@@ -601,12 +653,11 @@ async function saveSettings() {
       showDeepResearchHomepageReset: showDeepResearchHomepageResetInput.checked,
       showDeepResearchComposerCount: showDeepResearchComposerCountInput.checked,
       showDeepResearchComposerReset: showDeepResearchComposerResetInput.checked,
-      showDeepResearchUsagePie: showDeepResearchUsagePieInput.checked,
+      showDeepResearchHomepagePie: showDeepResearchHomepagePieInput.checked,
+      showDeepResearchComposerPie: showDeepResearchComposerPieInput.checked,
       deepResearchAllowanceMode: deepResearchAllowanceModeInput.value,
-      deepResearchUsagePieTotal: /^\d+$/.test(deepResearchUsagePieTotalInput.value.trim())
-        && Number(deepResearchUsagePieTotalInput.value) >= 1
-        && Number(deepResearchUsagePieTotalInput.value) <= 10000
-        ? Number(deepResearchUsagePieTotalInput.value) : null,
+      deepResearchUsagePieTotals: { ...researchPieTotals },
+      deepResearchUsagePieTotal: null, // Retire the legacy shared total.
       deepResearchHomepageVisibility: deepResearchHomepageVisibilityInput.value,
       deepResearchHomepageWindowDays: normalizedResearchWindowDays(deepResearchHomepageWindowDaysInput.value),
       stripUtmTracking: stripUtmTrackingInput.checked,
@@ -621,6 +672,7 @@ async function saveSettings() {
       dismissHistoryRateLimitModal: dismissHistoryRateLimitModalInput.checked,
       hideUsageCard: hideUsageCardInput.checked,
       hideUpgradePromotions: hideUpgradePromotionsInput.checked,
+      hideScheduledRecommendations: hideScheduledRecommendationsInput.checked,
       blockChatgptDesktopNotifications: blockChatgptDesktopNotificationsInput.checked,
       hideCookiePreferences: hideCookiePreferencesInput.checked,
       showChatgptDisclaimer: !hideChatgptDisclaimerInput.checked,
@@ -634,6 +686,7 @@ async function saveSettings() {
     });
     ownerListDirty = false;
     ownerGroupsPerPageInput.value = ownerGroupsPerPage;
+    messageQueueMaxHeightPercentInput.value = normalizedMessageQueueMaxHeightPercent(messageQueueMaxHeightPercentInput.value);
     deepResearchHomepageWindowDaysInput.value = normalizedResearchWindowDays(deepResearchHomepageWindowDaysInput.value);
     updateTokenSummary();
     showStatus(
@@ -658,6 +711,12 @@ form.addEventListener("submit", (event) => {
 });
 
 form.addEventListener("change", (event) => {
+  if (event.target === deepResearchUsagePieTotalInput) {
+    researchPieTotals[deepResearchAllowanceModeInput.value] =
+      normalizedResearchPieTotal(deepResearchUsagePieTotalInput.value);
+  } else if (event.target === deepResearchAllowanceModeInput) {
+    renderSelectedResearchPieTotal();
+  }
   updateResearchSettingsControls();
   if (event.target.closest(".token-row")) tokenInputsDirty = true;
   if (event.target.closest(".github-account")) ownerListDirty = true;

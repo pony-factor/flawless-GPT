@@ -1,0 +1,30 @@
+name: Extension regression tests
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install Playwright and Chromium
+        run: |
+          npm install --no-save --package-lock=false playwright@1.56.1
+          npx playwright install --with-deps chromium
+      - name: Unit tests
+        run: node --test tests/*.test.cjs
+      - name: User-message and sidebar-icon browser regressions (required)
+        run: node --test --test-name-pattern="modern conversation roles|own-message links|external-link arrows|hidden arrow wrappers" tests/external-links.browser.cjs
+      - name: Full external-link browser suite (advisory until baseline is green)
+        continue-on-error: true
+        run: node --test tests/external-links.browser.cjs

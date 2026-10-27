@@ -113,6 +113,7 @@
         "js/chat/hide-background-completion-notifications.js",
         "js/chat/hide-usage-card.js",
         "js/chat/hide-upgrade-promotions.js",
+        "js/chat/hide-scheduled-recommendations.js",
         "js/links/external-links.js",
         "js/research/research-report-host.js",
         "js/research/research-import-dialog.js",
@@ -126,6 +127,7 @@
         "js/dashboard/repository-fast-ui.js",
         "js/dashboard/owner-grid.js",
         "js/dashboard/repository-search-shortcut.js",
+        "js/dashboard/dashboard-colors.js",
         "js/dashboard/content.js"
       ],
       "run_at": "document_start"
@@ -151,6 +153,7 @@
         "js/launchers/youtube-search.js",
         "js/launchers/wooten-link-zipp-placeholder.js",
         "js/launchers/spellcheck-launcher.js",
+        "js/research/deep-research-spellcheck.js",
         "js/games/2048.js",
         "js/composer/clipboard-send.js",
         "js/composer/message-queue.js",

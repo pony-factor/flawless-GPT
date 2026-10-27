@@ -47,6 +47,18 @@
     return { remaining, total };
   }
 
+  // Scoped totals supersede the legacy single total, even when cleared.
+  function selectedResearchPieTotal(settings, mode = 'full') {
+    const selectedMode = mode === 'all' ? 'all' : 'full';
+    const scoped = settings?.deepResearchUsagePieTotals;
+    const preferred = scoped && typeof scoped === 'object' && !Array.isArray(scoped)
+      ? scoped[selectedMode]
+      : ((settings?.deepResearchAllowanceMode === 'all' ? 'all' : 'full') === selectedMode
+        ? settings.deepResearchUsagePieTotal : null);
+    return Number.isSafeInteger(preferred) && preferred > 0 && preferred <= 10000
+      ? preferred : null;
+  }
+
   function usagePiePercent(remaining, total) {
     if (!Number.isSafeInteger(remaining) || remaining < 0 ||
         !Number.isSafeInteger(total) || total <= 0 || remaining > total) return null;
@@ -54,7 +66,7 @@
   }
 
   if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { parseAllowance, selectedResearchQuota, usagePieTotal, usagePiePercent };
+    module.exports = { parseAllowance, selectedResearchQuota, selectedResearchPieTotal, usagePieTotal, usagePiePercent };
     return;
   }
   const context = globalThis.__ghrcExtensionContext;
@@ -78,8 +90,12 @@
     showDeepResearchHomepageReset: true,
     showDeepResearchComposerCount: true,
     showDeepResearchComposerReset: true,
+    // Inherit the prior shared pie preference until each location is saved.
+    showDeepResearchHomepagePie: null,
+    showDeepResearchComposerPie: null,
     showDeepResearchUsagePie: false,
-    deepResearchUsagePieTotal: null,
+    deepResearchUsagePieTotal: null, // Legacy single-mode preference.
+    deepResearchUsagePieTotals: null,
     deepResearchAllowanceMode: 'full',
     deepResearchHomepageVisibility: 'near-reset',
     deepResearchHomepageWindowDays: 5,
@@ -256,12 +272,14 @@
     if (widget.classList.contains('ghrc-research-near-reset') !== nearReset) {
       widget.classList.toggle('ghrc-research-near-reset', nearReset);
     }
-    const includeCount = homepage
-      ? preferences.showDeepResearchHomepageCount !== false
+    const includeCount = homepage ? preferences.showDeepResearchHomepageCount !== false
       : preferences.showDeepResearchComposerCount !== false;
-    const includeReset = homepage
-      ? preferences.showDeepResearchHomepageReset !== false
+    const includeReset = homepage ? preferences.showDeepResearchHomepageReset !== false
       : preferences.showDeepResearchComposerReset !== false;
+    const pieChoice = homepage ? preferences.showDeepResearchHomepagePie
+      : preferences.showDeepResearchComposerPie;
+    const showPiePreference = pieChoice == null
+      ? preferences.showDeepResearchUsagePie === true : pieChoice === true;
     const text = serverText(includeCount, includeReset)
       || ['Deep Research', ...(includeCount ? [count] : []), ...(includeReset ? [reset] : [])].join(' · ');
     const pie = widget.querySelector('.ghrc-research-usage-pie');
@@ -272,13 +290,13 @@
     const pieRemaining = serverQuota ? selected?.remaining : (
       fresh && allowance.full && preferences.deepResearchAllowanceMode === 'full'
         ? allowance.remaining : null);
-    const preferredTotal = preferences.deepResearchUsagePieTotal;
+    const preferredTotal = selectedResearchPieTotal(preferences, preferences.deepResearchAllowanceMode);
     const reportedTotal = selected?.total ?? null;
     // A missing maximum must not silently disable an enabled pie. Use the
     // estimated scale in either mode and identify it in the tooltip; the
     // selected remaining count still excludes other pools in full-only mode.
     const total = usagePieTotal(pieRemaining, reportedTotal, preferredTotal);
-    const percent = preferences.showDeepResearchUsagePie && includeCount
+    const percent = showPiePreference && includeCount
       ? usagePiePercent(pieRemaining, total) : null;
     const showPie = percent !== null;
     if (pie.hidden !== !showPie) pie.hidden = !showPie;
@@ -369,19 +387,12 @@
     } else document.getElementById(DASHBOARD_ID)?.remove();
 
     const prompts = [...document.querySelectorAll('#prompt-textarea, [data-composer-markdown][contenteditable="true"]')].filter(visible);
-    const researchPrompt = prompts.find(prompt => prompt.querySelector([
-      '[data-prompt-link-href="app://connector_openai_deep_research"]',
-      '[data-prompt-link-href="app://connector_openai_deep_research_work"]',
-      '[data-prompt-link-label="$deep-research"]',
-    ].join(',')));
+    // Match both current and legacy research mention representations.
+    const researchPrompt = prompts.find(prompt => prompt.querySelector(RESEARCH_MENTION)
+      || prompt.querySelector('[data-prompt-link-label="$deep-research"]'));
     const composer = researchPrompt?.closest('form, [data-type="unified-composer"]');
-    // Avoid a duplicate composer counter when the homepage row shows at least
-    // one allowance field. Otherwise the composer remains a useful fallback.
-    const homepageShowsAllowance = homepageRowVisible
-      && (preferences.showDeepResearchHomepageCount !== false
-        || preferences.showDeepResearchHomepageReset !== false);
-    if (enabled && preferences.showDeepResearchComposer !== false && composer?.parentElement
-      && !homepageShowsAllowance) {
+    // The in-chat tracker is independent of the homepage; both can display.
+    if (enabled && preferences.showDeepResearchComposer !== false && composer?.parentElement) {
       const widget = renderWidget(COMPOSER_ID);
       if (widget.nextElementSibling !== composer) composer.before(widget);
     } else document.getElementById(COMPOSER_ID)?.remove();
@@ -392,11 +403,49 @@
     pending = true;
     requestAnimationFrame(update);
   }
-  const observer = new MutationObserver(schedule);
-  observer.observe(document.documentElement, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['aria-describedby', 'aria-label', 'data-state', 'data-prompt-link-href', 'data-prompt-link-label', 'data-ghrc-hide-repository-dashboard', 'style', USAGE_ATTRIBUTE] });
-  document.addEventListener('pointerover', schedule);
-  document.addEventListener('focusin', schedule);
+  // ChatGPT has no documented native Deep Research activation webhook.
+  // Native interactions and quota updates trigger the tracker; a filtered
+  // mutation fallback handles asynchronous React composer/portal changes.
+  const TRACKER_HOST = 'form, [data-type="unified-composer"], #github-repositories-for-chatgpt, [role="menu"], [role="listbox"], [role="tooltip"]';
+  const WATCHED_MOUNTS = TRACKER_HOST + ', [data-message-author-role="user"], [data-conversation-role="user"], [data-content-search-unit-key$=":user"]';
+  function relevantMount(node) {
+    return node.nodeType === 1
+      && (node.matches(WATCHED_MOUNTS) || Boolean(node.querySelector(WATCHED_MOUNTS)));
+  }
+  function onMutations(mutations) {
+    if (!context.active() || (!enabled && !researchAttempt)) return;
+    for (const mutation of mutations) {
+      if (mutation.type === 'attributes') {
+        if (mutation.target === document.documentElement || mutation.target.closest?.(TRACKER_HOST)) {
+          schedule();
+          return;
+        }
+        continue;
+      }
+      if (mutation.target.closest?.(TRACKER_HOST)
+        || (researchAttempt && mutation.target.closest?.('[data-testid^="conversation-turn-"], article'))
+        || [...mutation.addedNodes, ...mutation.removedNodes].some(relevantMount)) {
+        schedule();
+        return;
+      }
+    }
+  }
+  const observer = new MutationObserver(onMutations);
+  observer.observe(document.documentElement, {
+    childList: true, subtree: true, attributes: true,
+    // Do not observe streaming response text or unrelated style/ARIA changes.
+    attributeFilter: ['aria-describedby', 'data-prompt-link-href', 'app-mention-path',
+      'data-prompt-link-label', 'data-ghrc-hide-repository-dashboard', USAGE_ATTRIBUTE],
+  });
+  function onResearchInteraction(event) {
+    if (event.target.closest?.(TRACKER_HOST)) schedule();
+  }
+  document.addEventListener('click', onResearchInteraction, true);
+  document.addEventListener('pointerover', onResearchInteraction, true);
+  document.addEventListener('focusin', onResearchInteraction, true);
   window.addEventListener('resize', schedule);
+  window.addEventListener('ghrc:route-change', schedule);
+  window.addEventListener('popstate', schedule);
   function applySettings(next) {
     preferences = { ...SETTINGS_DEFAULTS, ...next };
     if (preferences.deepResearchHomepageVisibility !== 'always') {
@@ -405,10 +454,6 @@
     const days = preferences.deepResearchHomepageWindowDays;
     preferences.deepResearchHomepageWindowDays =
       Number.isInteger(days) && days >= 1 && days <= 365 ? days : 5;
-    const selectedTotal = preferences.deepResearchUsagePieTotal;
-    preferences.deepResearchUsagePieTotal =
-      Number.isSafeInteger(selectedTotal) && selectedTotal > 0 && selectedTotal <= 10000
-        ? selectedTotal : null;
     preferences.deepResearchAllowanceMode = preferences.deepResearchAllowanceMode === 'all' ? 'all' : 'full';
     enabled = preferences.showDeepResearchTracker !== false;
     schedule();
@@ -448,7 +493,11 @@
       }
     } finally { refreshPending = false; }
   };
-  const timer = setInterval(() => { void automaticRefresh(); schedule(); }, 30_000);
+  const timer = setInterval(() => {
+    void automaticRefresh();
+    if (enabled && (preferences.showDeepResearchHomepage !== false
+      || preferences.showDeepResearchComposer !== false)) schedule();
+  }, 30_000);
   document.addEventListener('click', watchResearchSend, true);
   document.addEventListener('submit', watchResearchSend, true);
   document.addEventListener('keydown', watchResearchSend, true);
@@ -458,9 +507,12 @@
     document.removeEventListener('click', watchResearchSend, true);
     document.removeEventListener('submit', watchResearchSend, true);
     document.removeEventListener('keydown', watchResearchSend, true);
-    document.removeEventListener('pointerover', schedule);
-    document.removeEventListener('focusin', schedule);
+    document.removeEventListener('click', onResearchInteraction, true);
+    document.removeEventListener('pointerover', onResearchInteraction, true);
+    document.removeEventListener('focusin', onResearchInteraction, true);
     window.removeEventListener('resize', schedule);
+    window.removeEventListener('ghrc:route-change', schedule);
+    window.removeEventListener('popstate', schedule);
     globalThis.chrome?.storage?.onChanged?.removeListener(settingsChanged);
     document.getElementById(DASHBOARD_ID)?.remove();
     document.getElementById(COMPOSER_ID)?.remove();

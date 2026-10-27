@@ -34,7 +34,10 @@ test("cached dashboard controls and highlights mount before the host page finish
   fs.writeFileSync(path.join(extension, "background.js"), `
     chrome.runtime.onMessage.addListener((message, sender, reply) => {
       if (message.type === "load-repositories") reply({ok:true,mode:"public",ownerOrder:["octo"],repositories:[{name:"example",fullName:"octo/example",url:"https://github.com/octo/example",pushedAt:new Date().toISOString(),owner:{login:"octo",type:"User",displayName:"Octo",avatarUrl:""}}]});
-      else reply({ok:true});
+      else {
+        if (message.type === "open-wooten-link") globalThis.wootenSearchUrl = message.url;
+        reply({ok:true});
+      }
     });
   `);
   let stalledResponse;
@@ -58,6 +61,9 @@ test("cached dashboard controls and highlights mount before the host page finish
       highlightedPages: [{ id: "saved", url: "https://example.com/", title: "Saved highlight" }],
     }));
     const page = await context.newPage();
+    await page.route("https://wooten.link/404.html", route => route.fulfill({
+      status: 200, contentType: "text/html", body: "<html></html>",
+    }));
     const errors = [];
     page.on("pageerror", error => errors.push(error.message));
     // Never wait for load: the image response remains deliberately pending.
@@ -77,6 +83,26 @@ test("cached dashboard controls and highlights mount before the host page finish
     assert.equal(state.styled, "flex");
     assert.ok(state.imageHeight > 0 && state.imageHeight < 50);
     assert.equal(state.launcher, true);
+    const iconSubmit = page.locator(".ghrc-wooten-link-mark-submit");
+    const wootenInput = page.locator(".ghrc-wooten-link-search input");
+    assert.equal(await iconSubmit.getAttribute("type"), "submit");
+    assert.equal(await iconSubmit.getAttribute("aria-label"), "Search WootenLink");
+    assert.equal(await iconSubmit.locator("img.ghrc-wooten-link-mark").count(), 1);
+    // Empty searches should focus the field instead of navigating.
+    await iconSubmit.click();
+    assert.equal(await wootenInput.evaluate(input => document.activeElement === input), true);
+    await wootenInput.fill("Sweetie Belle");
+    await iconSubmit.click();
+    let submittedUrl = null;
+    for (let attempt = 0; attempt < 40; attempt++) {
+      submittedUrl = await worker.evaluate(() => globalThis.wootenSearchUrl || null);
+      if (submittedUrl) break;
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+    assert.ok(submittedUrl, "icon click submitted the search");
+    assert.equal(new URL(submittedUrl).origin, "https://wooten.link");
+    assert.equal(new URL(submittedUrl).searchParams.get("q"), "Sweetie Belle");
+
     const frames = await page.evaluate(() => startupFrames);
     assert.ok(frames.some(frame => frame.top === undefined), 'sample before React adds the composer');
     assert.ok(frames.every(frame => !frame.welcomeVisible), JSON.stringify(frames));

@@ -7,7 +7,10 @@ const read = file => fs.readFileSync(path.join(__dirname, '..', file), 'utf8');
 let browser;
 
 before(async () => {
-  browser = await chromium.launch({ executablePath: '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser', headless: true });
+  const options = { headless: true };
+  if (process.env.BRAVE_PATH) options.executablePath = process.env.BRAVE_PATH;
+  else if (process.platform === 'darwin') options.executablePath = '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser';
+  browser = await chromium.launch(options);
 });
 after(async () => { await browser?.close(); });
 
@@ -119,6 +122,37 @@ test('all sidebar buttons prefer the same native split, including GitHub documen
   await page.close();
 });
 
+
+test('modern conversation roles exclude user links before and after hydration', async () => {
+  const markup = [
+    '<article data-conversation-role="user"><a id="modern-user" href="https://github.com/pony-factor/sweetiebot-SCM/pull/420#issuecomment-6358632182">Pasted URL <svg id="own-arrow" width="14" height="14"></svg></a></article>',
+    '<article data-conversation-role="assistant"><a id="modern-assistant" href="https://example.org/assistant">Source</a></article>',
+    '<div data-conversation-role="user"><a id="nested-user" href="https://example.org/other">Another own link</a></div>',
+  ].join('');
+  const page = await fixture({ openExternalLinksInSplitView: true, hideExternalLinkArrows: true }, null, true, markup);
+  await page.locator('#modern-assistant + .ghrc-link-with-actions .ghrc-link-sidebar-button').waitFor();
+  assert.equal(await page.locator('#modern-user + .ghrc-link-with-actions').count(), 0);
+  assert.equal(await page.locator('#nested-user + .ghrc-link-with-actions').count(), 0);
+  assert.equal(await page.locator('#own-arrow[data-ghrc-external-link-arrow]').count(), 0);
+  assert.equal(await page.locator('#own-arrow').isVisible(), true);
+  assert.equal(await page.locator('.ghrc-link-sidebar-button').count(), 1);
+  await page.evaluate(() => {
+    const turn = document.createElement('article');
+    turn.id = 'hydrating-turn';
+    turn.innerHTML = '<a id="hydrating-link" href="https://example.org/hydrate">Link</a>';
+    document.querySelector('main').append(turn);
+  });
+  await page.locator('#hydrating-link + .ghrc-link-with-actions').waitFor();
+  await page.locator('#hydrating-turn').evaluate(turn => turn.setAttribute('data-conversation-role', 'user'));
+  await page.waitForFunction(() => !document.querySelector('#hydrating-link + .ghrc-link-with-actions'));
+  assert.equal(await page.locator('.ghrc-link-sidebar-button').count(), 1);
+  await page.locator('#hydrating-turn').evaluate(turn => turn.setAttribute('data-conversation-role', 'assistant'));
+  await page.locator('#hydrating-link + .ghrc-link-with-actions .ghrc-link-sidebar-button').waitFor();
+  await page.locator('#hydrating-turn').evaluate(turn => turn.setAttribute('data-conversation-role', 'user'));
+  await page.waitForFunction(() => !document.querySelector('#hydrating-link + .ghrc-link-with-actions'));
+  assert.deepEqual(page.errors, []);
+  await page.close();
+});
 
 test('own-message links never get sidebar buttons, including after role hydration', async () => {
   const conversation = [
@@ -538,6 +572,72 @@ test('embedded citation buttons open the actual source beside chat without invok
 });
 
 
+test('collapsed document cards open new tabs when their source is already beside chat', async () => {
+  for (const nativeSplitSupported of [true, false]) {
+    const page = await fixture({ openExternalLinksInSplitView: true }, null, nativeSplitSupported);
+    await page.evaluate(() => {
+      const card = document.createElement('button');
+      card.id = 'document-card';
+      card.type = 'button';
+      card.setAttribute('data-d-component', 'pressable');
+      card.setAttribute('aria-label', 'Open source document');
+      card.textContent = 'Document info';
+      card.__reactFiber$fixture = { memoizedProps: { __dilHostElement: { props: {
+        onVisibleKey: 'https://example.org/source?utm_source=chatgpt&keep=1#section',
+      } } } };
+      window.nativeCardClicks = 0;
+      card.addEventListener('click', () => { window.nativeCardClicks++; });
+      document.querySelector('main').append(card);
+    });
+    await page.locator('.ghrc-link-sidebar-button').first().click();
+    await page.waitForFunction(() => previewRequests.some(
+      request => request.type === 'open-native-split-view'));
+    if (!nativeSplitSupported) {
+      await page.frameLocator('#ghrc-link-preview iframe').frameLocator('iframe').locator('h1').waitFor();
+    }
+    const previousRequests = await page.evaluate(() => previewRequests.length);
+    await page.locator('#document-card').click();
+    assert.deepEqual(await page.evaluate(() => openedLinks), [
+      ['https://example.org/source?keep=1#section', '_blank', 'noopener,noreferrer'],
+    ]);
+    assert.equal(await page.evaluate(() => nativeCardClicks), 0);
+    assert.equal(await page.evaluate(() => previewRequests.length), previousRequests);
+    assert.equal(await page.locator('#ghrc-link-preview').count(), nativeSplitSupported ? 0 : 1);
+    assert.deepEqual(page.errors, []);
+    await page.close();
+  }
+});
+
+test('source cards in a popup also use new tabs, but disabled new tabs preserve native clicks', async () => {
+  for (const newTabsEnabled of [true, false]) {
+    const page = await fixture({ openExternalLinksInSplitView: true,
+      openExternalLinksInNewTabs: newTabsEnabled });
+    await page.evaluate(() => {
+      const dialog = document.createElement('div');
+      dialog.setAttribute('role', 'dialog');
+      const card = document.createElement('button');
+      card.id = 'source-card';
+      card.type = 'button';
+      card.setAttribute('data-d-component', 'pressable');
+      card.setAttribute('aria-label', 'Open external source');
+      card.textContent = 'Source document';
+      card.__reactFiber$fixture = { memoizedProps: { __dilHostElement: { props: {
+        onVisibleKey: 'https://example.org/linked-document',
+      } } } };
+      window.nativeCardClicks = 0;
+      card.addEventListener('click', () => { window.nativeCardClicks++; });
+      dialog.append(card);
+      document.body.append(dialog);
+    });
+    await page.locator('#source-card').click();
+    assert.deepEqual(await page.evaluate(() => openedLinks), newTabsEnabled
+      ? [['https://example.org/linked-document', '_blank', 'noopener,noreferrer']] : []);
+    assert.equal(await page.evaluate(() => nativeCardClicks), newTabsEnabled ? 0 : 1);
+    assert.deepEqual(page.errors, []);
+    await page.close();
+  }
+});
+
 test('source card copy controls appear on hover, copy each card URL, and preserve popup width', async () => {
   const page = await fixture({ openExternalLinksInSplitView: true });
   await page.evaluate(() => {
@@ -829,22 +929,53 @@ test('the vertical divider resizes the sidebar and persists the allocation', asy
   await page.close();
 });
 
-test('blocked embedded previews can still fall back to the browser native split', async () => {
+test('only failed embeds fall back to a separate tab without adding another sidebar', async () => {
   const page = await fixture({ openExternalLinksInSplitView: true });
   await page.locator('.ghrc-link-sidebar-button').click();
   await page.frameLocator('#ghrc-link-preview iframe').frameLocator('iframe').locator('h1').waitFor();
-  const watch = (await page.evaluate(() => previewRequests)).find(message => message.type === 'watch-link-preview');
-  assert.ok(watch);
-  await page.evaluate(watch => {
-    window.nativeSplitSupported = true;
-    runtimeListeners.forEach(fn => fn({
-      type: 'link-preview-navigation-error',
-      previewId: watch.previewId,
-      url: watch.url,
-    }));
-  }, watch);
-  await page.waitForFunction(() => previewRequests.filter(message => message.type === 'open-native-split-view').length === 2);
+  assert.equal((await page.evaluate(() => previewRequests)).filter(msg => msg.type === 'open-blocked-link-preview').length, 0);
+  assert.equal(await page.getByRole('button', { name: 'Verify website', exact: true }).count(), 0);
+  await page.evaluate(() => {
+    const watch = previewRequests.find(msg => msg.type === 'watch-link-preview');
+    const error = { type: 'link-preview-navigation-error', previewId: watch.previewId, url: watch.url, error: 'net::ERR_BLOCKED_BY_RESPONSE' };
+    runtimeListeners.forEach(fn => { fn(error); fn(error); });
+  });
+  await page.waitForFunction(() => !document.querySelector('#ghrc-link-preview'));
+  const requests = await page.evaluate(() => previewRequests);
+  assert.equal(requests.filter(msg => msg.type === 'open-blocked-link-preview').length, 1);
+  assert.equal(requests.filter(msg => msg.type === 'open-native-split-view').length, 1);
+  await page.close();
+});
+
+test('a failed fallback tab leaves a usable manual open control', async () => {
+  const page = await fixture({ openExternalLinksInSplitView: true });
+  await page.locator('.ghrc-link-sidebar-button').click();
+  await page.frameLocator('#ghrc-link-preview iframe').frameLocator('iframe').locator('h1').waitFor();
+  await page.evaluate(() => {
+    const original = chrome.runtime.sendMessage;
+    chrome.runtime.sendMessage = msg => msg.type === 'open-blocked-link-preview' ? Promise.resolve({ ok: false }) : original(msg);
+    const watch = previewRequests.find(msg => msg.type === 'watch-link-preview');
+    runtimeListeners.forEach(fn => fn({ type: 'link-preview-navigation-error', previewId: watch.previewId, url: watch.url, destinationUrl: 'https://doi.org/10.15779/Z38D795C24', error: 'net::ERR_BLOCKED_BY_RESPONSE' }));
+  });
+  await page.getByRole('status').getByText(/cannot load in the sidebar/).waitFor();
+  assert.equal(await page.getByRole('link', { name: 'Open this link in a new tab', exact: true }).getAttribute('href'), 'https://doi.org/10.15779/Z38D795C24');
+  await page.getByRole('link', { name: 'Open in new tab', exact: true }).click();
+  assert.equal((await page.evaluate(() => openedLinks)).length, 1);
   assert.equal(await page.locator('#ghrc-link-preview').count(), 0);
+  await page.close();
+});
+
+test('clicking a working website link navigates inside the sidebar without opening a tab', async () => {
+  const page = await fixture({ openExternalLinksInSplitView: true });
+  await page.route('https://example.org/**', route => route.fulfill({ contentType: 'text/html', body:
+    route.request().url().includes('/next') ? '<h1>Next page</h1>' : '<a href="https://example.org/next">Read next page</a>' }));
+  await page.locator('.ghrc-link-sidebar-button').click();
+  const website = page.frameLocator('#ghrc-link-preview iframe').frameLocator('iframe');
+  await website.getByRole('link', { name: 'Read next page' }).click();
+  await website.getByRole('heading', { name: 'Next page' }).waitFor();
+  assert.equal(await page.locator('#ghrc-link-preview').count(), 1);
+  assert.equal((await page.evaluate(() => previewRequests)).filter(msg => msg.type === 'open-blocked-link-preview').length, 0);
+  assert.deepEqual(await page.evaluate(() => openedLinks), []);
   await page.close();
 });
 

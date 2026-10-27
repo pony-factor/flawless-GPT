@@ -4,6 +4,8 @@
   const STORAGE_KEY = "queuedChatMessages";
   const PAUSED_STORAGE_KEY = "queuedChatMessagesPaused";
   const QUEUE_BUTTON_SETTING_KEY = "showMessageQueueButton";
+  const QUEUE_MAX_HEIGHT_SETTING_KEY = "messageQueueMaxHeightPercent";
+  const DEFAULT_QUEUE_MAX_HEIGHT_PERCENT = 60;
   const PANEL_ID = "ghrc-message-queue";
   const QUEUE_BUTTON_ID = "ghrc-message-queue-button";
   const INTERRUPT_BUTTON_ID = "ghrc-message-interrupt-button";
@@ -17,7 +19,6 @@
 
   let activeKey = conversationKey();
   let queue = [];
-  let storageState = {};
   let stateLoaded = false;
   let routeSyncRunning = false;
   let lastHref = location.href;
@@ -34,6 +35,7 @@
   let enqueueRunning = false;
   let queuePaused = false;
   let showQueueButton = false;
+  let queueMaxHeightPercent = DEFAULT_QUEUE_MAX_HEIGHT_PERCENT;
   let persistPending = Promise.resolve();
   const pendingQueueStorageWrites = new Set();
   let queueStateRequest = null;
@@ -42,6 +44,8 @@
   const pendingEnterTexts = new Set();
   let nativeSubmission = null;
   const capturedFiles = new Map();
+  const CAPTURED_FILE_SWEEP_MS = 30_000;
+  let capturedFilesSweepTimer = null;
 
   // ChatGPT sometimes mounts the upload input in a portal outside the form.
   // Prefer the composer's own input; use an orphaned input only if unambiguous.
@@ -74,14 +78,51 @@
     return matches.length === 1 ? matches[0] : null;
   }
 
+  // ChatGPT may keep an app selection in a chip outside its text editor.
+  function standaloneAppMentions(composer) {
+    const form = findComposerForm(composer);
+    if (!form || !composer) return [];
+    return [...form.querySelectorAll("[app-mention-path]")].filter(node => !composer.contains(node))
+      .flatMap(node => {
+        const label = (node.getAttribute("app-mention-display-name") || node.textContent || "").trim();
+        const path = node.getAttribute("app-mention-path") || "";
+        if (!label || !/^app:\/\//.test(path)) return [];
+        const attributes = Object.fromEntries(MENTION_ATTRIBUTES
+          .filter(name => node.hasAttribute(name)).map(name => [name, node.getAttribute(name)]));
+        // Use only a native removal control; otherwise pause instead of
+        // mutating ChatGPT's React state or losing the selected plugin.
+        const remove = node.querySelector('button[aria-label*="Remove" i], button[aria-label*="Clear" i]')
+          || node.parentElement?.querySelector('button[aria-label*="Remove" i], button[aria-label*="Clear" i]');
+        return [{ label, attributes, remove }];
+      });
+  }
+
+  function queuedComposerPayload(text, snapshot) {
+    const content = textWithQuote(text, snapshot.quote);
+    let prefix = "";
+    const mentions = snapshot.state.standaloneMentions.map(app => {
+      const start = prefix.length;
+      prefix += app.label + " ";
+      return { start, end: start + app.label.length, label: app.label, attributes: app.attributes };
+    });
+    const queuedText = (prefix + content).trimEnd();
+    const offset = prefix.length + content.length - text.length;
+    mentions.push(...snapshot.mentions.map(mention => ({
+      ...mention, start: mention.start + offset, end: mention.end + offset,
+    })));
+    return { text: queuedText, mentions };
+  }
+
   function composerContext(composer = findComposerInput()) {
     const form = findComposerForm(composer);
-    if (!form) return { files: [], selections: [], quote: null, mentions: [] };
+    if (!form) return { files: [], selections: [], quote: null, mentions: [], standaloneMentions: [] };
+    const standaloneMentions = standaloneAppMentions(composer);
     const attachmentSurface = form.querySelector('[data-composer-attachments], [data-testid="composer-attachments"]');
     const files = [...form.querySelectorAll('button[aria-label*="Remove" i]')]
       .filter(button => {
         const label = button.getAttribute("aria-label") || "";
         return !/selected text|quote|quoted/i.test(label)
+          && !standaloneMentions.some(app => app.remove === button)
           && (/file|attachment|image|upload/i.test(label) || attachmentSurface?.contains(button));
       });
     const fileTokens = files.map(capturedFileForButton);
@@ -95,12 +136,12 @@
         root: button.parentElement,
         text: button.parentElement?.querySelector('.whitespace-pre-wrap')?.textContent || "",
       }));
-    return { files, fileTokens, selections, quote, quoteButton, mentions: composerMentions(composer), unknown: Boolean(attachmentSurface?.childElementCount && !files.length && !quote && !selections.length) };
+    return { files, fileTokens, selections, quote, quoteButton, mentions: composerMentions(composer), standaloneMentions, unknown: Boolean(attachmentSurface?.childElementCount && !files.length && !quote && !selections.length && !standaloneMentions.length) };
   }
 
   function hasComposerContext(composer) {
     const state = composerContext(composer);
-    return Boolean(state.files.length || state.selections.length || state.quote || state.unknown);
+    return Boolean(state.files.length || state.selections.length || state.quote || state.unknown || state.standaloneMentions.length);
   }
 
   async function captureComposerContext(composer) {
@@ -133,15 +174,20 @@
     // Click the current controls only if they still represent this snapshot.
     if (!contextMatches(snapshot.state, composer)) return false;
     const current = composerContext(composer);
-    for (const button of [...current.files, current.quoteButton, ...current.selections.map(selection => selection.button)].filter(Boolean)) button.click();
+    for (const button of [...current.files, current.quoteButton, ...current.selections.map(selection => selection.button),
+      ...current.standaloneMentions.map(app => app.remove)].filter(Boolean)) button.click();
     await new Promise(resolve => window.setTimeout(resolve, 80));
-    return !hasComposerContext(composer);
+    const cleared = !hasComposerContext(composer);
+    if (cleared) releaseCapturedSnapshotFiles(capturedFiles, snapshot.state.fileTokens);
+    return cleared;
   }
 
   function contextMatches(snapshot, composer) {
     const current = composerContext(composer);
     return current.quote === snapshot.quote && current.unknown === snapshot.unknown
       && JSON.stringify(current.mentions) === JSON.stringify(snapshot.mentions)
+      && JSON.stringify(current.standaloneMentions.map(({ label, attributes }) => ({ label, attributes })))
+        === JSON.stringify(snapshot.standaloneMentions.map(({ label, attributes }) => ({ label, attributes })))
       && current.selections.length === snapshot.selections.length
       && current.selections.every((selection, index) => selection.button === snapshot.selections[index].button
         && selection.root === snapshot.selections[index].root && selection.text === snapshot.selections[index].text)
@@ -320,14 +366,40 @@
     return hidden ? "timeout" : "frame";
   }
 
+  function normalizeQueueMaxHeightPercent(value) {
+    const parsed = (typeof value === "number" || (typeof value === "string" && value.trim()))
+      ? Number(value) : NaN;
+    return Number.isFinite(parsed)
+      ? Math.min(90, Math.max(20, Math.round(parsed)))
+      : DEFAULT_QUEUE_MAX_HEIGHT_PERCENT;
+  }
+
+  // Queued items have their own saved attachment bytes; retain originals
+  // only for upload chips that could still be added to the queue.
+  function retainOnlyCapturedFiles(files, activeFiles, uncertain = false) {
+    if (uncertain) return;
+    const active = new Set(activeFiles);
+    for (const [name, file] of files) if (!active.has(file)) files.delete(name);
+  }
+
+  function releaseCapturedSnapshotFiles(files, snapshotFiles) {
+    for (const file of snapshotFiles) {
+      if (file && files.get(file.name) === file) files.delete(file.name);
+    }
+  }
+
   const testApi = {
     COMPLETE_SETTLE_MS,
     conversationIdFromPath,
     normalizeQueueItems,
+    normalizeQueueMaxHeightPercent,
     pumpSchedulingMode,
     queueCanAdvance,
     queueSendCanProceed,
     shouldQueueComposerEnter,
+    retainOnlyCapturedFiles,
+    releaseCapturedSnapshotFiles,
+    queueStorageSignature,
   };
 
   if (globalThis.__GHRC_TEST__) {
@@ -338,6 +410,25 @@
   const context = globalThis.__ghrcExtensionContext;
   if (!context?.active()) return;
 
+  // Native sends can remove upload chips without involving the queue. The
+  // sweep releases stale File objects even after a tab has been idle for days.
+  function scheduleCapturedFileSweep() {
+    if (!capturedFiles.size || capturedFilesSweepTimer !== null) return;
+    capturedFilesSweepTimer = window.setTimeout(() => {
+      capturedFilesSweepTimer = null;
+      if (!context.active()) {
+        capturedFiles.clear();
+        return;
+      }
+      const state = composerContext();
+      const uploading = Boolean(findComposerForm()?.querySelector('[role="progressbar"], [aria-busy="true"]'));
+      // Preserve bytes for uploads still in progress or not yet recognized.
+      const uncertain = uploading || state.files.some((_, index) => !state.fileTokens[index]);
+      retainOnlyCapturedFiles(capturedFiles, (state.fileTokens || []).filter(Boolean), uncertain);
+      scheduleCapturedFileSweep();
+    }, CAPTURED_FILE_SWEEP_MS);
+  }
+
   // Keep the original bytes: uploaded chips alone cannot recreate a file.
   for (const type of ["change", "drop", "paste"]) {
     document.addEventListener(type, event => {
@@ -347,6 +438,7 @@
       if (!form || !(form.contains(target) || (type === "change" && target === composerInput))) return;
       const files = target?.files || event.dataTransfer?.files || event.clipboardData?.files;
       for (const file of files || []) capturedFiles.set(file.name, file);
+      scheduleCapturedFileSweep();
     }, true);
   }
 
@@ -729,7 +821,25 @@
 
   function queueStorageSignature(state) {
     if (!state || typeof state !== "object") return "";
-    return JSON.stringify(Object.keys(state).sort().map((key) => [key, state[key]]));
+    // Avoid retaining the entire Base64 payload in echo-suppression signatures.
+    let hashA = 2166136261;
+    let hashB = 2246822519;
+    let length = 0;
+    const add = (value) => {
+      length += value.length;
+      for (let i = 0; i < value.length; i++) {
+        const code = value.charCodeAt(i);
+        hashA = Math.imul(hashA ^ code, 16777619);
+        hashB = Math.imul(hashB ^ code, 3266489917);
+      }
+    };
+    for (const key of Object.keys(state).sort()) {
+      add(JSON.stringify(key));
+      add(":");
+      add(JSON.stringify(state[key]));
+      add(";");
+    }
+    return `${length}:${(hashA >>> 0).toString(16)}:${(hashB >>> 0).toString(16)}`;
   }
 
   function persistQueue() {
@@ -784,14 +894,15 @@
       [STORAGE_KEY]: {},
       [PAUSED_STORAGE_KEY]: {},
       [QUEUE_BUTTON_SETTING_KEY]: false,
+      [QUEUE_MAX_HEIGHT_SETTING_KEY]: DEFAULT_QUEUE_MAX_HEIGHT_PERCENT,
     });
     if (!context.active()) return;
     showQueueButton = Boolean(stored[QUEUE_BUTTON_SETTING_KEY]);
-    storageState = stored[STORAGE_KEY] && typeof stored[STORAGE_KEY] === "object"
-      ? stored[STORAGE_KEY]
-      : {};
+    queueMaxHeightPercent = normalizeQueueMaxHeightPercent(stored[QUEUE_MAX_HEIGHT_SETTING_KEY]);
+    const storedQueues = stored[STORAGE_KEY] && typeof stored[STORAGE_KEY] === "object"
+      ? stored[STORAGE_KEY] : {};
     queuePaused = Boolean(stored[PAUSED_STORAGE_KEY]?.[activeKey]);
-    queue = normalizeQueueItems(storageState[activeKey]);
+    queue = normalizeQueueItems(storedQueues[activeKey]);
     stateLoaded = true;
     renderQueue();
     scheduleMount();
@@ -839,7 +950,6 @@
 
       activeKey = nextKey;
       queuePaused = Boolean(stored[PAUSED_STORAGE_KEY]?.[nextKey]);
-      storageState = nextState;
       queue = normalizeQueueItems(nextState[nextKey]);
       completionCandidateSince = null;
       renderQueue();
@@ -1156,6 +1266,10 @@
       return;
     }
     if (!panel) panel = createPanel();
+    const maxHeight = `${queueMaxHeightPercent}dvh`;
+    if (panel.style.getPropertyValue("--ghrc-queue-max-height") !== maxHeight) {
+      panel.style.setProperty("--ghrc-queue-max-height", maxHeight);
+    }
     const title = panel.querySelector(".ghrc-message-queue-title");
     const list = panel.querySelector(".ghrc-message-queue-list");
     title.textContent = `Queue · ${queue.length}`;
@@ -1394,9 +1508,12 @@
     return true;
   }
 
-  async function sendClipboardText(text) {
+  async function sendClipboardText(text, mentions = []) {
     if (!context.active() || !stateLoaded || routeSyncRunning || conversationKey() !== activeKey) return false;
     text = normalizedText(text);
+    const validMentions = normalizeMentions(mentions, text);
+    if (validMentions.length !== mentions.length) return false;
+    mentions = validMentions;
     if (!text.trim()) return false;
     const composer = findComposerInput();
     if (!composer) return false;
@@ -1404,9 +1521,9 @@
     // Use the same completion gate as the FIFO, rather than treating a missing
     // Stop/streaming indicator as permission to submit and interrupt that work.
     if (queue.length || !queueCanAdvance(lifecycleSnapshot(), COMPLETE_SETTLE_MS) || nativeSubmissionPending(composer)
-      || sendingItemId || enqueueRunning || interruptRunning) return enqueueText(text);
+      || sendingItemId || enqueueRunning || interruptRunning) return enqueueText(text, [], mentions);
     // Preserve attachments and selected context for the existing draft.
-    if (hasComposerContext(composer)) return enqueueText(text);
+    if (hasComposerContext(composer)) return enqueueText(text, [], mentions);
 
     const key = activeKey;
     const draft = composerText(composer);
@@ -1419,13 +1536,14 @@
     scheduleMount();
     try {
       replaced = true;
-      if (!await replaceComposerText(composer, text)) return false;
+      if (!await replaceComposerText(composer, text, mentions)) return false;
       const deadline = Date.now() + SUBMIT_TIMEOUT_MS;
       while (Date.now() < deadline) {
         if (!context.active() || key !== activeKey || conversationKey() !== key || routeSyncRunning
           || composer !== findComposerInput() || !composer.isConnected
-          || !textMatchesComposer(composer, text) || hasComposerContext(composer)) return false;
-        if (!queueCanAdvance(lifecycleSnapshot(), COMPLETE_SETTLE_MS) || queue.length) return enqueueText(text);
+          || !textMatchesComposer(composer, text) || !mentionsMatch(composer, mentions)
+          || hasComposerContext(composer)) return false;
+        if (!queueCanAdvance(lifecycleSnapshot(), COMPLETE_SETTLE_MS) || queue.length) return enqueueText(text, [], mentions);
         const sendButton = findSendButton(composer);
         if (sendButton && !sendButton.disabled && sendButton.getAttribute("aria-disabled") !== "true") {
           sendButton.click();
@@ -1455,7 +1573,15 @@
   // when idle, and otherwise join the FIFO without clicking Stop.
   globalThis.__ghrcMessageQueue = {
     enqueueText: text => context.run(() => enqueueText(text)),
-    sendClipboardText: text => context.run(() => sendClipboardText(text)),
+    sendClipboardText: (text, mentions) => context.run(() => sendClipboardText(text, mentions)),
+    enqueueComposerMessage: () => context.run(enqueueComposerMessage),
+    // Research spellcheck yields to the FIFO while ChatGPT is still busy.
+    shouldQueueResearchPrompt: composer => Boolean(composer === findComposerInput()
+      && stateLoaded && activeKey === conversationKey() && !routeSyncRunning
+      && (queue.length || (conversationIdFromPath() && (
+        nativeSubmissionPending(composer)
+        || !queueCanAdvance(lifecycleSnapshot(), COMPLETE_SETTLE_MS))))),
+    composerAutocompleteIsOpen,
     findComposerInput,
     findActionButton,
   };
@@ -1472,10 +1598,8 @@
       if (!composer) return false;
       const snapshot = await captureComposerContext(composer);
       if (!snapshot || !contextMatches(snapshot.state, composer)) return false;
-      const queuedText = textWithQuote(text, snapshot.quote);
-      const queued = await enqueueText(queuedText, snapshot.attachments, snapshot.mentions.map(mention => ({
-        ...mention, start: mention.start + queuedText.length - text.length, end: mention.end + queuedText.length - text.length,
-      })));
+      const payload = queuedComposerPayload(text, snapshot);
+      const queued = await enqueueText(payload.text, snapshot.attachments, payload.mentions);
       if (queued && !await clearComposerContext(snapshot, composer)) {
         queuePaused = true;
         await persistQueue();
@@ -1901,10 +2025,8 @@
       if (context.active() && activeKey === key && composer === findComposerInput()) {
         const snapshot = await contextRequest;
         if (!snapshot || !contextMatches(snapshot.state, composer)) return;
-        const queuedText = textWithQuote(text, snapshot.quote);
-        const queued = await enqueueText(queuedText, snapshot.attachments, snapshot.mentions.map(mention => ({
-          ...mention, start: mention.start + queuedText.length - text.length, end: mention.end + queuedText.length - text.length,
-        })));
+        const payload = queuedComposerPayload(text, snapshot);
+        const queued = await enqueueText(payload.text, snapshot.attachments, payload.mentions);
         if (queued && !await clearComposerContext(snapshot, composer)) {
           queuePaused = true;
           await persistQueue();
@@ -2001,7 +2123,8 @@
     }
     const snapshot = lifecycleSnapshot();
     const composerState = composerContext(composer);
-    const hasMessage = Boolean(text.trim() || composerState.files.length || composerState.quote || composerState.selections.length);
+    const hasMessage = Boolean(text.trim() || composerState.files.length || composerState.quote
+      || composerState.selections.length || composerState.standaloneMentions.length);
     if (hasMessage && !nativeSubmissionPending(composer) && stateLoaded
       && activeKey === conversationKey() && !queue.length && !enterPending && !routeSyncRunning
       && queueCanAdvance(snapshot, COMPLETE_SETTLE_MS)) {
@@ -2029,6 +2152,10 @@
       showQueueButton = Boolean(changes[QUEUE_BUTTON_SETTING_KEY].newValue);
       scheduleMount();
     }
+    if (changes[QUEUE_MAX_HEIGHT_SETTING_KEY]) {
+      queueMaxHeightPercent = normalizeQueueMaxHeightPercent(changes[QUEUE_MAX_HEIGHT_SETTING_KEY].newValue);
+      renderQueue();
+    }
     if (changes[PAUSED_STORAGE_KEY]
       && queuePaused !== Boolean(changes[PAUSED_STORAGE_KEY].newValue?.[activeKey])) {
       queuePaused = Boolean(changes[PAUSED_STORAGE_KEY].newValue?.[activeKey]);
@@ -2042,12 +2169,10 @@
     const nextQueue = normalizeQueueItems(nextState[activeKey]);
     const queueWriteSignature = queueStorageSignature(nextState);
     if (pendingQueueStorageWrites.delete(queueWriteSignature)) {
-      storageState = nextState;
       return;
     }
     if (JSON.stringify(nextQueue) === JSON.stringify(storageCopy())) return;
 
-    storageState = nextState;
     queue = nextQueue;
     completionCandidateSince = null;
     renderQueue();
@@ -2083,6 +2208,8 @@
     queueResizeObserver?.disconnect();
     window.removeEventListener("resize", scheduleMount);
     clearInterval(pumpInterval);
+    if (capturedFilesSweepTimer !== null) clearTimeout(capturedFilesSweepTimer);
+    capturedFiles.clear();
     clearScheduledPump();
     document.removeEventListener("visibilitychange", reschedulePumpForVisibility);
     if (saveTimer !== null) clearTimeout(saveTimer);
