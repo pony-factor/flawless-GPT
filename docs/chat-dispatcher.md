@@ -1,0 +1,47 @@
+# Chat dispatcher
+
+Open **ChatGPT → Open chat dispatcher** from the Flawless popup or full settings. The dispatcher is part of Flawless and uses its existing GitHub connection. It does not need a separate extension, native app, terminal process, API key, or running Codex session.
+
+## Start or resume
+
+1. Import the task manifest while paused. The Studio manifest format is supported; tasks already submitted stay excluded from new assignments.
+2. Press **Start**. On the first start, the dispatcher opens ten fresh ChatGPT tabs automatically. It reuses those same ten chats for later tasks after verified merges. Resuming an existing pool keeps its current chats. Every slot works independently: a busy chat stays untouched, while a completed chat can move to its next task after merge verification.
+
+**Pause** immediately prevents further submissions. Browser startup and extension updates leave the dispatcher paused. Closing the dashboard does not stop a running dispatcher; its extension worker and periodic alarm continue in the background.
+
+## When a slot advances
+
+The dispatcher requires all of the following:
+
+- The latest assistant reply is complete and unchanged for at least 1.5 seconds.
+- No Stop, thinking, streaming, pending submission, existing queue entry, attachment, quote, or user draft is present.
+- The current task has a `MERGE_CONFIRMED` line naming its task ID, PR URL, and full merge commit SHA.
+- GitHub independently reports that same repository, PR number, merged state, and merge SHA.
+
+An open PR, a closed-unmerged PR, or passing CI alone does not count as completion. Earlier tasks associated with the adopted chat in the imported manifest must also have verified merge confirmations. Already implemented tasks can cite the existing merged PR rather than create an empty one.
+
+New prompts request a focused PR, the needed CI checks, and squash merge after completion. They leave automatic branch deletion and checkout cleanup to the existing workflow. The dispatcher verifies merges; the implementation chats perform the authorized repository changes and PR operations.
+
+The optional **Prefer Codex Pony** setting asks implementation chats to use their configured Codex Pony/Kefania publishing tool. It cannot change a chat's GitHub credentials or guarantee the author identity. If that tool is unavailable, the prompt permits the authorized GitHub workflow and asks the chat to report the identity it used.
+
+An idle chat without confirmation receives at most one follow-up asking it to finish its existing task. It receives no new checklist task until its merges are verified. This follow-up goes through the same interruption checks as a normal task.
+
+## Interruption protection
+
+The content adapter reuses Flawless's composer selection, native Send lookup, and read-only lifecycle snapshot when available. It also retains its independent DOM checks for already-open tabs. It never invokes the queue, clipboard sender, Stop, Interrupt, or Steer actions.
+
+Each send first reserves a particular tab, conversation, reply, and prompt. It checks completion before writing and again immediately before clicking the genuine native Send node. Activity resuming, a route change, a changed draft, or Send becoming Stop aborts the operation. Unsent text is preserved for review.
+
+Reservations are saved before changing the composer. A crash or an unconfirmed submission blocks that slot instead of retrying a potentially successful send. In Work layouts that omit user prompts, each reply echoes a unique dispatch receipt before the slot is bound. An uncertain task can also recover automatically from its exact GitHub-verified merge proof, without replaying the prompt. While paused, review the chat and select the matching confirmation action in its card. Existing drafts are never automatically erased.
+
+## Moving from the Studio prototype
+
+Keep the Studio dispatcher paused. Export its session or import the existing task manifest into this dashboard, then press Start to create the fresh pool. Previously submitted checklist tasks remain excluded. The Flawless feature has separate storage keys and does not read the other extension's storage or change unrelated Flawless settings.
+
+Once the Flawless pool is adopted, keep the old prototype paused or disable it so there is only one dispatcher. No localhost verifier is used by this integration; GitHub checks use the connection already managed by Flawless. Public repository metadata can use public access if no saved connection is available; rate limits or unavailable access block advancement.
+
+## Tests
+
+Install the development-only DOM fixture dependency with `npm install --no-save --package-lock=false jsdom@26.1.0`, then run `node --test tests/chat-dispatcher-*.test.cjs tests/message-queue.test.cjs tests/settings-markup.test.cjs`.
+
+The regression workflow installs the same fixture dependency and includes dispatcher tests in the existing required unit-test step.

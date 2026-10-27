@@ -388,6 +388,7 @@ pages declare their loading order; the background entry point is
 | `core/` | Extension lifecycle, route events, and background entry points |
 | `chat/` | Conversation display, model controls, recovery, and notices |
 | `composer/` | Input styling, focus, clipboard sending, uploads, and message queue |
+| `dispatcher/` | Ten-chat task dispatch, completion guards, and verified squash-merge gates |
 | `sidebar/` | Chat history dates, loading, collapse, and tab state |
 | `dashboard/` | Repositories, account columns, avatars, pins, and highlighted pages |
 | `links/` | Citations, previews, split views, image recovery, and URL cleanup |
@@ -399,3 +400,7 @@ pages declare their loading order; the background entry point is
 
 Worker `importScripts()` paths resolve relative to `js/core/background.js`,
 including calls made by imported scripts. Tests refer directly to feature paths.
+
+## Chat dispatcher
+
+The popup and full settings include **ChatGPT → Open chat dispatcher**. Start opens ten fresh chats and reuses that pool, sends only after stable completion, and requires GitHub-verified merge confirmations before advancing a slot. It uses Flawless's existing GitHub connection and runs inside the extension without a separate app or terminal process. See the [dispatcher guide](docs/chat-dispatcher.md) for Start/Pause and migration from the Studio prototype.
