@@ -67,8 +67,23 @@
     return null;
   }
 
+  function savedAnswers(payload, userIds) {
+    const answers = new Map();
+    const messages = new Map(Object.values(payload.mapping || {})
+      .filter(node => node.message).map(node => [node.message.id || node.id, node.message]));
+    for (const userId of userIds) {
+      const id = answerForTurn(payload, userId);
+      const message = messages.get(id);
+      if (message) answers.set(userId, {
+        id, content: { parts: message.content.parts.filter(part => typeof part === "string") },
+      });
+    }
+    // Do not retain the mapping, tool results, attachments or other branches.
+    return answers;
+  }
+
   if (typeof module !== "undefined" && module.exports) {
-    module.exports = { missingAnswer, answerForTurn, entryFor, shouldCoolDown };
+    module.exports = { missingAnswer, answerForTurn, entryFor, shouldCoolDown, savedAnswers };
     return;
   }
 
@@ -178,10 +193,8 @@
   function repair(elements, saved) {
     for (const element of elements) {
       if (!element.isConnected || !missingAnswer(entryFor(element))) continue;
-      const answerId = answerForTurn(saved, element.getAttribute("data-turn-key"));
-      const message = answerId && Object.values(saved.mapping)
-        .find(node => (node.message?.id || node.id) === answerId)?.message;
-      if (message) renderAnswer(element, { ...message, id: answerId });
+      const message = saved.get(element.getAttribute("data-turn-key"));
+      if (message) renderAnswer(element, message);
     }
   }
 
@@ -195,7 +208,14 @@
       if (!missingAnswer(entryFor(element))) element.querySelector("[data-ghrc-recovered-answer]")?.remove();
     }
     const elements = turns.filter(element => missingAnswer(entryFor(element)));
-    if (!elements.length) return;
+    if (!elements.length) {
+      savedConversation = null;
+      return;
+    }
+    if (savedConversation) {
+      const missingIds = new Set(elements.map(element => element.getAttribute("data-turn-key")));
+      for (const key of savedConversation.keys()) if (!missingIds.has(key)) savedConversation.delete(key);
+    }
     if (savedId !== id) {
       savedId = id;
       savedConversation = null;
@@ -216,10 +236,12 @@
       const saved = await loadSavedConversation(id, requestController.signal);
       if (generation !== requestGeneration || conversationId() !== id) return;
       if (!saved?.mapping) { retryAfter = Date.now() + 60_000; return; }
-      savedConversation = saved;
+      const currentElements = [...document.querySelectorAll(TURN_SELECTOR)]
+        .filter(element => missingAnswer(entryFor(element)));
+      savedConversation = savedAnswers(saved, currentElements.map(element => element.getAttribute("data-turn-key")));
       // Repair only the completed missing turns. Drafts, the queue, and the
       // currently streaming turn are never changed or interrupted.
-      repair(elements, saved);
+      repair(currentElements, savedConversation);
     } catch {
       // Cancelled reads must not rate-limit a new prompt after navigation.
       if (generation === requestGeneration) retryAfter = Date.now() + 60_000;
@@ -312,6 +334,11 @@
   document.addEventListener("submit", onPromptSend, true);
   window.addEventListener("ghrc:route-change", onRouteChange);
   window.addEventListener("pagehide", stopPolling);
+  window.addEventListener("ghrc:refresh-view", () => {
+    // Respect pending reads and server cooldowns even on repeated manual clicks.
+    promptActivity();
+    void check();
+  });
   // Existing conversations retain immediate recovery after a reload. A
   // brand-new homepage has nothing to recover and needs no idle timer.
   // After cooldown or navigation, only the next prompt wakes the scanner.

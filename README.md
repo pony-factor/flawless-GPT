@@ -216,6 +216,8 @@ Close it with the browser’s **Close This View** control. Browsers without nati
 split support use an embedded preview; close that preview with **Close** or
 **Escape**. Websites may block embedding, so the preview also provides
 **Open in new tab**. Modifier clicks keep browser behavior.
+On conversation pages, **Refresh view** requests an in-place refresh through ChatGPT's existing router without reloading the document. It waits for active responses to finish and spaces manual requests at least 30 seconds apart. If the router is unavailable, it uses the conversation error screen's native retry when available and reports unsupported refreshes explicitly. Server rate limits can still prevent a conversation from loading. Missing-answer recovery retains only the final text needed for broken turns, rather than the full fetched conversation.
+
 The history setting hides the known conversation-history rate-limit modal, clears the page locks it
 leaves behind, and preserves native wheel and touch scrolling if stale modal
 listeners remain. Link previews load the destination in a sandboxed iframe.
