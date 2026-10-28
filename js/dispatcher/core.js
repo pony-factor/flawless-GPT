@@ -51,6 +51,42 @@ function normalizeTasks(input) {
   });
 }
 
+function checklistManifest(value) {
+  const source = String(value ?? '');
+  if (!source.trim() || source.length > 100000) throw Error('Paste checklist items (maximum 100,000 characters).');
+  const lines = source.replace(/\r\n?/g, '\n').split('\n');
+  const checkbox = /^\s*(?:(?:[-*+]|\d+[.)])\s+)?\[([ xX])\]\s+(.+?)\s*$/;
+  const bullet = /^\s*(?:[-*+]|\d+[.)])\s+(.+?)\s*$/;
+  const hasCheckboxes = lines.some(line => checkbox.test(line));
+  const hasBullets = !hasCheckboxes && lines.some(line => bullet.test(line));
+  let section = '';
+  const tasks = [];
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    if (/^#{1,6}\s+/.test(trimmed)) {
+      section = trimmed.replace(/^#{1,6}\s+/, '').trim();
+      continue;
+    }
+    const match = trimmed.match(checkbox);
+    if (match?.[1].toLowerCase() === 'x' || hasCheckboxes && !match) continue;
+    const listItem = match ? match[2] : trimmed.match(bullet)?.[1];
+    if (!match && hasBullets && !listItem) continue;
+    const item = (listItem || trimmed).trim();
+    if (!item || /^(?:\d+\s*\/\s*\d+|implementation progress|copy checklist)$/i.test(item)
+      || /^[-_]{3,}$/.test(item)) continue;
+    if (item.length > 5000) throw Error('Each checklist item must be under 5,000 characters.');
+    tasks.push({
+      task_id: 'checklist-' + String(tasks.length + 1).padStart(4, '0'),
+      prompt: section ? 'Checklist section: ' + section + '\n' + item : item,
+      status: 'pending',
+    });
+    if (tasks.length > 10000) throw Error('Maximum 10,000 checklist tasks.');
+  }
+  if (!tasks.length) throw Error('No incomplete checklist items found.');
+  return { tasks };
+}
+
 function scopedPrompt(task, repository, { preferCodexPony = false } = {}) {
   if (!REPOSITORY.test(repository)) throw Error('Use an owner/repository name.');
   return `Repository: https://github.com/${repository}\nTask: ${task.id}\n\n${task.prompt}\n\n`
@@ -81,7 +117,7 @@ function canAssign(worker) {
   return !worker.taskId || worker.phase === 'merged';
 }
 
-const api = { SETTLE_MS, POOL_SIZE, REPOSITORY, CHAT_URL, chatURL, validSnapshot, parseConfirmations, verifiedMerge, normalizeTasks, scopedPrompt, mergeReminder, canAssign };
+const api = { SETTLE_MS, POOL_SIZE, REPOSITORY, CHAT_URL, chatURL, validSnapshot, parseConfirmations, verifiedMerge, normalizeTasks, checklistManifest, scopedPrompt, mergeReminder, canAssign };
 globalThis.__ghrcDispatcherCore = api;
 if (typeof module !== "undefined") module.exports = api;
 })();
