@@ -54,12 +54,14 @@ test("clipboard surfaces file permission errors", async () => {
   assert.equal(f.button.label, "Enable file URLs");
 });
 
-test("HTTP URLs keep working and javascript URLs are rejected", async () => {
+test("HTTP URLs keep working and unsafe schemes become Google queries", async () => {
   const good = clipboard("https://www.sec.gov/report.pdf"); await good.run();
   assert.deepEqual(good.navigations, ["https://www.sec.gov/report.pdf"]);
   assert.deepEqual(good.messages, []);
   const bad = clipboard("javascript:alert(1)"); await bad.run();
-  assert.deepEqual(bad.navigations, []);
+  const search = new URL("https://www.google.com/search");
+  search.searchParams.set("q", "javascript:alert(1)");
+  assert.deepEqual(bad.navigations, [search.href]);
   assert.deepEqual(bad.messages, []);
 });
 
@@ -91,17 +93,32 @@ test("clipboard URLs keep meaningful punctuation inside paths, queries and fragm
   assert.deepEqual(wrapped.navigations, ["https://en.wikipedia.org/wiki/Function_(mathematics)"]);
 });
 
-test("clipboard navigation refuses arbitrary prose or a non-URL scheme", async () => {
+test("clipboard text that is not a standalone recognized URL searches Google", async () => {
   for (const input of [
     "See https://example.org/article",
     "https://example.org/article and other text",
     "javascript:alert(1)",
+    "ftp://example.org/file",
     "https://",
+    "Stellar transfer agents",
+    "  A & B? #C  ",
   ]) {
     const f = clipboard(input);
     await f.run();
-    assert.deepEqual(f.navigations, [], input);
+    const search = new URL("https://www.google.com/search");
+    search.searchParams.set("q", input.trim());
+    assert.deepEqual(f.navigations, [search.href], input);
     assert.deepEqual(f.messages, [], input);
+  }
+});
+
+test("empty clipboard text does not navigate or submit a Google search", async () => {
+  for (const input of ["", "  \t\n  "]) {
+    const f = clipboard(input);
+    await f.run();
+    assert.deepEqual(f.navigations, []);
+    assert.deepEqual(f.messages, []);
+    assert.equal(f.button.title, "Clipboard has no text to open or search");
   }
 });
 

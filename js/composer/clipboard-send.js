@@ -191,9 +191,18 @@
   async function openClipboardUrl(button) {
     setButtonBusy(button, true);
     try {
-      const url = parseClipboardUrl(await readClipboardText());
+      const clipboardText = (await readClipboardText()).trim();
+      if (!clipboardText) {
+        setButtonMessage(button, "Clipboard has no text to open or search");
+        return;
+      }
+      const url = parseClipboardUrl(clipboardText);
       if (!url) {
-        setButtonMessage(button, "Clipboard does not contain a valid URL");
+        // Search the original text rather than guessing at a URL or navigating
+        // to a non-web scheme. URLSearchParams safely encodes the query.
+        const search = new URL("https://www.google.com/search");
+        search.searchParams.set("q", clipboardText);
+        window.location.assign(search.href);
         return;
       }
 
@@ -256,8 +265,8 @@
     const button = document.createElement("button");
     button.id = URL_BUTTON_ID;
     button.type = "button";
-    button.title = "Open clipboard URL in this tab";
-    button.setAttribute("aria-label", "Open clipboard URL in this tab");
+    button.title = "Open clipboard URL or search Google in this tab";
+    button.setAttribute("aria-label", "Open clipboard URL or search Google in this tab");
     button.innerHTML = `
       <svg viewBox="0 0 24 24" aria-hidden="true">
         <path d="M10 13a5 5 0 0 0 7.1 0l2-2a5 5 0 0 0-7.1-7l-1.1 1.1M14 11a5 5 0 0 0-7.1 0l-2 2a5 5 0 0 0 7.1 7l1.1-1.1" />
