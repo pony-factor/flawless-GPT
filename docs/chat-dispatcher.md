@@ -4,10 +4,13 @@ Open **ChatGPT → Open chat dispatcher** from the Flawless popup or full settin
 
 ## Start or resume
 
-1. Import the task manifest while paused. The Studio manifest format is supported; tasks already submitted stay excluded from new assignments.
+1. While paused, either **paste checklist items** into the dashboard and select **Import incomplete items**, or import a JSON task manifest. The Studio manifest format remains supported; previously submitted tasks stay excluded from new assignments. A pasted Markdown checklist accepts `- [ ]` and `- [x]` entries, numbered checkboxes, ordinary bullet lists, and one task per line. Completed `[x]` items are skipped; Markdown headings are copied into each task as section context.
 2. Press **Start**. On the first start, the dispatcher opens ten fresh ChatGPT tabs automatically. It reuses those same ten chats for later tasks after verified merges. Resuming an existing pool keeps its current chats. Every slot works independently: a busy chat stays untouched, while a completed chat can move to its next task after merge verification.
 
 **Pause** immediately prevents further submissions. Browser startup and extension updates leave the dispatcher paused. Closing the dashboard does not stop a running dispatcher; its extension worker and periodic alarm continue in the background.
+
+
+The pasted checklist is **not** sent immediately. Import replaces the currently unassigned task list and Start controls dispatch. Each unchecked line becomes a separate implementation task and proposed PR. For changes with dependencies or shared files, consolidate related checklist lines into a focused task before importing; ten slots can otherwise start concurrently. Input is preserved if validation or import fails. The JSON manifest import continues to work unchanged.
 
 ## When a slot advances
 
