@@ -36,6 +36,8 @@ function render() {
   $('prefer-codex-pony').checked = Boolean(state.preferCodexPony);
   $('prefer-codex-pony').disabled = !state.paused || !connected;
   $('manifest').disabled = !state.paused || !connected;
+  $('checklist-text').disabled = !state.paused || !connected;
+  $('import-checklist').disabled = !state.paused || !connected;
   $('start').disabled = !connected || !state.paused || !state.tasks.length || Boolean(state.workers.length && state.workers.length !== 10);
   $('pause').disabled = !connected || state.paused;
   $('reset').disabled = !connected || !state.paused || !state.workers.length;
@@ -90,6 +92,15 @@ $('manifest').addEventListener('change', async event => {
     await action({ type: 'import', manifest, repository: $('repository').value.trim() });
   } catch (error) { notice(error.message); }
   event.target.value = '';
+});
+$('import-checklist').addEventListener('click', async () => {
+  try {
+    const manifest = globalThis.__ghrcDispatcherCore.checklistManifest($('checklist-text').value);
+    await request({ type: 'import', manifest, repository: $('repository').value.trim() });
+    $('checklist-text').value = '';
+    await refresh();
+    notice('Imported ' + manifest.tasks.length + ' incomplete checklist items. Start when ready.');
+  } catch (error) { notice(error.message); }
 });
 $('start').addEventListener('click', () => action({ type: 'start' }));
 $('pause').addEventListener('click', () => action({ type: 'pause' }));
