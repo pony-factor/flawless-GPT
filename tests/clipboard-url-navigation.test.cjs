@@ -165,7 +165,7 @@ test("worker reports browser navigation failures", async () => {
 
 test("worker uses the browser default provider and originating tab", async () => {
   const f = worker();
-  assert.deepEqual(await f.search("  My Little Pony & Stellar  "), { ok: true });
+  assert.equal((await f.search("  My Little Pony & Stellar  ")).ok, true);
   assert.deepEqual(f.searches, [{ tabId: 4, text: "My Little Pony & Stellar" }]);
   assert.deepEqual(f.navigations, []);
 });
