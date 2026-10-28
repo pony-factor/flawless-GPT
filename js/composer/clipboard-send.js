@@ -16,6 +16,21 @@
     return globalThis.__ghrcMessageQueue?.findComposerInput() || null;
   }
 
+  // Stay scoped to the active composer; ChatGPT may show other plus buttons
+  // in menus, sidebars, and inline editors.
+  function findComposerPlusButton(composer) {
+    const host = composer?.closest?.("form") || composer?.closest?.('[data-type="unified-composer"]');
+    return host?.querySelector([
+      'button[data-testid="composer-plus-btn"]',
+      'button[data-testid="composer-plus-button"]',
+      'button[data-testid="composer-attachment-button"]',
+      'button[aria-label="Add files and more" i]',
+      'button[aria-label^="Add photos" i]',
+      'button[aria-label^="Add files" i]',
+      'button[aria-label^="Attach files" i]',
+    ].join(", ")) || null;
+  }
+
   function isNewChatPage() {
     return window.location.pathname === "/";
   }
@@ -298,8 +313,13 @@
     if (isNewChatPage()) {
       if (!urlButton) urlButton = createUrlButton();
       const launcher = document.getElementById("ghrc-spellcheck-gpt-launcher");
-      const urlAnchor = launcher?.parentElement ? launcher : anchor;
-      urlButton.toggleAttribute("data-ghrc-beside-spellcheck", Boolean(launcher?.parentElement));
+      const plus = window.matchMedia?.("(max-width: 700px)")?.matches
+        ? findComposerPlusButton(composer) : null;
+      const urlAnchor = plus
+        ? (launcher?.parentElement === plus.parentElement ? launcher : plus)
+        : (launcher?.parentElement ? launcher : anchor);
+      urlButton.toggleAttribute("data-ghrc-inline-before-plus", Boolean(plus));
+      urlButton.toggleAttribute("data-ghrc-beside-spellcheck", !plus && Boolean(launcher?.parentElement));
       if (urlButton.parentElement !== urlAnchor.parentElement || urlButton.nextElementSibling !== urlAnchor) {
         urlAnchor.before(urlButton);
       }
@@ -345,8 +365,11 @@
   });
 
   const observer = new MutationObserver(scheduleMount);
+  const narrowViewport = window.matchMedia?.("(max-width: 700px)");
+  narrowViewport?.addEventListener("change", scheduleMount);
   window.addEventListener(ROUTE_CHANGE_EVENT, scheduleMount);
   context.onStop(() => {
+    narrowViewport?.removeEventListener("change", scheduleMount);
     window.removeEventListener(ROUTE_CHANGE_EVENT, scheduleMount);
     observer.disconnect();
     removeButton();

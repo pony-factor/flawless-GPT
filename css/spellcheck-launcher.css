@@ -51,3 +51,12 @@
     left: 4px;
   }
 }
+
+/* On narrow composers, join ChatGPT's left-hand toolbar before the native +. */
+@media (max-width: 700px) {
+  #ghrc-spellcheck-gpt-launcher[data-ghrc-inline-before-plus] {
+    position: static;
+    flex: 0 0 32px;
+    z-index: auto;
+  }
+}

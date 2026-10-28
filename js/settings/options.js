@@ -73,12 +73,16 @@ const disableWorkModeInput = document.getElementById("disable-work-mode");
 const disableManualWebSearchInput = document.getElementById("disable-manual-web-search");
 const showSpellcheckGptLauncherInput = document.getElementById("show-spellcheck-gpt-launcher");
 const show2048LauncherInput = document.getElementById("show-2048-launcher");
+const deepResearchSpellcheckEnabledInput = document.getElementById("deep-research-spellcheck-enabled");
 const showDeepResearchTrackerInput = document.getElementById("show-deep-research-tracker");
 const showDeepResearchHomepageInput = document.getElementById("show-deep-research-homepage");
 const showDeepResearchComposerInput = document.getElementById("show-deep-research-composer");
 const showDeepResearchHomepageCountInput = document.getElementById("show-deep-research-homepage-count");
 const showDeepResearchHomepageResetInput = document.getElementById("show-deep-research-homepage-reset");
-const showDeepResearchUsagePieInput = document.getElementById("show-deep-research-usage-pie");
+const showDeepResearchComposerCountInput = document.getElementById("show-deep-research-composer-count");
+const showDeepResearchComposerResetInput = document.getElementById("show-deep-research-composer-reset");
+const showDeepResearchHomepagePieInput = document.getElementById("show-deep-research-homepage-pie");
+const showDeepResearchComposerPieInput = document.getElementById("show-deep-research-composer-pie");
 const deepResearchUsagePieTotalInput = document.getElementById("deep-research-usage-pie-total");
 const deepResearchAllowanceModeInput = document.getElementById("deep-research-allowance-mode");
 let researchPieTotals = { full: null, all: null };
@@ -255,15 +259,20 @@ function normalizedResearchWindowDays(value) {
 function updateResearchSettingsControls() {
   const enabled = showDeepResearchTrackerInput.checked;
   const homepage = enabled && showDeepResearchHomepageInput.checked;
+  const composer = enabled && showDeepResearchComposerInput.checked;
   showDeepResearchHomepageInput.disabled = !enabled;
   showDeepResearchComposerInput.disabled = !enabled;
   showDeepResearchHomepageCountInput.disabled = !homepage;
   showDeepResearchHomepageResetInput.disabled = !homepage;
+  showDeepResearchHomepagePieInput.disabled = !homepage;
   deepResearchHomepageVisibilityInput.disabled = !homepage;
   deepResearchHomepageWindowDaysInput.disabled = !homepage;
-  showDeepResearchUsagePieInput.disabled = !enabled;
+  showDeepResearchComposerCountInput.disabled = !composer;
+  showDeepResearchComposerResetInput.disabled = !composer;
+  showDeepResearchComposerPieInput.disabled = !composer;
   deepResearchAllowanceModeInput.disabled = !enabled;
-  deepResearchUsagePieTotalInput.disabled = !enabled || !showDeepResearchUsagePieInput.checked;
+  deepResearchUsagePieTotalInput.disabled = !enabled || !(homepage && showDeepResearchHomepagePieInput.checked
+    || composer && showDeepResearchComposerPieInput.checked);
 }
 
 function normalizedOwnerGroupsPerPage(value) {
@@ -442,11 +451,16 @@ async function loadSettings() {
     disableWorkMode: false,
     showSpellcheckGptLauncher: false,
     show2048Launcher: false,
+    deepResearchSpellcheckEnabled: true,
     showDeepResearchTracker: true,
     showDeepResearchHomepage: true,
     showDeepResearchComposer: true,
     showDeepResearchHomepageCount: true,
     showDeepResearchHomepageReset: true,
+    showDeepResearchComposerCount: true,
+    showDeepResearchComposerReset: true,
+    showDeepResearchHomepagePie: null,
+    showDeepResearchComposerPie: null,
     showDeepResearchUsagePie: false,
     deepResearchUsagePieTotal: null,
     deepResearchUsagePieTotals: null,
@@ -509,12 +523,19 @@ async function loadSettings() {
   disableManualWebSearchInput.checked = Boolean(settings.disableManualWebSearch);
   showSpellcheckGptLauncherInput.checked = Boolean(settings.showSpellcheckGptLauncher);
   show2048LauncherInput.checked = Boolean(settings.show2048Launcher);
+  deepResearchSpellcheckEnabledInput.checked = settings.deepResearchSpellcheckEnabled !== false;
   showDeepResearchTrackerInput.checked = settings.showDeepResearchTracker !== false;
   showDeepResearchHomepageInput.checked = settings.showDeepResearchHomepage !== false;
   showDeepResearchComposerInput.checked = settings.showDeepResearchComposer !== false;
   showDeepResearchHomepageCountInput.checked = settings.showDeepResearchHomepageCount !== false;
   showDeepResearchHomepageResetInput.checked = settings.showDeepResearchHomepageReset !== false;
-  showDeepResearchUsagePieInput.checked = settings.showDeepResearchUsagePie === true;
+  showDeepResearchComposerCountInput.checked = settings.showDeepResearchComposerCount !== false;
+  showDeepResearchComposerResetInput.checked = settings.showDeepResearchComposerReset !== false;
+  // Preserve the previous shared pie preference until the new controls save.
+  showDeepResearchHomepagePieInput.checked = settings.showDeepResearchHomepagePie == null
+    ? settings.showDeepResearchUsagePie === true : settings.showDeepResearchHomepagePie === true;
+  showDeepResearchComposerPieInput.checked = settings.showDeepResearchComposerPie == null
+    ? settings.showDeepResearchUsagePie === true : settings.showDeepResearchComposerPie === true;
   deepResearchAllowanceModeInput.value = settings.deepResearchAllowanceMode === "all" ? "all" : "full";
   researchPieTotals = loadedResearchPieTotals(settings);
   renderSelectedResearchPieTotal();
@@ -624,12 +645,16 @@ async function saveSettings() {
       disableManualWebSearch: disableManualWebSearchInput.checked,
       showSpellcheckGptLauncher: showSpellcheckGptLauncherInput.checked,
       show2048Launcher: show2048LauncherInput.checked,
+      deepResearchSpellcheckEnabled: deepResearchSpellcheckEnabledInput.checked,
       showDeepResearchTracker: showDeepResearchTrackerInput.checked,
       showDeepResearchHomepage: showDeepResearchHomepageInput.checked,
       showDeepResearchComposer: showDeepResearchComposerInput.checked,
       showDeepResearchHomepageCount: showDeepResearchHomepageCountInput.checked,
       showDeepResearchHomepageReset: showDeepResearchHomepageResetInput.checked,
-      showDeepResearchUsagePie: showDeepResearchUsagePieInput.checked,
+      showDeepResearchComposerCount: showDeepResearchComposerCountInput.checked,
+      showDeepResearchComposerReset: showDeepResearchComposerResetInput.checked,
+      showDeepResearchHomepagePie: showDeepResearchHomepagePieInput.checked,
+      showDeepResearchComposerPie: showDeepResearchComposerPieInput.checked,
       deepResearchAllowanceMode: deepResearchAllowanceModeInput.value,
       deepResearchUsagePieTotals: { ...researchPieTotals },
       deepResearchUsagePieTotal: null, // Retire the legacy shared total.
