@@ -12,5 +12,7 @@ importScripts(
   "../research/deep-research-cache-background.js",
   "../research/research-publisher-background.js",
   "../research/research-launcher-background.js",
-  "../research/deep-research-spellcheck-background.js"
+  "../research/deep-research-spellcheck-background.js",
+  "../dispatcher/core.js",
+  "../dispatcher/background.js"
 );
