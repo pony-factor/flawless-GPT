@@ -102,6 +102,7 @@ html.dark #github-repositories-for-chatgpt {
   font-family: inherit;
 }
 
+#github-repositories-for-chatgpt .ghrc-chat-dispatcher,
 #github-repositories-for-chatgpt .ghrc-wooten-link-submit,
 #github-repositories-for-chatgpt .ghrc-state button,
 #github-repositories-for-chatgpt .ghrc-pagination button {
@@ -115,6 +116,7 @@ html.dark #github-repositories-for-chatgpt {
   padding: 6px 10px;
 }
 
+#github-repositories-for-chatgpt .ghrc-chat-dispatcher:hover,
 #github-repositories-for-chatgpt .ghrc-wooten-link-submit:hover,
 #github-repositories-for-chatgpt .ghrc-state button:hover,
 #github-repositories-for-chatgpt .ghrc-pagination button:hover:not(:disabled) {
@@ -122,6 +124,7 @@ html.dark #github-repositories-for-chatgpt {
   background: color-mix(in srgb, var(--ghrc-canvas-subtle) 85%, var(--ghrc-fg) 15%);
 }
 
+#github-repositories-for-chatgpt .ghrc-chat-dispatcher:focus-visible,
 #github-repositories-for-chatgpt .ghrc-wooten-link-submit:focus-visible,
 #github-repositories-for-chatgpt .ghrc-wooten-link-search input:focus-visible,
 #github-repositories-for-chatgpt .ghrc-state button:focus-visible,
