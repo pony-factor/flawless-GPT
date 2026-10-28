@@ -198,11 +198,12 @@
       }
       const url = parseClipboardUrl(clipboardText);
       if (!url) {
-        // Search the original text rather than guessing at a URL or navigating
-        // to a non-web scheme. URLSearchParams safely encodes the query.
-        const search = new URL("https://www.google.com/search");
-        search.searchParams.set("q", clipboardText);
-        window.location.assign(search.href);
+        // Delegate to the extension worker so the browser's configured
+        // search engine is used instead of hard-coding a provider.
+        const result = await chrome.runtime.sendMessage({
+          type: "search-clipboard-text", text: clipboardText,
+        });
+        if (!result?.ok) setButtonMessage(button, result?.error || "Clipboard search could not be opened");
         return;
       }
 
@@ -265,8 +266,8 @@
     const button = document.createElement("button");
     button.id = URL_BUTTON_ID;
     button.type = "button";
-    button.title = "Open clipboard URL or search Google in this tab";
-    button.setAttribute("aria-label", "Open clipboard URL or search Google in this tab");
+    button.title = "Open clipboard URL or search with your default engine";
+    button.setAttribute("aria-label", "Open clipboard URL or search with your default engine");
     button.innerHTML = `
       <svg viewBox="0 0 24 24" aria-hidden="true">
         <path d="M10 13a5 5 0 0 0 7.1 0l2-2a5 5 0 0 0-7.1-7l-1.1 1.1M14 11a5 5 0 0 0-7.1 0l-2 2a5 5 0 0 0 7.1 7l1.1-1.1" />

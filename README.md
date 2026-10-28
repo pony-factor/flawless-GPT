@@ -72,7 +72,8 @@ the repository metadata the extension should display.
 
 The **Open clipboard URL** button on New Chat opens recognized web and local
 `file:///` links in the current tab. If the clipboard does not contain a
-recognized URL, the button instead searches Google for that text.
+recognized URL, the button instead searches that text using the browser's
+configured default search engine (via the extension's search permission).
 For local files, enable **Allow access to file URLs** in Flawless ChatGPT's
 `chrome://extensions` or `brave://extensions` details. The local file opens in
 the current tab; this feature does not upload its contents.
