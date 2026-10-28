@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { validSnapshot, parseConfirmations, verifiedMerge, normalizeTasks, scopedPrompt, canAssign } = require('../js/dispatcher/core.js');
+const { validSnapshot, parseConfirmations, verifiedMerge, normalizeTasks, checklistManifest, scopedPrompt, canAssign } = require('../js/dispatcher/core.js');
 
 const sha = 'a'.repeat(40);
 const snapshot = () => ({ url: 'https://chatgpt.com/c/thread-1', known: true, composerReady: true, active: false,
@@ -49,6 +49,25 @@ test('imports preserve already-sent exclusions and reject duplicates', () => {
   assert.match(scopedPrompt({ id: 'opener-0059', prompt: 'Preserve integrity.' }, 'PDF-magic/opener', { preferCodexPony: true }), /configured Codex Pony\/Kefania publishing tool/);
 });
 
+
+test('pasted Markdown checklists exclude checked items and keep section context', () => {
+  const manifest = checklistManifest('# Tasks\n## Mnemonic generation\n- [x] Existing worker\n- [ ] Generate BIP-39 entropy\n- [ ] Derive SEP-5 keys\n## Browser UI\n1. [ ] Add mnemonic selector');
+  assert.equal(manifest.tasks.length, 3);
+  assert.deepEqual(manifest.tasks.map(task => task.task_id), ['checklist-0001', 'checklist-0002', 'checklist-0003']);
+  assert.match(manifest.tasks[0].prompt, /Mnemonic generation\nGenerate BIP-39 entropy/);
+  assert.match(manifest.tasks[2].prompt, /Browser UI\nAdd mnemonic selector/);
+  assert.deepEqual(normalizeTasks(manifest).map(task => task.status), ['pending', 'pending', 'pending']);
+});
+
+test('pasted checklists accept plain lines or bullets and reject empty work', () => {
+  assert.equal(checklistManifest('First action\nSecond action').tasks.length, 2);
+  assert.equal(checklistManifest('- First action\n* Second action').tasks.length, 2);
+  assert.throws(() => checklistManifest('- [x] Already complete'), /No incomplete/);
+  assert.throws(() => checklistManifest('   '), /Paste checklist/);
+  assert.throws(() => checklistManifest('a'.repeat(100001)), /100,000/);
+  assert.throws(() => checklistManifest('a'.repeat(5001)), /5,000/);
+  assert.equal(checklistManifest('## Context\n- [ ] Pending\nThis is not a checklist item').tasks.length, 1);
+});
 
 test('fresh startup snapshots require explicit dispatcher ownership', () => {
   const s = { url: 'https://chatgpt.com/', fresh: true, known: true, composerReady: true, active: false, queueLength: 0, submissionPending: false, signature: 'fresh', stableSince: Date.now() - 2000, observedAt: Date.now() };
