@@ -132,16 +132,22 @@ Deep Research allowance tracking for the homepage and active research composer.
 The master **Enable Deep Research allowance trackers** switch continues to disable
 both locations when turned off.
 
-The homepage has independent settings for its tracker, **Show reports remaining**,
-and **Show reset countdown**. By default the homepage tracker appears only within
-**5 days** of the next reset, as before. Change **Homepage visibility** to
-**Always show on homepage** to see the report count throughout the cycle, or
-adjust the reset window from 1 to 365 days. To show only the report count,
-enable homepage tracking and reports remaining, then disable **Show reset
-countdown**. The composer has an independent on/off switch, but shares the
-homepage's count and reset-countdown choices—even when the homepage tracker is
-hidden or outside its visibility window. Changes save automatically and update
-existing ChatGPT tabs.
+The homepage and active Deep Research composer each have independent switches for
+**Show tracker**, **Show reports remaining**, **Show reset countdown**, and
+**Show usage pie**. The composer can stay visible when the homepage tracker is
+also visible, and changing one location does not affect the other. The in-chat
+tracker only mounts while the Deep Research plugin is selected.
+
+By default the homepage tracker appears only within **5 days** of the next
+reset. Change **Homepage visibility** to **Always show on homepage** to see the
+report count throughout the cycle, or adjust the reset window from 1 to 365
+days. Full/combined quota selection and the optional allowance total are shared
+data settings. Legacy shared pie preferences carry forward until the new
+per-location switches are saved. Changes take effect in existing ChatGPT tabs.
+
+Research selection is detected through native interactions and a filtered
+DOM fallback; unrelated streaming conversation text no longer schedules
+tracker rerenders.
 
 The **Counter allowance** setting defaults to **Full research only**, using
 ChatGPT's `deep_research` quota and excluding the `deep_research_mini` lightweight
@@ -216,9 +222,16 @@ Close it with the browser’s **Close This View** control. Browsers without nati
 split support use an embedded preview; close that preview with **Close** or
 **Escape**. Websites may block embedding, so the preview also provides
 **Open in new tab**. Modifier clicks keep browser behavior.
+
+On conversation pages, **Refresh view** requests an in-place refresh through ChatGPT's existing router without reloading the document. It asks you to wait for active responses to finish and spaces manual requests at least 30 seconds apart. If the router is unavailable, it uses the conversation error screen's native retry when available and reports unsupported refreshes explicitly. Server rate limits can still prevent a conversation from loading. Missing-answer recovery retains only the final text needed for broken turns, rather than the full fetched conversation.
+
+Automatic answer recovery is capped at three saved-conversation reads for the same group of broken turns. It skips hidden and offline tabs, backs off after failures, and honors the server's `Retry-After` cooldown even across navigation or manual refresh. **Refresh view** can open a new recovery attempt window after cooldown. Research quota data updates through normal ChatGPT activity or an explicit click on the tracker; its periodic local redraw makes no automatic quota requests.
+
 The history setting hides the known conversation-history rate-limit modal, clears the page locks it
 leaves behind, and preserves native wheel and touch scrolling if stale modal
 listeners remain. Link previews load the destination in a sandboxed iframe.
+
+Recognized rate-limit and conversation-loading error panels get a pony-themed card with the existing mascot, lavender colors, and light/dark styling. Their original error messages and controls remain available. The artwork is a CSS background; it is never inserted as a message or attachment, and this styling makes no network requests to refresh the conversation.
 
 ### Browsing GitHub pages inside the sidebar
 

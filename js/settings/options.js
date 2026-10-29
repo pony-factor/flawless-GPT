@@ -79,7 +79,10 @@ const showDeepResearchHomepageInput = document.getElementById("show-deep-researc
 const showDeepResearchComposerInput = document.getElementById("show-deep-research-composer");
 const showDeepResearchHomepageCountInput = document.getElementById("show-deep-research-homepage-count");
 const showDeepResearchHomepageResetInput = document.getElementById("show-deep-research-homepage-reset");
-const showDeepResearchUsagePieInput = document.getElementById("show-deep-research-usage-pie");
+const showDeepResearchComposerCountInput = document.getElementById("show-deep-research-composer-count");
+const showDeepResearchComposerResetInput = document.getElementById("show-deep-research-composer-reset");
+const showDeepResearchHomepagePieInput = document.getElementById("show-deep-research-homepage-pie");
+const showDeepResearchComposerPieInput = document.getElementById("show-deep-research-composer-pie");
 const deepResearchUsagePieTotalInput = document.getElementById("deep-research-usage-pie-total");
 const deepResearchAllowanceModeInput = document.getElementById("deep-research-allowance-mode");
 let researchPieTotals = { full: null, all: null };
@@ -119,6 +122,7 @@ const skipExternalSiteWarningInput = document.getElementById("skip-external-site
 const dismissHistoryRateLimitModalInput = document.getElementById("dismiss-history-rate-limit-modal");
 const hideUsageCardInput = document.getElementById("hide-usage-card");
 const hideUpgradePromotionsInput = document.getElementById("hide-upgrade-promotions");
+const hideScheduledRecommendationsInput = document.getElementById("hide-scheduled-recommendations");
 const blockChatgptDesktopNotificationsInput = document.getElementById("block-chatgpt-desktop-notifications");
 const hideHomeSuggestionsInput = document.getElementById("hide-home-suggestions");
 const hideModelControlsInput = document.getElementById("hide-model-controls");
@@ -255,15 +259,20 @@ function normalizedResearchWindowDays(value) {
 function updateResearchSettingsControls() {
   const enabled = showDeepResearchTrackerInput.checked;
   const homepage = enabled && showDeepResearchHomepageInput.checked;
+  const composer = enabled && showDeepResearchComposerInput.checked;
   showDeepResearchHomepageInput.disabled = !enabled;
   showDeepResearchComposerInput.disabled = !enabled;
   showDeepResearchHomepageCountInput.disabled = !homepage;
   showDeepResearchHomepageResetInput.disabled = !homepage;
+  showDeepResearchHomepagePieInput.disabled = !homepage;
   deepResearchHomepageVisibilityInput.disabled = !homepage;
   deepResearchHomepageWindowDaysInput.disabled = !homepage;
-  showDeepResearchUsagePieInput.disabled = !enabled;
+  showDeepResearchComposerCountInput.disabled = !composer;
+  showDeepResearchComposerResetInput.disabled = !composer;
+  showDeepResearchComposerPieInput.disabled = !composer;
   deepResearchAllowanceModeInput.disabled = !enabled;
-  deepResearchUsagePieTotalInput.disabled = !enabled || !showDeepResearchUsagePieInput.checked;
+  deepResearchUsagePieTotalInput.disabled = !enabled || !(homepage && showDeepResearchHomepagePieInput.checked
+    || composer && showDeepResearchComposerPieInput.checked);
 }
 
 function normalizedOwnerGroupsPerPage(value) {
@@ -448,6 +457,10 @@ async function loadSettings() {
     showDeepResearchComposer: true,
     showDeepResearchHomepageCount: true,
     showDeepResearchHomepageReset: true,
+    showDeepResearchComposerCount: true,
+    showDeepResearchComposerReset: true,
+    showDeepResearchHomepagePie: null,
+    showDeepResearchComposerPie: null,
     showDeepResearchUsagePie: false,
     deepResearchUsagePieTotal: null,
     deepResearchUsagePieTotals: null,
@@ -466,6 +479,7 @@ async function loadSettings() {
     dismissHistoryRateLimitModal: true,
     hideUsageCard: true,
     hideUpgradePromotions: true,
+    hideScheduledRecommendations: true,
     blockChatgptDesktopNotifications: true,
     hideCookiePreferences: false,
     showChatgptDisclaimer: false,
@@ -515,7 +529,13 @@ async function loadSettings() {
   showDeepResearchComposerInput.checked = settings.showDeepResearchComposer !== false;
   showDeepResearchHomepageCountInput.checked = settings.showDeepResearchHomepageCount !== false;
   showDeepResearchHomepageResetInput.checked = settings.showDeepResearchHomepageReset !== false;
-  showDeepResearchUsagePieInput.checked = settings.showDeepResearchUsagePie === true;
+  showDeepResearchComposerCountInput.checked = settings.showDeepResearchComposerCount !== false;
+  showDeepResearchComposerResetInput.checked = settings.showDeepResearchComposerReset !== false;
+  // Preserve the previous shared pie preference until the new controls save.
+  showDeepResearchHomepagePieInput.checked = settings.showDeepResearchHomepagePie == null
+    ? settings.showDeepResearchUsagePie === true : settings.showDeepResearchHomepagePie === true;
+  showDeepResearchComposerPieInput.checked = settings.showDeepResearchComposerPie == null
+    ? settings.showDeepResearchUsagePie === true : settings.showDeepResearchComposerPie === true;
   deepResearchAllowanceModeInput.value = settings.deepResearchAllowanceMode === "all" ? "all" : "full";
   researchPieTotals = loadedResearchPieTotals(settings);
   renderSelectedResearchPieTotal();
@@ -535,6 +555,7 @@ async function loadSettings() {
   dismissHistoryRateLimitModalInput.checked = Boolean(settings.dismissHistoryRateLimitModal);
   hideUsageCardInput.checked = settings.hideUsageCard !== false;
   hideUpgradePromotionsInput.checked = Boolean(settings.hideUpgradePromotions);
+  hideScheduledRecommendationsInput.checked = settings.hideScheduledRecommendations !== false;
   blockChatgptDesktopNotificationsInput.checked = settings.blockChatgptDesktopNotifications !== false;
   hideHomeSuggestionsInput.checked = settings.hideHomeSuggestions !== false;
   hideModelControlsInput.checked = settings.hideModelControls !== false;
@@ -630,7 +651,10 @@ async function saveSettings() {
       showDeepResearchComposer: showDeepResearchComposerInput.checked,
       showDeepResearchHomepageCount: showDeepResearchHomepageCountInput.checked,
       showDeepResearchHomepageReset: showDeepResearchHomepageResetInput.checked,
-      showDeepResearchUsagePie: showDeepResearchUsagePieInput.checked,
+      showDeepResearchComposerCount: showDeepResearchComposerCountInput.checked,
+      showDeepResearchComposerReset: showDeepResearchComposerResetInput.checked,
+      showDeepResearchHomepagePie: showDeepResearchHomepagePieInput.checked,
+      showDeepResearchComposerPie: showDeepResearchComposerPieInput.checked,
       deepResearchAllowanceMode: deepResearchAllowanceModeInput.value,
       deepResearchUsagePieTotals: { ...researchPieTotals },
       deepResearchUsagePieTotal: null, // Retire the legacy shared total.
@@ -648,6 +672,7 @@ async function saveSettings() {
       dismissHistoryRateLimitModal: dismissHistoryRateLimitModalInput.checked,
       hideUsageCard: hideUsageCardInput.checked,
       hideUpgradePromotions: hideUpgradePromotionsInput.checked,
+      hideScheduledRecommendations: hideScheduledRecommendationsInput.checked,
       blockChatgptDesktopNotifications: blockChatgptDesktopNotificationsInput.checked,
       hideCookiePreferences: hideCookiePreferencesInput.checked,
       showChatgptDisclaimer: !hideChatgptDisclaimerInput.checked,

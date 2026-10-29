@@ -61,6 +61,7 @@
         "vendor/showdown.min.js",
         "vendor/purify.min.js",
         "js/chat/missing-response-recovery.js",
+        "js/chat/refresh-view.js",
         "js/sidebar/sidebar-tab-state.js",
         "js/research/deep-research-usage.js",
         "js/settings/chatgpt-personalization-api.js"
@@ -81,6 +82,8 @@
         "css/flawless-corner.css",
         "css/chat-display.css",
         "css/missing-response-recovery.css",
+        "css/refresh-view.css",
+        "css/pony-error-page.css",
         "css/worked-duration.css",
         "css/composer-colors.css",
         "css/file-drop.css",
@@ -95,6 +98,7 @@
       "js": [
         "js/core/extension-context.js",
         "js/chat/flawless-corner.js",
+        "js/chat/pony-error-page.js",
         "js/settings/web-commit-guidance-sync.js",
         "js/chat/compact-header.js",
         "js/games/2048-keyboard.js",
@@ -115,6 +119,7 @@
         "js/chat/hide-background-completion-notifications.js",
         "js/chat/hide-usage-card.js",
         "js/chat/hide-upgrade-promotions.js",
+        "js/chat/hide-scheduled-recommendations.js",
         "js/links/external-links.js",
         "js/research/research-report-host.js",
         "js/research/research-import-dialog.js",

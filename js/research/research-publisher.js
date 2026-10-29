@@ -5,22 +5,54 @@
   const documents = new WeakSet();
   const observers = new Map();
   let finalized = false;
+  let disposed = false;
+  let lookupRetryCount = 0;
+  const MAX_JOB_LOOKUP_RETRIES = 60;
   let enabled = false;
   let scheduled = false;
   let frameTimer;
   let automaticBusy = false;
   const reportCandidates = new WeakMap();
   const RELOAD_MESSAGE = 'The extension was updated. Reload this ChatGPT page to reconnect and retry the import.';
+  // Poll only during a known import or bounded job-lookup recovery.
+  function pollActiveImport(active) {
+    if (!active || finalized || disposed || !enabled) {
+      clearInterval(frameTimer);
+      frameTimer = undefined;
+    } else if (!frameTimer) {
+      frameTimer = setInterval(schedule, 1000);
+    }
+  }
   function stopMonitoring() {
-    clearInterval(frameTimer);
-    frameTimer = undefined;
+    pollActiveImport(false);
     for (const [doc, observer] of observers) {
       observer.disconnect();
-      if (finalized) doc.removeEventListener('load', schedule, true);
+      if (finalized || disposed) doc.removeEventListener('load', schedule, true);
     }
-    // A completed report must not retain references to stale sandbox documents.
-    // On pagehide without finalization, keep handles for a BFCache restoration.
-    if (finalized) observers.clear();
+    // Keep disconnected handles only for BFCache restoration.
+    if (finalized || disposed) observers.clear();
+  }
+  function dispose() {
+    if (disposed) return;
+    disposed = true;
+    stopMonitoring();
+    globalThis.chrome?.storage?.onChanged?.removeListener?.(settingsChanged);
+    window.removeEventListener('pagehide', onPageHide);
+    window.removeEventListener('pageshow', onPageShow);
+  }
+  function onPageHide(event) {
+    if (event.persisted) stopMonitoring();
+    else dispose();
+  }
+  function onPageShow(event) {
+    if (!event.persisted || finalized || disposed) return;
+    for (const [doc, observer] of observers) {
+      if (doc.documentElement) observer.observe(doc, {
+        childList: true, subtree: true, attributes: true,
+        attributeFilter: ['disabled', 'aria-busy'],
+      });
+    }
+    updateEnabled(enabled);
   }
   function finalizeReport(doc) {
     if (finalized) return;
@@ -34,13 +66,13 @@
 
   async function request(message) {
     if (!globalThis.chrome?.runtime?.sendMessage) {
-      stopMonitoring();
+      dispose();
       throw new Error(RELOAD_MESSAGE);
     }
     try { return await chrome.runtime.sendMessage(message); }
     catch (error) {
       if (/extension context invalidated/i.test(error?.message || '')) {
-        stopMonitoring();
+        dispose();
         throw new Error(RELOAD_MESSAGE);
       }
       throw error;
@@ -48,16 +80,27 @@
   }
 
   async function autoImport(doc) {
-    if (!enabled || automaticBusy || finalized) return;
+    if (!enabled || automaticBusy || finalized || disposed) return;
     const download = doc.querySelector('button[aria-label="Export"], button[aria-label="Download"]');
     const scope = download && reportScope(download);
     if (!scope || scope.querySelector('[aria-busy="true"], [role="progressbar"]') || download.disabled) return;
     automaticBusy = true;
     try {
-      const response = await request({ type: 'research-launch-job' });
-      if (!response?.ok) throw new Error(response?.error || 'Could not check automatic import. Retrying…');
+      let response;
+      try {
+        response = await request({ type: 'research-launch-job' });
+        if (!response?.ok) throw new Error(response?.error || 'Could not check automatic import. Retrying…');
+        lookupRetryCount = 0;
+      } catch (error) {
+        // Retry a temporarily unavailable background worker, but never poll
+        // without a report or after the retry budget/context is exhausted.
+        lookupRetryCount++;
+        pollActiveImport(lookupRetryCount <= MAX_JOB_LOOKUP_RETRIES && Boolean(doc.querySelector(PAGE)));
+        throw error;
+      }
       const { job } = response;
       const status = scope.querySelector('.ghrc-report-status');
+      pollActiveImport(['submitted', 'importing', 'import-retry'].includes(job?.state));
       if (job?.state === 'complete' && job.result) {
         if (status) globalThis.__ghrcResearchImportStatus(status, job.result);
         const button = scope.querySelector('.' + BUTTON);
@@ -143,7 +186,7 @@
   }
 
   function mount(doc) {
-    if (finalized || !doc.documentElement) return;
+    if (finalized || disposed || !doc.documentElement) return;
     if (!documents.has(doc.documentElement)) {
       documents.add(doc.documentElement);
       const style = doc.createElement('style');
@@ -154,9 +197,10 @@
       // Disconnect the previous monitor before attaching to the new root.
       observers.get(doc)?.disconnect();
       const observer = new MutationObserver(schedule);
-      observer.observe(doc, { childList: true, subtree: true });
+      observer.observe(doc, { childList: true, subtree: true,
+        attributes: true, attributeFilter: ['disabled', 'aria-busy'] });
+      if (!observers.has(doc)) doc.addEventListener('load', schedule, true);
       observers.set(doc, observer);
-      doc.addEventListener('load', schedule, true);
       doc.addEventListener('click', async event => {
         const link = event.target.closest?.('a[href]');
         if (!event.isTrusted || !link?.closest(PAGE) || event.button !== 0 || event.altKey) return;
@@ -232,43 +276,29 @@
   }
 
   function schedule() {
-    if (scheduled || finalized) return;
+    if (scheduled || finalized || disposed) return;
     scheduled = true;
-    setTimeout(() => { scheduled = false; if (!finalized) mount(document); }, 0);
+    setTimeout(() => { scheduled = false; if (!finalized && !disposed) mount(document); }, 0);
   }
 
   function updateEnabled(value) {
+    if (finalized || disposed) return;
     enabled = Boolean(value);
-    if (finalized) return;
-    clearInterval(frameTimer);
-    frameTimer = undefined;
-    // Only an enabled publisher needs the one-second recovery scan.
-    // Fullscreen/report links still work via the lightweight DOM listener.
-    if (enabled) frameTimer = setInterval(schedule, 1000);
+    // Job-state inspection determines whether recovery polling is needed.
+    pollActiveImport(false);
     schedule();
   }
 
   chrome.storage.local.get({ researchPublisherEnabled: false }).then((settings) => {
     updateEnabled(settings.researchPublisherEnabled);
   }).catch(() => {});
-  chrome.storage.onChanged.addListener((changes, area) => {
-    if (area !== 'local') return;
-    if (changes.researchPublisherEnabled) {
+  function settingsChanged(changes, area) {
+    if (area === 'local' && changes.researchPublisherEnabled)
       updateEnabled(changes.researchPublisherEnabled.newValue);
-      return;
-    }
-
-  });
-  // Report links and fullscreen state work even when publishing is disabled.
-  // Do not start a polling timer before the stored preference is loaded.
-  window.addEventListener('pagehide', stopMonitoring);
-  window.addEventListener('pageshow', event => {
-    if (event.persisted && !finalized) {
-      for (const [doc, observer] of observers) {
-        if (doc.documentElement) observer.observe(doc, { childList: true, subtree: true });
-      }
-      updateEnabled(enabled);
-    }
-  });
+  }
+  chrome.storage.onChanged.addListener(settingsChanged);
+  // Report links and fullscreen state work without an idle polling timer.
+  window.addEventListener('pagehide', onPageHide);
+  window.addEventListener('pageshow', onPageShow);
   schedule();
 })();
