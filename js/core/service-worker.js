@@ -608,6 +608,13 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return true;
   }
 
+  if (message?.type === "open-chat-dispatcher") {
+    chrome.tabs.create({ url: chrome.runtime.getURL("chat-dispatcher.html") })
+      .then(() => sendResponse({ ok: true }))
+      .catch(() => sendResponse({ ok: false, error: "Could not open Chat Dispatcher." }));
+    return true;
+  }
+
   if (message?.type === "open-options") {
     (async () => {
       if (message.connectGithub) {

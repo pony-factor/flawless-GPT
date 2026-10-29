@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Flawless Chat Dispatcher</title><link rel="stylesheet" href="css/chat-dispatcher.css"></head>
+<body>
+  <main>
+    <header><div><p class="eyebrow">FLAWLESS / WORKSPACE TOOLS</p><h1>Chat Dispatcher</h1><p class="subtitle">Ten chats. One task at a time. Every merge confirmed.</p></div><span id="run-status" class="pill">Paused</span></header>
+    <div id="notice" role="status" hidden></div>
+    <section class="toolbar" aria-label="Dispatcher controls"><label>Repository<input id="repository" value="PDF-magic/opener" autocomplete="off" spellcheck="false"></label><label class="file-button">Import task manifest<input id="manifest" type="file" accept=".json,application/json"></label><button id="start" class="primary">Start</button><button id="pause">Pause</button><button id="export">Export session</button></section>
+    <section class="checklist-import" aria-labelledby="checklist-heading">
+      <h2 id="checklist-heading">Paste checklist items</h2>
+      <p>Paste Markdown checkboxes, bullet items, or one task per line. Checked items are skipped. Each incomplete item becomes one task and its own PR, so group dependent changes before dispatching.</p>
+      <label for="checklist-text">Tasks to import</label>
+      <textarea id="checklist-text" rows="7" spellcheck="false" placeholder="- [ ] Implement a new feature&#10;- [x] Already completed&#10;- [ ] Add regression tests"></textarea>
+      <div class="checklist-import-actions"><button id="import-checklist">Import incomplete items</button><small>While paused, replaces the current task list. No tasks are sent until Start.</small></div>
+    </section>
+    <label class="publisher-preference"><input id="prefer-codex-pony" type="checkbox">Prefer Codex Pony for PR creation when its publishing tool is available to the chat</label>
+    <section class="stats" aria-label="Task progress"><div><strong id="merged-count">0</strong><span>Merged & verified</span></div><div><strong id="active-count">0 / 10</strong><span>Bound chat slots</span></div><div><strong id="pending-count">0</strong><span>Tasks remaining</span></div><div><strong id="review-count">0</strong><span>Need attention</span></div></section>
+    <section aria-labelledby="pool-heading"><div class="section-heading"><h2 id="pool-heading">Worker pool</h2><span>Only idle chats receive messages</span></div><div id="workers" class="workers"></div></section>
+    <section class="lower"><div><h2>Activity</h2><ol id="events" class="events"><li>No tasks have been sent.</li></ol></div><aside><h2>Before a chat advances</h2><ol class="rules"><li>No Stop, thinking, streaming, or pending submission.</li><li>The latest reply is complete and stable for 1.5 seconds.</li><li>The chat confirms the task’s PR URL and merge commit.</li><li>GitHub independently confirms that exact merge.</li></ol><p class="quiet">Existing drafts stay untouched. Closed tabs and uncertain sends stop their slot for review.</p><details><summary>GitHub connection</summary><p>Uses the GitHub connection already configured in Flawless. No companion app or terminal process is needed.</p><a href="options.html" target="_blank" rel="noopener">Manage GitHub connection</a></details><button id="reset" class="subtle">Detach pool while paused</button></aside></section>
+  </main>
+  <script src="js/dispatcher/core.js"></script>
+  <script src="js/dispatcher/dashboard.js" type="module"></script>
+</body></html>

@@ -1584,6 +1584,18 @@
     composerAutocompleteIsOpen,
     findComposerInput,
     findActionButton,
+    findNativeSend: findSendButton,
+    getDispatcherLifecycle() {
+      const composer = findComposerInput();
+      return {
+        ...lifecycleSnapshot(),
+        stateReady: stateLoaded && !routeSyncRunning && activeKey === conversationKey(),
+        queueLength: queue.length,
+        submissionPending: nativeSubmissionPending(composer) || Boolean(sendingItemId)
+          || enqueueRunning || interruptRunning || Boolean(enterPending),
+        hasContext: Boolean(composer && hasComposerContext(composer)),
+      };
+    },
   };
 
   async function enqueueComposerMessage() {

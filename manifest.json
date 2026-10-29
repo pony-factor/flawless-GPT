@@ -16,7 +16,9 @@
     "identity",
     "clipboardRead",
     "search",
-    "nativeMessaging"
+    "nativeMessaging",
+    "alarms",
+    "scripting"
   ],
   "host_permissions": [
     "https://*/*",
@@ -162,6 +164,7 @@
         "js/games/2048.js",
         "js/composer/clipboard-send.js",
         "js/composer/message-queue.js",
+        "js/composer/chat-dispatcher.js",
         "js/composer/file-drop.js",
         "js/composer/temporary-chat-inline.js",
         "js/dashboard/pinned-issues-model.js",

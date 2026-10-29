@@ -530,8 +530,6 @@
     searchShortcut,
     enableCustomRepositorySearch,
   ) {
-    if (!showRepositorySearch && !showRepositoryTotal) return;
-
     const toolbar = document.createElement("header");
     toolbar.className = showRepositorySearch
       ? "ghrc-toolbar ghrc-toolbar-with-search"
@@ -552,15 +550,31 @@
       toolbar.append(identity);
     }
 
+    const actions = document.createElement("div");
+    actions.className = "ghrc-actions";
     if (mode === "public" && showRepositoryTotal) {
-      const actions = document.createElement("div");
-      actions.className = "ghrc-actions";
       const notice = document.createElement("span");
       notice.className = "ghrc-public-notice";
       notice.textContent = "Public repositories only";
       actions.append(notice);
-      toolbar.append(actions);
     }
+    const dispatcher = document.createElement("button");
+    dispatcher.type = "button";
+    dispatcher.className = "ghrc-chat-dispatcher";
+    dispatcher.textContent = "Bulk merge";
+    dispatcher.title = "Open Chat Dispatcher in a new tab";
+    dispatcher.addEventListener("click", () => {
+      if (!context.active()) return;
+      try {
+        chrome.runtime.sendMessage({ type: "open-chat-dispatcher" }, () => {
+          void chrome.runtime.lastError;
+        });
+      } catch (error) {
+        context.handleError(error);
+      }
+    });
+    actions.append(dispatcher);
+    toolbar.append(actions);
     widget.append(toolbar);
 
     if (showRepositorySearch) {
