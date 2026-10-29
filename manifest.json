@@ -15,6 +15,7 @@
     "webNavigation",
     "identity",
     "clipboardRead",
+    "search",
     "nativeMessaging",
     "alarms",
     "scripting"
