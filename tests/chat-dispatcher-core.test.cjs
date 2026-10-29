@@ -1,11 +1,29 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { validSnapshot, parseConfirmations, verifiedMerge, normalizeTasks, checklistManifest, scopedPrompt, canAssign } = require('../js/dispatcher/core.js');
+const { validSnapshot, parseConfirmations, verifiedMerge, normalizeTasks, checklistManifest, scopedPrompt, mergeReminder, canAssign } = require('../js/dispatcher/core.js');
 
 const sha = 'a'.repeat(40);
 const snapshot = () => ({ url: 'https://chatgpt.com/c/thread-1', known: true, composerReady: true, active: false,
   queueLength: 0, submissionPending: false, latestUserAnswered: true, assistantComplete: true,
   signature: 'finished-turn', stableSince: 1000, observedAt: 2600 });
+
+test('bulk merge prompts and continuation reminders suppress redundant PR comments', () => {
+  const task = { id: 'opener-0059', prompt: 'Preserve integrity.' };
+  const worker = { taskId: task.id, pendingTaskIds: [task.id], verifiedTaskIds: [] };
+  const prompts = [
+    scopedPrompt(task, 'PDF-magic/opener'),
+    scopedPrompt(task, 'PDF-magic/opener', { preferCodexPony: true }),
+    mergeReminder(worker, 'PDF-magic/opener'),
+  ];
+  for (const prompt of prompts) {
+    assert.match(prompt, /Do not publish routine CI polling/);
+    assert.match(prompt, /branch synchronization confirmations, merge readiness/);
+    assert.match(prompt, /Report those updates only in ChatGPT/);
+    assert.match(prompt, /substantive implementation decisions/);
+    assert.match(prompt, /review existing PR comments/);
+    assert.match(prompt, /never repeat previously documented findings/);
+  }
+});
 
 test('unknown, active, incomplete, queued, stale, and unsettled chats cannot send', () => {
   assert.equal(validSnapshot(snapshot(), 2600), true);

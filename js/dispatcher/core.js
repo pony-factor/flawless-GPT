@@ -5,6 +5,12 @@ const POOL_SIZE = 10;
 const REPOSITORY = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
 const CHAT_URL = /^https:\/\/chatgpt\.com\/c\/[A-Za-z0-9-]+\/?(?:[?#].*)?$/;
 
+const GITHUB_COMMENT_POLICY = [
+  "GitHub PR comment policy: Do not publish routine CI polling, workflow progress, branch synchronization confirmations, merge readiness, or repeated status checks as PR comments. Report those updates only in ChatGPT.",
+  "Publish GitHub comments only for substantive implementation decisions, meaningful code changes requiring explanation, unresolved actionable review findings, or information needed by other contributors.",
+  "Before posting, review existing PR comments, consolidate related information, and never repeat previously documented findings.",
+].join(" ");
+
 function chatURL(value) {
   const url = String(value || '').startsWith('chatgpt.com/') ? `https://${value}` : String(value || '');
   return CHAT_URL.test(url) ? url : null;
@@ -95,6 +101,7 @@ function scopedPrompt(task, repository, { preferCodexPony = false } = {}) {
     + 'Implement this scoped task, add necessary CI coverage, and run required checks. '
     + 'This request authorizes committing and pushing this task, opening one focused PR, and squash-merging after completion and passing required checks. '
     + 'Use an emoji imperative PR title and explain what changed and why. Do not access secret-bearing files. '
+    + GITHUB_COMMENT_POLICY + ' '
     + (preferCodexPony ? 'If the configured Codex Pony/Kefania publishing tool is available in this chat, use it to create the PR as Codex Pony. Otherwise use the available authorized GitHub workflow and report which identity created the PR. Never read or copy credentials to change identities. ' : '')
     + 'Leave automatic branch deletion and checkout cleanup to the existing workflow. '
     + 'Do not finish at an open PR, a closed-unmerged PR, or passing CI alone. Verify GitHub reports merged=true. '
@@ -107,6 +114,7 @@ function mergeReminder(worker, repository) {
   return `Finish your existing ${repository} task ${worker.taskId} before taking another checklist item. `
     + `Also finish and confirm any earlier tasks assigned to this same chat that remain unverified: ${outstanding.join(', ')}. `
     + 'Complete the implementation, resolve PR conflicts safely, pass required checks, and squash-merge the PR. '
+    + GITHUB_COMMENT_POLICY + ' '
     + 'Confirm GitHub actually reports merged=true. Do not create a duplicate PR. '
     + 'Leave automatic branch deletion and checkout cleanup to the existing workflow. '
     + 'Provide a separate confirmation line for each outstanding task, using its actual task ID: '
