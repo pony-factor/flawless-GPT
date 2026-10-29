@@ -107,8 +107,6 @@
   let pending = false;
   let serverQuota = null;
   let lastRawQuota = null;
-  let refreshPending = false;
-  let lastStandaloneRefresh = 0;
   let researchAttempt = null;
   const cacheBridge = typeof globalThis.chrome?.runtime?.sendMessage === 'function';
 
@@ -478,25 +476,12 @@
   }
   // One initial cache read per tab; all later changes propagate via storage.
   void quotaMessage({ type: 'deep-research-quota-read' });
-  const automaticRefresh = async () => {
-    if (!enabled || document.visibilityState !== 'visible') return;
-    const due = !serverQuota || Date.now() - serverQuota.observedAt >= quotaRefreshInterval();
-    if (!due || refreshPending) return;
-    refreshPending = true;
-    try {
-      if (cacheBridge) {
-        const result = await quotaMessage({ type: 'deep-research-quota-refresh-claim' });
-        if (result?.refresh) window.dispatchEvent(new Event('ghrc-refresh-deep-research-usage'));
-      } else if (Date.now() - lastStandaloneRefresh >= 5 * 60_000) {
-        lastStandaloneRefresh = Date.now();
-        window.dispatchEvent(new Event('ghrc-refresh-deep-research-usage'));
-      }
-    } finally { refreshPending = false; }
-  };
+  // Redraw local time labels only; no automatic quota refresh request.
+  // Preserve the independent tracker visibility controls from main.
   const timer = setInterval(() => {
-    void automaticRefresh();
-    if (enabled && (preferences.showDeepResearchHomepage !== false
-      || preferences.showDeepResearchComposer !== false)) schedule();
+    if (document.visibilityState === 'visible' && enabled
+      && (preferences.showDeepResearchHomepage !== false
+        || preferences.showDeepResearchComposer !== false)) schedule();
   }, 30_000);
   document.addEventListener('click', watchResearchSend, true);
   document.addEventListener('submit', watchResearchSend, true);

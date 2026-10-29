@@ -94,7 +94,6 @@ jobs:
     name: Chromium queue regressions (advisory)
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -108,13 +107,20 @@ jobs:
         run: |
           echo "BROWSER_EXECUTABLE=$(node -p 'require("playwright").chromium.executablePath()')" >> "$GITHUB_ENV"
       - name: Run queue and composer browser regressions
+        id: queue_regressions
+        continue-on-error: true
         run: node --test tests/message-queue.browser.cjs tests/disable-manual-web-search.browser.cjs
+      - name: Report advisory queue regression failures
+        if: steps.queue_regressions.outcome == 'failure'
+        run: |
+          echo '::warning title=Advisory Chromium queue regressions::Browser test failures remain visible in the preceding step log.'
+          echo '### Advisory Chromium queue regressions' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Browser tests failed. Review the preceding test step before promoting this advisory suite to a required gate.' >> "$GITHUB_STEP_SUMMARY"
 
   browser-highlights:
     name: Chromium highlighted pages (advisory)
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -128,7 +134,15 @@ jobs:
         run: |
           echo "BROWSER_EXECUTABLE=$(node -p 'require("playwright").chromium.executablePath()')" >> "$GITHUB_ENV"
       - name: Run highlights and YouTube browser regressions
+        id: highlights_regressions
+        continue-on-error: true
         run: node --test tests/highlighted-pages.browser.cjs tests/youtube-search.browser.cjs
+      - name: Report advisory highlights regression failures
+        if: steps.highlights_regressions.outcome == 'failure'
+        run: |
+          echo '::warning title=Advisory Chromium highlighted pages::Browser test failures remain visible in the preceding step log.'
+          echo '### Advisory Chromium highlighted pages' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Browser tests failed. Review the preceding test step before promoting this advisory suite to a required gate.' >> "$GITHUB_STEP_SUMMARY"
 
   package:
     name: Extension packaging
