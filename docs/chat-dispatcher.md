@@ -25,6 +25,10 @@ An open PR, a closed-unmerged PR, or passing CI alone does not count as completi
 
 New prompts request a focused PR, the needed CI checks, and squash merge after completion. They leave automatic branch deletion and checkout cleanup to the existing workflow. The dispatcher verifies merges; the implementation chats perform the authorized repository changes and PR operations.
 
+## GitHub comment policy
+
+Bulk-merge task prompts and merge follow-ups tell ChatGPT to keep routine CI polling, workflow progress, branch synchronization, merge readiness, and repeated status checks in the ChatGPT conversation—not GitHub PR comments. Publish a PR comment only for a substantive implementation decision, a meaningful code change requiring explanation, an unresolved actionable review finding, or information other contributors need. Before commenting, review the existing PR discussion, consolidate related points, and do not repeat findings already documented.
+
 The optional **Prefer Codex Pony** setting asks implementation chats to use their configured Codex Pony/Kefania publishing tool. It cannot change a chat's GitHub credentials or guarantee the author identity. If that tool is unavailable, the prompt permits the authorized GitHub workflow and asks the chat to report the identity it used.
 
 An idle chat without confirmation receives at most one follow-up asking it to finish its existing task. It receives no new checklist task until its merges are verified. This follow-up goes through the same interruption checks as a normal task.
