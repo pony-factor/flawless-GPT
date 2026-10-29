@@ -15,7 +15,7 @@ before(async () => {
 });
 after(async () => { await browser?.close(); });
 
-async function fixture({ draft = '', active = false, queued = false, fail = false, delayed = false, remainBroken = false, reasoningSteps = 0, toolReasoning = false, earlierMissing = false, savedText = 'Saved answer', noMessageId = false } = {}) {
+async function fixture({ draft = '', active = false, queued = false, fail = false, retryAfter = '', delayed = false, remainBroken = false, reasoningSteps = 0, toolReasoning = false, earlierMissing = false, savedText = 'Saved answer', noMessageId = false } = {}) {
   const p = await browser.newPage();
   let loads = 0;
   let reads = 0;
@@ -33,7 +33,7 @@ async function fixture({ draft = '', active = false, queued = false, fail = fals
     if (url.pathname.startsWith('/backend-api/conversation/')) {
       reads++;
       if (delayed) await held;
-      return route.fulfill({ status: fail ? 429 : 200, json: {
+      return route.fulfill({ status: fail ? 429 : 200, headers: { 'Retry-After': retryAfter }, json: {
         current_node: 'a', mapping: {
           earlier: { id: 'earlier', parent: null, message: { author: { role: 'user' } } },
           u: { id: 'u', parent: earlierMissing ? 'earlier' : null, message: { author: { role: 'user' } } },
@@ -144,6 +144,42 @@ test('rate limits do not reload or repeatedly fetch', async () => {
   await f.p.close();
 });
 
+test('server cooldown survives manual refresh and navigation', async () => {
+  const f = await fixture({ fail: true, retryAfter: '300' });
+  await settle(f.p);
+  await f.p.clock.runFor(65_000);
+  await f.p.evaluate(() => window.dispatchEvent(new Event('ghrc:refresh-view')));
+  assert.equal(f.reads(), 1);
+  await f.p.evaluate(() => history.pushState({}, '', '/c/other'));
+  await f.p.locator('textarea').fill('Continue after navigating');
+  await f.p.clock.runFor(65_000);
+  assert.equal(f.reads(), 1, 'another chat cannot bypass a server cooldown');
+  await f.p.clock.runFor(175_000);
+  await f.p.waitForFunction(() => document.querySelector('textarea').value.length > 0);
+  await f.p.waitForTimeout(150);
+  assert.equal(f.reads(), 2, 'one retry is allowed after the server deadline');
+  await f.p.close();
+});
+
+test('background and offline tabs do not fetch recovery data', async () => {
+  for (const guard of ['hidden', 'offline']) {
+    const f = await fixture();
+    await f.p.evaluate(guard => {
+      if (guard === 'hidden') Object.defineProperty(document, 'hidden', { configurable: true, value: true });
+      else Object.defineProperty(navigator, 'onLine', { configurable: true, value: false });
+    }, guard);
+    await settle(f.p);
+    assert.equal(f.reads(), 0);
+    await f.p.evaluate(guard => {
+      if (guard === 'hidden') delete document.hidden;
+      else delete navigator.onLine;
+    }, guard);
+    await settle(f.p);
+    assert.equal(f.reads(), 1);
+    await f.p.close();
+  }
+});
+
 test('a removed recovery is restored without navigation or another request', async () => {
   const f = await fixture({ remainBroken: true });
   await settle(f.p);
@@ -207,7 +243,12 @@ test('restores full saved text safely when only the mapping node has an ID', asy
   assert.equal(await f.p.locator('[data-ghrc-recovered-answer] pre code').textContent(), 'indented code\n');
   assert.equal(await f.p.locator('[data-ghrc-recovered-answer] script').count(), 0);
   await f.p.clock.runFor(60_000);
-  assert.equal(f.reads(), 4);
+  assert.equal(f.reads(), 3, 'automatic conversation reads are capped');
+  await f.p.clock.runFor(60_000);
+  assert.equal(f.reads(), 3, 'a persistent native rendering failure cannot poll forever');
+  await f.p.evaluate(() => window.dispatchEvent(new Event('ghrc:refresh-view')));
+  await f.p.waitForTimeout(150);
+  assert.equal(f.reads(), 4, 'explicit refresh can request a fresh snapshot after cooldown');
   assert.equal(f.loads(), 1);
   assert.deepEqual(f.errors, []);
   await f.p.close();
@@ -231,7 +272,8 @@ test('idle recovery stops after fifteen minutes and wakes on a new composer edit
   // The inactivity cutoff clears the cached conversation and cancels polling.
   await f.p.locator('[data-ghrc-recovered-answer]').evaluate(node => node.remove());
   const reads = f.reads();
-  await f.p.locator('#answer').click();
+  // The empty answer placeholder has no click target after recovery is removed.
+  await f.p.locator('[data-turn-key]').click({ position: { x: 10, y: 10 } });
   await f.p.clock.runFor(8_000);
   assert.equal(await f.p.locator('[data-ghrc-recovered-answer]').count(), 0,
     'unrelated UI interactions cannot restart an idle recovery scan');

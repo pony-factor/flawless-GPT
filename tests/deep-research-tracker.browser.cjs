@@ -4,6 +4,32 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { chromium } = require('playwright');
 
+test('expired or missing quota never triggers background server refreshes', async () => {
+  const browser = await chromium.launch({ executablePath: '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser', headless: true });
+  try {
+    for (const bridge of [true, false]) {
+      const page = await browser.newPage();
+      await page.clock.install();
+      await page.setContent('<form><div id="prompt-textarea" contenteditable="true"><span data-prompt-link-href="app://connector_openai_deep_research">Research</span></div></form>');
+      await page.evaluate(bridge => {
+        window.__ghrcExtensionContext = { active: () => true, onStop() {} };
+        window.refreshRequests = 0;
+        window.claims = 0;
+        window.addEventListener('ghrc-refresh-deep-research-usage', () => window.refreshRequests++);
+        if (bridge) window.chrome = { runtime: { async sendMessage(message) {
+          if (message.type === 'deep-research-quota-refresh-claim') window.claims++;
+          return { ok: true, refresh: true, quota: { remaining: 3, observedAt: Date.now() - 9 * 3600_000, resetAt: null } };
+        } } };
+      }, bridge);
+      await page.addScriptTag({ content: fs.readFileSync(path.join(__dirname, '../js/research/deep-research-tracker.js'), 'utf8') });
+      await page.clock.runFor(120_000);
+      assert.equal(await page.evaluate(() => window.refreshRequests), 0);
+      assert.equal(await page.evaluate(() => window.claims), 0);
+      await page.close();
+    }
+  } finally { await browser.close(); }
+});
+
 test('mounts, reads native usage, excludes messages, and cleans up on extension reload', async () => {
   const browser = await chromium.launch({
     executablePath: '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser', headless: true,

@@ -1,6 +1,13 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { missingAnswer, answerForTurn, entryFor, shouldCoolDown } = require('../js/chat/missing-response-recovery.js');
+const { missingAnswer, answerForTurn, entryFor, shouldCoolDown, savedAnswers, retryDelay } = require('../js/chat/missing-response-recovery.js');
+
+test('server Retry-After supports seconds and dates with a safe minimum cooldown', () => {
+  const now = Date.parse('2026-10-27T12:00:00Z');
+  assert.equal(retryDelay('300', now), 300_000);
+  assert.equal(retryDelay('Tue, 27 Oct 2026 12:10:00 GMT', now), 600_000);
+  for (const header of [null, '', 'nonsense', '-1', '0']) assert.equal(retryDelay(header, now), 60_000);
+});
 
 const prefix = () => ({ errorMessage: null, turn: { status: 'complete', items: [
   { type: 'user-message' },
@@ -11,6 +18,18 @@ const answer = (id, parent, text = 'Saved reply') => ({ id, parent, message: {
   id, author: { role: 'assistant' }, channel: 'final', status: 'finished_successfully',
   content: { content_type: 'text', parts: [text] },
 } });
+
+test('cached recovery keeps only selected missing finals and drops large tool and attachment data', () => {
+  const nodes = [user('u1', null), answer('a1', 'u1'), user('u2', 'a1'), answer('a2', 'u2'), answer('sibling', 'u1')];
+  nodes[1].message.metadata = { toolResults: 'x'.repeat(1_000_000) };
+  nodes[1].message.content.parts.push({ attachment: 'large binary data' });
+  const payload = { current_node: 'a2', mapping: Object.fromEntries(nodes.map(n => [n.id, n])) };
+  const cache = savedAnswers(payload, ['u1', 'unknown']);
+  assert.deepEqual([...cache], [['u1', { id: 'a1', content: { parts: ['Saved reply'] } }]]);
+  nodes[1].message.content.parts[0] = 'Changed native payload';
+  assert.equal(cache.get('u1').content.parts[0], 'Saved reply');
+  assert.ok(JSON.stringify([...cache]).length < 150);
+});
 
 test('only the observed completed prefix-only state is a candidate', () => {
   assert.equal(missingAnswer(prefix()), true);
