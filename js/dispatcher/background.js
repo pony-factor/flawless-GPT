@@ -1,6 +1,6 @@
 (() => {
 "use strict";
-const { POOL_SIZE, CHAT_URL, REPOSITORY, chatURL, validSnapshot, parseConfirmations, verifiedMerge, normalizeTasks, scopedPrompt, mergeReminder, canAssign } = globalThis.__ghrcDispatcherCore;
+const { POOL_SIZE, CHAT_URL, REPOSITORY, chatURL, validSnapshot, parseConfirmations, verifiedMerge, normalizeTasks, scopedPrompt, mergeReminder, canAssign, shouldRotate } = globalThis.__ghrcDispatcherCore;
 
 const temporaryChat = url => /^https:\/\/chatgpt\.com\/c\/local-chatgpt(?:%3a|:)[A-Za-z0-9-]+(?:[?#].*)?$/i.test(url || '');
 const blank = () => ({ version: 1, paused: true, repository: 'PDF-magic/opener', tasks: [], workers: [], events: [] });
@@ -99,6 +99,73 @@ async function sendToWorker(state, worker, task, prompt) {
   return true;
 }
 
+// Rotation is reserved before opening a tab. Once its replacement ID is saved,
+ // a restarted service worker can complete the same handoff without creating
+ // another chat or dispatching a fourth task to the old conversation.
+async function finishRotation(state, worker) {
+  const rotation = worker.rotation;
+  if (!rotation?.newTabId) {
+    worker.phase = 'review';
+    worker.error = 'Chat rotation was interrupted before the replacement was recorded. Inspect open chats and rebind the slot.';
+    await save(state);
+    return false;
+  }
+  if ((await readState()).paused) {
+    worker.activity = 'Rotation paused; original chat retained';
+    await save(state);
+    return false;
+  }
+  const replacement = await chrome.tabs.get(rotation.newTabId);
+  if (replacement.url && !/^https:\/\/chatgpt\.com\/(?:[?#].*)?$/.test(replacement.url)) {
+    throw Error('Replacement tab left the new-chat page. Original chat was not closed.');
+  }
+  const original = await chrome.tabs.get(rotation.previousTabId).catch(() => null);
+  if (original) {
+    if (original.url !== rotation.previousUrl || original.pendingUrl) {
+      throw Error('Original chat navigated during rotation. It was not closed.');
+    }
+    const observed = await snapshot(rotation.previousTabId);
+    if (!validSnapshot(observed) || observed.draftPresent) {
+      worker.activity = 'Waiting for original chat to become idle before closing it';
+      await save(state);
+      return false;
+    }
+    await chrome.tabs.remove(rotation.previousTabId);
+  }
+  Object.assign(worker, {
+    tabId: rotation.newTabId, url: 'https://chatgpt.com/', title: 'New chat',
+    fresh: true, phase: 'ready', taskId: null, reminderSent: false,
+    pendingTaskIds: [], verifiedTaskIds: [], activity: 'Fresh chat ready', error: '',
+  });
+  delete worker.rotation;
+  delete worker.reservation;
+  delete worker.dispatchNonce;
+  delete worker.merge;
+  log(state, `Slot ${worker.slot}: detached and closed the previous chat after three verified jobs; opened a fresh chat.`);
+  await save(state);
+  return true;
+}
+
+async function rotateWorker(state, worker) {
+  worker.phase = 'rotating';
+  worker.activity = 'Opening a new chat after three verified jobs';
+  worker.rotation = { previousTabId: worker.tabId, previousUrl: worker.url };
+  await save(state);
+  try {
+    const replacement = await chrome.tabs.create({ url: 'https://chatgpt.com/', active: false });
+    worker.rotation.newTabId = replacement.id;
+    await save(state);
+  } catch (error) {
+    // If creating the replacement failed, leave the verified old chat intact.
+    // Do not automatically repeat a possibly successful, unrecorded creation.
+    worker.phase = 'review';
+    worker.error = 'Could not record a replacement chat. Inspect browser tabs before retrying: ' + error.message;
+    await save(state);
+    return false;
+  }
+  return finishRotation(state, worker);
+}
+
 async function githubRead(repository, suffix = '') {
   if (!REPOSITORY.test(repository)) throw Error('Invalid repository.');
   const tokens = await TokenVault.loadTokens({ refresh: true });
@@ -140,6 +207,15 @@ async function tick() {
           }
         }
       } catch { /* Keep the uncertain slot blocked until its proof is available. */ }
+    }
+    if (worker.phase === 'rotating') {
+      try { await finishRotation(state, worker); }
+      catch (error) {
+        worker.error = error.message;
+        log(state, `Slot ${worker.slot}: ${error.message}`);
+        await save(state);
+      }
+      continue;
     }
     if (['review', 'dispatching', 'opening'].includes(worker.phase)) continue;
     try {
@@ -188,7 +264,7 @@ async function tick() {
               worker.verifiedTaskIds.push(taskId);
               worker.merge = actual;
               const finished = state.tasks.find(task => task.id === taskId);
-              if (finished) { finished.status = 'merged'; finished.merge = actual; }
+              if (finished) { finished.status = 'merged'; finished.merge = actual; finished.chatUrl = worker.url; }
               log(state, `Slot ${worker.slot}: GitHub verified ${taskId} merged as PR #${actual.number}.`);
               break;
             }
@@ -208,6 +284,10 @@ async function tick() {
         }
       }
       if (canAssign(worker) && !observed.draftPresent) {
+        if (shouldRotate(state.tasks, worker)) {
+          await rotateWorker(state, worker);
+          continue;
+        }
         const next = state.tasks.find(task => task.status === 'pending');
         if (next) await sendToWorker(state, worker, next, scopedPrompt(next, state.repository, { preferCodexPony: Boolean(state.preferCodexPony) }));
         else worker.activity = 'All imported tasks assigned';
@@ -266,7 +346,7 @@ async function command(message) {
       workers.push({ slot: workers.length + 1, tabId, url: tab.url, title: tab.title, taskId, phase: 'running', reminderSent: false,
         pendingTaskIds: [...new Set([...history, taskId])], verifiedTaskIds: [] });
       const task = state.tasks.find(candidate => candidate.id === taskId);
-      if (task) task.status = 'running';
+      if (task) { task.status = 'running'; task.chatUrl = tab.url; }
     }
     state.workers = workers;
     log(state, 'Adopted ten existing chats. No prompts were sent.');
@@ -369,7 +449,10 @@ chrome.alarms.onAlarm.addListener(alarm => { if (alarm.name === 'chat-dispatcher
 chrome.tabs.onRemoved.addListener(tabId => locked(async () => {
   const state = await readState();
   const worker = state.workers.find(w => w.tabId === tabId);
+  if (worker && worker.phase === 'rotating' && worker.rotation?.previousTabId === tabId) return;
   if (worker) { worker.phase = 'review'; worker.error = 'Bound tab was closed. Rebind explicitly; no replacement tab was opened.'; await save(state); }
+  const rotating = state.workers.find(w => w.phase === 'rotating' && w.rotation?.newTabId === tabId);
+  if (rotating) { rotating.phase = 'review'; rotating.error = 'Replacement chat was closed during rotation. Inspect the original tab and rebind.'; await save(state); }
 }));
 const pauseOnStartup = () => { pauseRequested = true; pauseEpoch++; return chrome.storage.local.set({ chatDispatcherPaused: true }); };
 chrome.runtime.onStartup.addListener(pauseOnStartup);

@@ -2,6 +2,7 @@
 "use strict";
 const SETTLE_MS = 1500;
 const POOL_SIZE = 10;
+const JOBS_PER_CHAT = 3;
 const REPOSITORY = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
 const CHAT_URL = /^https:\/\/chatgpt\.com\/c\/[A-Za-z0-9-]+\/?(?:[?#].*)?$/;
 
@@ -125,7 +126,12 @@ function canAssign(worker) {
   return !worker.taskId || worker.phase === 'merged';
 }
 
-const api = { SETTLE_MS, POOL_SIZE, REPOSITORY, CHAT_URL, chatURL, validSnapshot, parseConfirmations, verifiedMerge, normalizeTasks, checklistManifest, scopedPrompt, mergeReminder, canAssign };
+function shouldRotate(tasks, worker) {
+  return worker.phase === 'merged' && tasks.filter(task =>
+    task.status === 'merged' && task.chatUrl === worker.url).length >= JOBS_PER_CHAT;
+}
+
+const api = { SETTLE_MS, POOL_SIZE, JOBS_PER_CHAT, REPOSITORY, CHAT_URL, chatURL, validSnapshot, parseConfirmations, verifiedMerge, normalizeTasks, checklistManifest, scopedPrompt, mergeReminder, canAssign, shouldRotate };
 globalThis.__ghrcDispatcherCore = api;
 if (typeof module !== "undefined") module.exports = api;
 })();

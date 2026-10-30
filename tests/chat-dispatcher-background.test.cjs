@@ -231,3 +231,97 @@ test('temporary tab URLs bind through the authoritative main frame and unique re
   assert.equal(h.state().workers[0].url, h.snapshots[0].url);
   assert.equal(h.calls.some(c => c.type === 'ghrc-chat-dispatcher:commit'), false);
 });
+
+test('the third GitHub-verified job closes only the idle old chat and opens a fresh one', async t => {
+  const h = await harness(t, { confirmed: true });
+  const original = h.state().workers[0].url;
+  h.state().tasks.unshift(
+    { id: 'prior-1', status: 'merged', chatUrl: original },
+    { id: 'prior-2', status: 'merged', chatUrl: original },
+  );
+  const created = [], removed = [];
+  h.sandbox.chrome.tabs.create = async options => { created.push(options); return { id: 101, url: options.url }; };
+  h.sandbox.chrome.tabs.remove = async id => { removed.push(id); };
+  const get = h.sandbox.chrome.tabs.get;
+  h.sandbox.chrome.tabs.get = async id => id === 101 ? { id, url: 'https://chatgpt.com/' } : get(id);
+  await h.module.tick();
+  assert.equal(h.state().tasks.find(task => task.id === 'opener-0059').status, 'merged');
+  assert.equal(h.state().tasks.find(task => task.id === 'opener-0060').status, 'pending');
+  assert.equal(created.length, 1);
+  assert.equal(created[0].url, 'https://chatgpt.com/');
+  assert.equal(created[0].active, false);
+  assert.deepEqual(removed, [1]);
+  assert.equal(h.state().workers[0].tabId, 101);
+  assert.equal(h.state().workers[0].url, 'https://chatgpt.com/');
+  assert.equal(h.state().workers[0].taskId, null);
+  assert.equal(h.state().workers[0].fresh, true);
+  assert.equal(h.state().workers[0].phase, 'ready');
+  assert.equal(h.calls.filter(c => c.type === 'ghrc-chat-dispatcher:commit').length, 0);
+  assert.equal(h.state().tasks[0].chatUrl, original, 'completed task history stays attached to its old conversation');
+});
+
+test('fewer than three merged jobs do not rotate a chat', async t => {
+  const h = await harness(t, { confirmed: true });
+  h.state().tasks.unshift({ id: 'prior-1', status: 'merged', chatUrl: h.state().workers[0].url });
+  let created = 0, removed = 0;
+  h.sandbox.chrome.tabs.create = async () => { created++; };
+  h.sandbox.chrome.tabs.remove = async () => { removed++; };
+  await h.module.tick();
+  assert.equal(created, 0);
+  assert.equal(removed, 0);
+  assert.equal(h.state().tasks.find(task => task.id === 'opener-0060').status, 'running');
+});
+
+test('interrupted rotation reuses the reserved new chat and never resends a job', async t => {
+  const h = await harness(t, { confirmed: true });
+  const original = h.state().workers[0].url;
+  h.state().tasks.unshift(
+    { id: 'prior-1', status: 'merged', chatUrl: original },
+    { id: 'prior-2', status: 'merged', chatUrl: original },
+  );
+  let creations = 0, attempts = 0;
+  h.sandbox.chrome.tabs.create = async () => { creations++; return { id: 101 }; };
+  const get = h.sandbox.chrome.tabs.get;
+  h.sandbox.chrome.tabs.get = async id => id === 101 ? { id, url: 'https://chatgpt.com/' } : get(id);
+  h.sandbox.chrome.tabs.remove = async () => { if (++attempts === 1) throw Error('Closing the tab failed'); };
+  await h.module.tick();
+  assert.equal(h.state().workers[0].phase, 'rotating');
+  assert.equal(h.state().workers[0].tabId, 1);
+  assert.equal(h.state().workers[0].rotation.newTabId, 101);
+  assert.equal(h.state().tasks.find(task => task.id === 'opener-0060').status, 'pending');
+  await h.module.tick();
+  assert.equal(creations, 1);
+  assert.equal(attempts, 2);
+  assert.equal(h.state().workers[0].phase, 'ready');
+  assert.equal(h.state().workers[0].tabId, 101);
+  assert.equal(h.calls.filter(c => c.type === 'ghrc-chat-dispatcher:commit').length, 0);
+});
+
+test('busy or drafted chats are not closed during rotation', async t => {
+  const h = await harness(t, { confirmed: true });
+  const original = h.state().workers[0].url;
+  h.state().tasks.unshift(
+    { id: 'prior-1', status: 'merged', chatUrl: original },
+    { id: 'prior-2', status: 'merged', chatUrl: original },
+  );
+  h.snapshots[0].draftPresent = true;
+  let created = 0, closed = 0;
+  h.sandbox.chrome.tabs.create = async () => { created++; return { id: 101 }; };
+  h.sandbox.chrome.tabs.remove = async () => { closed++; };
+  await h.module.tick();
+  assert.equal(created, 0);
+  assert.equal(closed, 0);
+  assert.equal(h.state().tasks.find(task => task.id === 'opener-0060').status, 'pending');
+  h.snapshots[0].draftPresent = false;
+  const get = h.sandbox.chrome.tabs.get;
+  h.sandbox.chrome.tabs.get = async id => id === 101 ? { id, url: 'https://chatgpt.com/' } : get(id);
+  const send = h.sandbox.chrome.tabs.sendMessage;
+  h.sandbox.chrome.tabs.sendMessage = async (id, msg) => {
+    if (id === 1 && msg.type === 'ghrc-chat-dispatcher:snapshot' && created) h.snapshots[0].active = true;
+    return send(id, msg);
+  };
+  await h.module.tick();
+  assert.equal(created, 1);
+  assert.equal(closed, 0);
+  assert.equal(h.state().workers[0].phase, 'rotating');
+});
