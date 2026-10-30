@@ -3,24 +3,62 @@
 const { POOL_SIZE, CHAT_URL, REPOSITORY, chatURL, validSnapshot, parseConfirmations, verifiedMerge, normalizeTasks, scopedPrompt, mergeReminder, canAssign, shouldRotate } = globalThis.__ghrcDispatcherCore;
 
 const temporaryChat = url => /^https:\/\/chatgpt\.com\/c\/local-chatgpt(?:%3a|:)[A-Za-z0-9-]+(?:[?#].*)?$/i.test(url || '');
-const blank = () => ({ version: 1, paused: true, repository: 'PDF-magic/opener', tasks: [], workers: [], events: [] });
-let serial = Promise.resolve();
-let pauseRequested = false;
-let pauseEpoch = 0;
-const locked = action => {
-  const next = serial.then(action);
-  serial = next.catch(() => {});
+const REGISTRY_KEY = 'chatDispatcherSessionIds';
+const SESSION_ID = /^(?:legacy|[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})$/i;
+const stateKey = id => id === 'legacy' ? 'chatDispatcherState' : `chatDispatcherState:${id}`;
+const pausedKey = id => id === 'legacy' ? 'chatDispatcherPaused' : `chatDispatcherPaused:${id}`;
+const blank = id => ({ id, version: 2, paused: true, repository: 'PDF-magic/opener', tasks: [], workers: [], events: [] });
+const serials = new Map();
+const pauseRequested = new Set();
+const pauseEpoch = new Map();
+let registrySerial = Promise.resolve();
+const locked = (id, action) => {
+  const next = (serials.get(id) || Promise.resolve()).then(action);
+  serials.set(id, next.catch(() => {}));
   return next;
 };
-const readState = async () => {
-  const values = await chrome.storage.local.get(['chatDispatcherState', 'chatDispatcherPaused']);
-  const state = values.chatDispatcherState || blank();
-  if (values.chatDispatcherPaused || pauseRequested) state.paused = true;
+async function sessionIds() {
+  const values = await chrome.storage.local.get([REGISTRY_KEY, 'chatDispatcherState']);
+  const ids = Array.isArray(values[REGISTRY_KEY]) ? values[REGISTRY_KEY] : [];
+  // Older single-dispatcher sessions remain accessible and are never overwritten.
+  return [...new Set([...(values.chatDispatcherState ? ['legacy'] : []), ...ids.filter(id => SESSION_ID.test(id))])];
+}
+function registerSession(id) {
+  const next = registrySerial.then(async () => {
+    const ids = await sessionIds();
+    if (!ids.includes(id)) await chrome.storage.local.set({ [REGISTRY_KEY]: [...ids, id] });
+  });
+  registrySerial = next.catch(() => {});
+  return next;
+}
+const readState = async (id = 'legacy') => {
+  const values = await chrome.storage.local.get([stateKey(id), pausedKey(id)]);
+  const state = values[stateKey(id)] || blank(id);
+  state.id = id;
+  if (values[pausedKey(id)] || pauseRequested.has(id)) state.paused = true;
   return state;
 };
-const save = state => { if (pauseRequested) state.paused = true; return chrome.storage.local.set({ chatDispatcherState: state }); };
+const save = state => {
+  if (pauseRequested.has(state.id)) state.paused = true;
+  return chrome.storage.local.set({ [stateKey(state.id)]: state });
+};
 const log = (state, text) => { state.events.unshift({ time: new Date().toISOString(), text }); state.events.length = Math.min(state.events.length, 200); };
-const dashboardSender = sender => sender.id === chrome.runtime.id && sender.url === chrome.runtime.getURL('chat-dispatcher.html');
+const dashboardSession = sender => {
+  if (sender.id !== chrome.runtime.id || !sender.url) return null;
+  const url = new URL(sender.url);
+  if (`${url.protocol}//${url.host}${url.pathname}` !== chrome.runtime.getURL('chat-dispatcher.html')) return null;
+  const id = url.searchParams.get('session') || 'legacy';
+  return SESSION_ID.test(id) ? id : null;
+};
+async function listSessions() {
+  const sessions = [];
+  for (const id of await sessionIds()) {
+    const state = await readState(id);
+    sessions.push({ id, repository: state.repository, paused: state.paused, tasks: state.tasks.length,
+      merged: state.tasks.filter(task => task.status === 'merged').length, workers: state.workers.length });
+  }
+  return sessions;
+}
 
 async function snapshot(tabId, allowFresh = false) {
   const tab = await chrome.tabs.get(tabId);
@@ -61,7 +99,7 @@ async function sendToWorker(state, worker, task, prompt) {
   }
   // Pause may have been pressed while prepare was in flight. Check persisted
   // state, not only the in-memory copy loaded at the start of this cycle.
-  const latest = await readState();
+  const latest = await readState(state.id);
   if (latest.paused) {
     state.paused = true;
     worker.phase = 'review';
@@ -110,7 +148,7 @@ async function finishRotation(state, worker) {
     await save(state);
     return false;
   }
-  if ((await readState()).paused) {
+  if ((await readState(state.id)).paused) {
     worker.activity = 'Rotation paused; original chat retained';
     await save(state);
     return false;
@@ -183,11 +221,11 @@ async function verify(confirmation) {
     mergeCommit: pr.merged === true ? pr.merge_commit_sha : null };
 }
 
-async function tick() {
-  const state = await readState();
+async function tick(id = 'legacy') {
+  const state = await readState(id);
   if (state.paused || state.workers.length !== POOL_SIZE) return;
   for (const worker of state.workers) {
-    if ((await readState()).paused) return;
+    if ((await readState(id)).paused) return;
     if (worker.phase === 'review' && worker.reservation?.kind === 'task') {
       // Recovery observes exact task merge proof only; it never retries a send.
       try {
@@ -303,9 +341,12 @@ async function tick() {
   }
 }
 
-async function command(message) {
-  const state = await readState();
+async function command(message, id = 'legacy') {
+  if (!SESSION_ID.test(id)) throw Error('Invalid dispatcher session.');
+  await registerSession(id);
+  const state = await readState(id);
   if (message.type === 'state') return { ok: true, state };
+  if (message.type === 'sessions') return { ok: true, sessions: await listSessions() };
   if (message.type === 'preferences') {
     if (!state.paused) throw Error('Pause before changing publishing preferences.');
     state.preferCodexPony = message.preferCodexPony === true;
@@ -332,6 +373,15 @@ async function command(message) {
     if (!state.paused) throw Error('Pause before changing the pool.');
     if (state.workers.length) throw Error('Reset the existing pool before rebinding.');
     if (!Array.isArray(message.tabIds) || message.tabIds.length !== POOL_SIZE || new Set(message.tabIds).size !== POOL_SIZE) throw Error('Select exactly ten different conversation tabs.');
+    // Prevent two independent dispatchers from controlling the same browser tab.
+    for (const otherId of await sessionIds()) {
+      if (otherId === id) continue;
+      const other = await readState(otherId);
+      if (other.workers.some(worker => message.tabIds.includes(worker.tabId)
+        || message.tabIds.includes(worker.rotation?.newTabId))) {
+        throw Error('A selected chat is already owned by another dispatcher.');
+      }
+    }
     const workers = [];
     for (const tabId of message.tabIds) {
       const tab = await chrome.tabs.get(tabId);
@@ -354,7 +404,7 @@ async function command(message) {
     return { ok: true };
   }
   if (message.type === 'start') {
-    if (message.pauseEpoch !== undefined && message.pauseEpoch !== pauseEpoch) throw Error('Start was canceled by Pause.');
+    if (message.pauseEpoch !== undefined && message.pauseEpoch !== (pauseEpoch.get(id) || 0)) throw Error('Start was canceled by Pause.');
     if (state.workers.some(worker => worker.phase === 'opening' || !worker.tabId)) throw Error('Pool creation was interrupted. Pause and detach the incomplete pool before starting again.');
     if (state.workers.length && state.workers.length !== POOL_SIZE) throw Error('The pool is incomplete. Pause and detach it before starting again.');
     if (!state.tasks.some(task => task.status === 'pending') && !state.workers.length) throw Error('Import checklist tasks first.');
@@ -364,16 +414,16 @@ async function command(message) {
       state.workers = Array.from({ length: POOL_SIZE }, (_, i) => ({ slot: i + 1, phase: 'opening', fresh: true }));
       await save(state);
       for (const worker of state.workers) {
-        if (message.pauseEpoch !== undefined && message.pauseEpoch !== pauseEpoch) throw Error('Start was canceled by Pause.');
+        if (message.pauseEpoch !== undefined && message.pauseEpoch !== (pauseEpoch.get(id) || 0)) throw Error('Start was canceled by Pause.');
         const tab = await chrome.tabs.create({ url: 'https://chatgpt.com/', active: false });
         Object.assign(worker, { tabId: tab.id, url: 'https://chatgpt.com/', phase: 'ready', reminderSent: false });
         await save(state);
       }
       log(state, 'Created ten fresh chats. These same chats will be reused after verified merges.');
     }
-    if (message.pauseEpoch !== undefined && message.pauseEpoch !== pauseEpoch) throw Error('Start was canceled by Pause.');
-    pauseRequested = false;
-    await chrome.storage.local.set({ chatDispatcherPaused: false });
+    if (message.pauseEpoch !== undefined && message.pauseEpoch !== (pauseEpoch.get(id) || 0)) throw Error('Start was canceled by Pause.');
+    pauseRequested.delete(id);
+    await chrome.storage.local.set({ [pausedKey(id)]: false });
     state.paused = false;
     log(state, 'Dispatching started. Busy chats are observation-only.');
     await save(state);
@@ -423,42 +473,82 @@ async function command(message) {
   throw Error('Unsupported command.');
 }
 
+// Independent session queues allow overlapping manifests and background work.
+async function tickAll(tabId = null) {
+  const ids = await sessionIds();
+  await Promise.all(ids.map(id => locked(id, async () => {
+    if (tabId !== null) {
+      const state = await readState(id);
+      if (!state.workers.some(worker => worker.tabId === tabId
+        || worker.rotation?.newTabId === tabId)) return;
+    }
+    await tick(id);
+  })));
+}
+
 chrome.runtime.onMessage.addListener((message, sender, respond) => {
   if (message?.type === 'ghrc-chat-dispatcher:wake' && sender.id === chrome.runtime.id && sender.tab && CHAT_URL.test(sender.url || '')) {
-    locked(tick).catch(() => {});
+    tickAll(sender.tab.id).catch(() => {});
     respond({ ok: true });
     return;
   }
-  if (!dashboardSender(sender) || !message?.type?.startsWith('ghrc-chat-dispatcher:')) return;
+  const id = dashboardSession(sender);
+  if (!id || !message?.type?.startsWith('ghrc-chat-dispatcher:')) return;
+  if ((message.sessionId || 'legacy') !== id) {
+    respond({ ok: false, error: 'Dispatcher session does not match its dashboard.' });
+    return;
+  }
   message = { ...message, type: message.type.slice('ghrc-chat-dispatcher:'.length) };
-  // Pause is immediate, even while a send's two-phase preparation is in flight.
-  if (message?.type === 'pause') {
-    pauseRequested = true;
-    pauseEpoch++;
-    chrome.storage.local.set({ chatDispatcherPaused: true }).then(() => respond({ ok: true }), error => respond({ ok: false, error: error.message }));
+  // Pause bypasses the worker lock and applies only to this session.
+  if (message.type === 'pause') {
+    pauseRequested.add(id);
+    pauseEpoch.set(id, (pauseEpoch.get(id) || 0) + 1);
+    chrome.storage.local.set({ [pausedKey(id)]: true })
+      .then(() => respond({ ok: true }), error => respond({ ok: false, error: error.message }));
     return true;
   }
-  if (message?.type === 'start') message = { ...message, pauseEpoch };
-  locked(() => command(message)).then(result => {
+  if (message.type === 'start') message = { ...message, pauseEpoch: pauseEpoch.get(id) || 0 };
+  locked(id, () => command(message, id)).then(result => {
     respond(result);
-    if (message.type === 'start') locked(tick).catch(() => {});
+    if (message.type === 'start') locked(id, () => tick(id)).catch(() => {});
   }, error => respond({ ok: false, error: error.message }));
   return true;
 });
-chrome.alarms.onAlarm.addListener(alarm => { if (alarm.name === 'chat-dispatcher') locked(tick).catch(() => {}); });
-chrome.tabs.onRemoved.addListener(tabId => locked(async () => {
-  const state = await readState();
-  const worker = state.workers.find(w => w.tabId === tabId);
-  if (worker && worker.phase === 'rotating' && worker.rotation?.previousTabId === tabId) return;
-  if (worker) { worker.phase = 'review'; worker.error = 'Bound tab was closed. Rebind explicitly; no replacement tab was opened.'; await save(state); }
-  const rotating = state.workers.find(w => w.phase === 'rotating' && w.rotation?.newTabId === tabId);
-  if (rotating) { rotating.phase = 'review'; rotating.error = 'Replacement chat was closed during rotation. Inspect the original tab and rebind.'; await save(state); }
-}));
-const pauseOnStartup = () => { pauseRequested = true; pauseEpoch++; return chrome.storage.local.set({ chatDispatcherPaused: true }); };
+chrome.alarms.onAlarm.addListener(alarm => {
+  if (alarm.name === 'chat-dispatcher') tickAll().catch(() => {});
+});
+chrome.tabs.onRemoved.addListener(tabId => {
+  sessionIds().then(ids => Promise.all(ids.map(id => locked(id, async () => {
+    const state = await readState(id);
+    const worker = state.workers.find(w => w.tabId === tabId);
+    if (worker && worker.phase === 'rotating' && worker.rotation?.previousTabId === tabId) return;
+    if (worker) {
+      worker.phase = 'review';
+      worker.error = 'Bound tab was closed. Rebind explicitly; no replacement tab was opened.';
+      await save(state);
+    }
+    const rotating = state.workers.find(w => w.phase === 'rotating' && w.rotation?.newTabId === tabId);
+    if (rotating) {
+      rotating.phase = 'review';
+      rotating.error = 'Replacement chat was closed during rotation. Inspect the original tab and rebind.';
+      await save(state);
+    }
+  })))).catch(() => {});
+});
+const pauseOnStartup = async () => {
+  const ids = await sessionIds();
+  for (const id of ids) {
+    pauseRequested.add(id);
+    pauseEpoch.set(id, (pauseEpoch.get(id) || 0) + 1);
+  }
+  await chrome.storage.local.set(Object.fromEntries(ids.map(id => [pausedKey(id), true])));
+};
 chrome.runtime.onStartup.addListener(pauseOnStartup);
 chrome.runtime.onInstalled.addListener(pauseOnStartup);
 chrome.alarms.create('chat-dispatcher', { periodInMinutes: 0.5 }).catch(() => console.error('Could not schedule the dispatcher alarm.'));
 
-if (globalThis.__GHRC_DISPATCHER_TEST__) Object.assign(globalThis.__GHRC_DISPATCHER_TEST__, { tick, command, sendToWorker });
+if (globalThis.__GHRC_DISPATCHER_TEST__) Object.assign(globalThis.__GHRC_DISPATCHER_TEST__, {
+  tick, tickAll, command, sendToWorker, sessionIds, readState, listSessions,
+});
 
 })();

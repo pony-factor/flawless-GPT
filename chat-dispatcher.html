@@ -4,6 +4,11 @@
 <body>
   <main>
     <header><div><p class="eyebrow">FLAWLESS / WORKSPACE TOOLS</p><h1>Chat Dispatcher</h1><p class="subtitle">Ten worker slots. Three verified jobs per chat, then a fresh conversation.</p></div><span id="run-status" class="pill">Paused</span></header>
+    <section class="dispatcher-sessions" aria-label="Independent dispatchers">
+      <div><strong id="session-name">New dispatcher</strong><p>Each dispatcher has its own manifest, ten chat slots, and pause controls.</p></div>
+      <a class="new-dispatcher" href="chat-dispatcher.html" target="_blank" rel="noopener">Open another dispatcher</a>
+      <details><summary>Other dispatcher sessions</summary><div id="session-list" class="session-list"></div></details>
+    </section>
     <div id="notice" role="status" hidden></div>
     <section class="toolbar" aria-label="Dispatcher controls"><label>Repository<input id="repository" value="PDF-magic/opener" autocomplete="off" spellcheck="false"></label><label class="file-button">Import task manifest<input id="manifest" type="file" accept=".json,application/json"></label><button id="start" class="primary">Start</button><button id="pause">Pause</button><button id="export">Export session</button></section>
     <section class="checklist-import" aria-labelledby="checklist-heading">
