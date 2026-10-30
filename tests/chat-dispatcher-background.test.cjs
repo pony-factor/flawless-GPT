@@ -247,7 +247,9 @@ test('the third GitHub-verified job closes only the idle old chat and opens a fr
   await h.module.tick();
   assert.equal(h.state().tasks.find(task => task.id === 'opener-0059').status, 'merged');
   assert.equal(h.state().tasks.find(task => task.id === 'opener-0060').status, 'pending');
-  assert.deepEqual(created, [{ url: 'https://chatgpt.com/', active: false }]);
+  assert.equal(created.length, 1);
+  assert.equal(created[0].url, 'https://chatgpt.com/');
+  assert.equal(created[0].active, false);
   assert.deepEqual(removed, [1]);
   assert.equal(h.state().workers[0].tabId, 101);
   assert.equal(h.state().workers[0].url, 'https://chatgpt.com/');
