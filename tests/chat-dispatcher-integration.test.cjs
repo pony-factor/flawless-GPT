@@ -41,3 +41,14 @@ test('integrated worker uses existing GitHub access and has no companion depende
   assert.match(adapter, /getDispatcherLifecycle/);
   assert.doesNotMatch(adapter, /\.enqueueText\(|\.sendClipboardText\(|\.stop\.click\(/);
 });
+
+test('dispatcher dashboard exposes independent session navigation', () => {
+  const script = fs.readFileSync(path.join(root, 'js/dispatcher/dashboard.js'), 'utf8');
+  const page = fs.readFileSync(path.join(root, 'chat-dispatcher.html'), 'utf8');
+  assert.match(script, /sessionId/);
+  assert.match(script, /history\.replaceState/);
+  assert.match(script, /type: 'sessions'/);
+  assert.match(page, /id="session-name"/);
+  assert.match(page, /id="session-list"/);
+  assert.match(page, /Open another dispatcher/);
+});

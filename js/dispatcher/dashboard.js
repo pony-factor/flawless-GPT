@@ -1,11 +1,20 @@
 const connected = Boolean(globalThis.chrome?.runtime?.id);
 const $ = id => document.getElementById(id);
+const pageUrl = new URL(location.href);
+const suppliedId = pageUrl.searchParams.get('session');
+const sessionId = /^(?:legacy|[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})$/i.test(suppliedId || '')
+  ? suppliedId : crypto.randomUUID();
+if (suppliedId !== sessionId) {
+  pageUrl.searchParams.set('session', sessionId);
+  history.replaceState(null, '', pageUrl);
+}
 let state = { paused: true, tasks: [], workers: [], events: [] };
+let sessions = [];
 const el = (tag, text, className) => { const node = document.createElement(tag); if (text !== undefined) node.textContent = text; if (className) node.className = className; return node; };
 const notice = text => { $('notice').textContent = text; $('notice').hidden = !text; };
 async function request(message) {
   if (!connected) throw Error('Preview only. Open this dashboard from Flawless to connect your chats.');
-  const response = await chrome.runtime.sendMessage({ ...message, type: `ghrc-chat-dispatcher:${message.type}` });
+  const response = await chrome.runtime.sendMessage({ ...message, sessionId, type: `ghrc-chat-dispatcher:${message.type}` });
   if (!response?.ok) throw Error(response?.error || 'The dispatcher did not respond.');
   return response;
 }
@@ -29,6 +38,17 @@ setInterval(refreshEventTimes, 30000);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshEventTimes(); });
 
 function render() {
+  $('session-name').textContent = sessionId === 'legacy' ? 'Previous dispatcher' : `Dispatcher ${sessionId.slice(0, 8)}`;
+  $('session-list').replaceChildren();
+  for (const session of sessions) {
+    if (session.id === sessionId) continue;
+    const link = el('a', `${session.repository} · ${session.paused ? 'Paused' : 'Running'} · ${session.merged}/${session.tasks} merged`);
+    link.href = `chat-dispatcher.html?session=${encodeURIComponent(session.id)}`;
+    link.target = '_blank';
+    link.rel = 'noopener';
+    $('session-list').append(link);
+  }
+  if (!sessions.some(session => session.id !== sessionId)) $('session-list').append(el('span', 'No other dispatcher sessions yet.'));
   $('run-status').textContent = state.paused ? 'Paused' : 'Running';
   $('run-status').classList.toggle('live', !state.paused);
   $('repository').value = state.repository || 'PDF-magic/opener';
@@ -79,7 +99,10 @@ function render() {
 }
 
 async function refresh() {
-  if (connected) state = (await request({ type: 'state' })).state;
+  if (connected) {
+    state = (await request({ type: 'state' })).state;
+    sessions = (await request({ type: 'sessions' })).sessions;
+  }
   render();
 }
 
@@ -114,8 +137,13 @@ $('export').addEventListener('click', () => {
 if (connected) {
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== 'local') return;
-    if (changes.chatDispatcherState) { state = changes.chatDispatcherState.newValue; render(); }
-    if (changes.chatDispatcherPaused) refresh().catch(error => notice(error.message));
+    const currentKey = sessionId === 'legacy' ? 'chatDispatcherState' : `chatDispatcherState:${sessionId}`;
+    const currentPauseKey = sessionId === 'legacy' ? 'chatDispatcherPaused' : `chatDispatcherPaused:${sessionId}`;
+    if (changes[currentKey]) { state = changes[currentKey].newValue; render(); }
+    if (changes[currentPauseKey] || changes.chatDispatcherSessionIds || Object.keys(changes).some(key =>
+      key.startsWith('chatDispatcherState:') || key === 'chatDispatcherState')) {
+      refresh().catch(error => notice(error.message));
+    }
   });
 } else {
   notice('Open the dispatcher from Flawless ChatGPT to bind chats and run it.');
