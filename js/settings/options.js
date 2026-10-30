@@ -60,6 +60,7 @@ searchShortcutResetButton.addEventListener("click", () => {
 });
 const enableCustomRepositorySearchInput = document.getElementById("enable-custom-repository-search");
 const showRepositoryTotalInput = document.getElementById("show-repository-total");
+const showBulkMergeButtonInput = document.getElementById("show-bulk-merge-button");
 const showWootenLinkSearchInput = document.getElementById("show-wooten-link-search");
 const showYoutubeSearchInput = document.getElementById("show-youtube-search");
 const pinnedRepositoryList = document.getElementById("pinned-repositories");
@@ -439,6 +440,7 @@ async function loadSettings() {
     repositorySearchShortcut: searchShortcutUtils.DEFAULT,
     enableCustomRepositorySearch: false,
     showRepositoryTotal: true,
+    showBulkMergeButton: true,
     showWootenLinkSearch: false,
     showYoutubeSearch: true,
     pinnedRepositories: [],
@@ -512,6 +514,7 @@ async function loadSettings() {
   renderRepositorySearchShortcut();
   enableCustomRepositorySearchInput.checked = Boolean(settings.enableCustomRepositorySearch);
   showRepositoryTotalInput.checked = Boolean(settings.showRepositoryTotal);
+  showBulkMergeButtonInput.checked = settings.showBulkMergeButton !== false;
   showWootenLinkSearchInput.checked = Boolean(settings.showWootenLinkSearch);
   showYoutubeSearchInput.checked = settings.showYoutubeSearch !== false;
   hideDictationButtonInput.checked = Boolean(settings.hideDictationButton);
@@ -633,6 +636,7 @@ async function saveSettings() {
       repositorySearchShortcut: searchShortcutUtils.normalize(repositorySearchShortcut),
       enableCustomRepositorySearch: enableCustomRepositorySearchInput.checked,
       showRepositoryTotal: showRepositoryTotalInput.checked,
+      showBulkMergeButton: showBulkMergeButtonInput.checked,
       showWootenLinkSearch: showWootenLinkSearchInput.checked,
       showYoutubeSearch: showYoutubeSearchInput.checked,
       pinnedRepositories: pinnedRepositoriesFromList(),

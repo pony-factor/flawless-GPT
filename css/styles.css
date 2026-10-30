@@ -116,6 +116,25 @@ html.dark #github-repositories-for-chatgpt {
   padding: 6px 10px;
 }
 
+#github-repositories-for-chatgpt .ghrc-chat-dispatcher {
+  align-items: center;
+  display: inline-flex;
+  height: 32px;
+  justify-content: center;
+  padding: 5px;
+  width: 32px;
+}
+
+#github-repositories-for-chatgpt .ghrc-sort-icon {
+  fill: none;
+  height: 18px;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+  width: 18px;
+}
+
 #github-repositories-for-chatgpt .ghrc-chat-dispatcher:hover,
 #github-repositories-for-chatgpt .ghrc-wooten-link-submit:hover,
 #github-repositories-for-chatgpt .ghrc-state button:hover,
