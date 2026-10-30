@@ -356,7 +356,7 @@ test('independent dispatchers retain separate task manifests and preferences', a
   assert.equal(Boolean(b.preferCodexPony), false);
   assert.equal(h.state().tasks[0].id, 'opener-0059', 'legacy progress remains intact');
   const sessions = await h.module.listSessions();
-  assert.deepEqual(sessions.map(s => s.id), ['legacy', SESSION_A, SESSION_B]);
+  assert.deepEqual(Array.from(sessions, s => s.id), ['legacy', SESSION_A, SESSION_B]);
 });
 
 test('two dispatchers can start their own ten-chat pools without cross-session changes', async t => {

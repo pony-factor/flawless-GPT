@@ -345,10 +345,7 @@ async function command(message, id = 'legacy') {
   if (!SESSION_ID.test(id)) throw Error('Invalid dispatcher session.');
   await registerSession(id);
   const state = await readState(id);
-  if (message.type === 'state') {
-    await save(state);
-    return { ok: true, state };
-  }
+  if (message.type === 'state') return { ok: true, state };
   if (message.type === 'sessions') return { ok: true, sessions: await listSessions() };
   if (message.type === 'preferences') {
     if (!state.paused) throw Error('Pause before changing publishing preferences.');
