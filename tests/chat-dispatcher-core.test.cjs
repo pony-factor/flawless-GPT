@@ -92,3 +92,20 @@ test('fresh startup snapshots require explicit dispatcher ownership', () => {
   assert.equal(validSnapshot(s), false);
   assert.equal(validSnapshot(s, Date.now(), true), true);
 });
+
+test('three verified jobs in one conversation require a fresh worker chat', () => {
+  const { JOBS_PER_CHAT, shouldRotate } = require('../js/dispatcher/core.js');
+  assert.equal(JOBS_PER_CHAT, 3);
+  const worker = { phase: 'merged', url: 'https://chatgpt.com/c/one' };
+  const tasks = [
+    { id: 'a', status: 'merged', chatUrl: worker.url },
+    { id: 'b', status: 'merged', chatUrl: worker.url },
+    { id: 'c', status: 'pending', chatUrl: worker.url },
+    { id: 'd', status: 'merged', chatUrl: 'https://chatgpt.com/c/other' },
+  ];
+  assert.equal(shouldRotate(tasks, worker), false);
+  tasks[2].status = 'merged';
+  assert.equal(shouldRotate(tasks, worker), true);
+  assert.equal(shouldRotate(tasks, { ...worker, phase: 'awaiting-merge' }), false);
+  assert.equal(shouldRotate(tasks, { ...worker, url: 'https://chatgpt.com/c/new' }), false);
+});
