@@ -264,7 +264,7 @@ async function tick() {
               worker.verifiedTaskIds.push(taskId);
               worker.merge = actual;
               const finished = state.tasks.find(task => task.id === taskId);
-              if (finished) { finished.status = 'merged'; finished.merge = actual; }
+              if (finished) { finished.status = 'merged'; finished.merge = actual; finished.chatUrl = worker.url; }
               log(state, `Slot ${worker.slot}: GitHub verified ${taskId} merged as PR #${actual.number}.`);
               break;
             }
@@ -346,7 +346,7 @@ async function command(message) {
       workers.push({ slot: workers.length + 1, tabId, url: tab.url, title: tab.title, taskId, phase: 'running', reminderSent: false,
         pendingTaskIds: [...new Set([...history, taskId])], verifiedTaskIds: [] });
       const task = state.tasks.find(candidate => candidate.id === taskId);
-      if (task) task.status = 'running';
+      if (task) { task.status = 'running'; task.chatUrl = tab.url; }
     }
     state.workers = workers;
     log(state, 'Adopted ten existing chats. No prompts were sent.');
