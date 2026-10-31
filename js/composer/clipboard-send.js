@@ -16,6 +16,21 @@
     return globalThis.__ghrcMessageQueue?.findComposerInput() || null;
   }
 
+  // Stay scoped to the active composer; ChatGPT may show other plus buttons
+  // in menus, sidebars, and inline editors.
+  function findComposerPlusButton(composer) {
+    const host = composer?.closest?.("form") || composer?.closest?.('[data-type="unified-composer"]');
+    return host?.querySelector([
+      'button[data-testid="composer-plus-btn"]',
+      'button[data-testid="composer-plus-button"]',
+      'button[data-testid="composer-attachment-button"]',
+      'button[aria-label="Add files and more" i]',
+      'button[aria-label^="Add photos" i]',
+      'button[aria-label^="Add files" i]',
+      'button[aria-label^="Attach files" i]',
+    ].join(", ")) || null;
+  }
+
   function isNewChatPage() {
     return window.location.pathname === "/";
   }
@@ -176,9 +191,19 @@
   async function openClipboardUrl(button) {
     setButtonBusy(button, true);
     try {
-      const url = parseClipboardUrl(await readClipboardText());
+      const clipboardText = (await readClipboardText()).trim();
+      if (!clipboardText) {
+        setButtonMessage(button, "Clipboard has no text to open or search");
+        return;
+      }
+      const url = parseClipboardUrl(clipboardText);
       if (!url) {
-        setButtonMessage(button, "Clipboard does not contain a valid URL");
+        // Delegate to the extension worker so the browser's configured
+        // search engine is used instead of hard-coding a provider.
+        const result = await chrome.runtime.sendMessage({
+          type: "search-clipboard-text", text: clipboardText,
+        });
+        if (!result?.ok) setButtonMessage(button, result?.error || "Clipboard search could not be opened");
         return;
       }
 
@@ -241,8 +266,8 @@
     const button = document.createElement("button");
     button.id = URL_BUTTON_ID;
     button.type = "button";
-    button.title = "Open clipboard URL in this tab";
-    button.setAttribute("aria-label", "Open clipboard URL in this tab");
+    button.title = "Open clipboard URL or search with your default engine";
+    button.setAttribute("aria-label", "Open clipboard URL or search with your default engine");
     button.innerHTML = `
       <svg viewBox="0 0 24 24" aria-hidden="true">
         <path d="M10 13a5 5 0 0 0 7.1 0l2-2a5 5 0 0 0-7.1-7l-1.1 1.1M14 11a5 5 0 0 0-7.1 0l-2 2a5 5 0 0 0 7.1 7l1.1-1.1" />
@@ -298,8 +323,13 @@
     if (isNewChatPage()) {
       if (!urlButton) urlButton = createUrlButton();
       const launcher = document.getElementById("ghrc-spellcheck-gpt-launcher");
-      const urlAnchor = launcher?.parentElement ? launcher : anchor;
-      urlButton.toggleAttribute("data-ghrc-beside-spellcheck", Boolean(launcher?.parentElement));
+      const plus = window.matchMedia?.("(max-width: 700px)")?.matches
+        ? findComposerPlusButton(composer) : null;
+      const urlAnchor = plus
+        ? (launcher?.parentElement === plus.parentElement ? launcher : plus)
+        : (launcher?.parentElement ? launcher : anchor);
+      urlButton.toggleAttribute("data-ghrc-inline-before-plus", Boolean(plus));
+      urlButton.toggleAttribute("data-ghrc-beside-spellcheck", !plus && Boolean(launcher?.parentElement));
       if (urlButton.parentElement !== urlAnchor.parentElement || urlButton.nextElementSibling !== urlAnchor) {
         urlAnchor.before(urlButton);
       }
@@ -345,8 +375,11 @@
   });
 
   const observer = new MutationObserver(scheduleMount);
+  const narrowViewport = window.matchMedia?.("(max-width: 700px)");
+  narrowViewport?.addEventListener("change", scheduleMount);
   window.addEventListener(ROUTE_CHANGE_EVENT, scheduleMount);
   context.onStop(() => {
+    narrowViewport?.removeEventListener("change", scheduleMount);
     window.removeEventListener(ROUTE_CHANGE_EVENT, scheduleMount);
     observer.disconnect();
     removeButton();

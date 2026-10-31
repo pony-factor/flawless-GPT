@@ -1,0 +1,160 @@
+name: Flawless quality gates
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  syntax:
+    name: JavaScript syntax
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Parse tracked JavaScript and CommonJS files
+        run: |
+          git ls-files -z '*.js' '*.cjs' | xargs -0 -r -n 1 node --check
+
+  manifest:
+    name: Manifest integrity
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Verify packaged resource references
+        run: node tests/ci/validate-extension.cjs
+
+  node-unit:
+    name: Node unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ["22", "24"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - name: Install test dependencies
+        run: npm install --no-save --package-lock=false playwright@1.56.1 jsdom@26.1.0
+      - name: Run complete Node unit suite
+        run: node --test tests/*.test.cjs
+
+  python-native:
+    name: Python native host
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Compile native Python sources
+        run: python -m compileall -q native
+      - name: Test native host and report publisher
+        run: python -m unittest discover -s tests -p '*_test.py' -v
+
+  browser-startup:
+    name: Chromium extension startup
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install Playwright Chromium
+        run: |
+          npm install --no-save --package-lock=false playwright@1.56.1
+          npx playwright install --with-deps chromium
+      - name: Select CI Chromium executable
+        run: |
+          echo "BROWSER_EXECUTABLE=$(node -p 'require("playwright").chromium.executablePath()')" >> "$GITHUB_ENV"
+      - name: Run startup browser regressions
+        run: node --test tests/compact-startup.browser.cjs tests/dashboard-startup.browser.cjs
+
+  browser-queue:
+    name: Chromium queue regressions (advisory)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install Playwright Chromium
+        run: |
+          npm install --no-save --package-lock=false playwright@1.56.1
+          npx playwright install --with-deps chromium
+      - name: Select CI Chromium executable
+        run: |
+          echo "BROWSER_EXECUTABLE=$(node -p 'require("playwright").chromium.executablePath()')" >> "$GITHUB_ENV"
+      - name: Run queue and composer browser regressions
+        id: queue_regressions
+        continue-on-error: true
+        run: node --test tests/message-queue.browser.cjs tests/disable-manual-web-search.browser.cjs
+      - name: Report advisory queue regression failures
+        if: steps.queue_regressions.outcome == 'failure'
+        run: |
+          echo '::warning title=Advisory Chromium queue regressions::Browser test failures remain visible in the preceding step log.'
+          echo '### Advisory Chromium queue regressions' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Browser tests failed. Review the preceding test step before promoting this advisory suite to a required gate.' >> "$GITHUB_STEP_SUMMARY"
+
+  browser-highlights:
+    name: Chromium highlighted pages (advisory)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install Playwright Chromium
+        run: |
+          npm install --no-save --package-lock=false playwright@1.56.1
+          npx playwright install --with-deps chromium
+      - name: Select CI Chromium executable
+        run: |
+          echo "BROWSER_EXECUTABLE=$(node -p 'require("playwright").chromium.executablePath()')" >> "$GITHUB_ENV"
+      - name: Run highlights and YouTube browser regressions
+        id: highlights_regressions
+        continue-on-error: true
+        run: node --test tests/highlighted-pages.browser.cjs tests/youtube-search.browser.cjs
+      - name: Report advisory highlights regression failures
+        if: steps.highlights_regressions.outcome == 'failure'
+        run: |
+          echo '::warning title=Advisory Chromium highlighted pages::Browser test failures remain visible in the preceding step log.'
+          echo '### Advisory Chromium highlighted pages' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Browser tests failed. Review the preceding test step before promoting this advisory suite to a required gate.' >> "$GITHUB_STEP_SUMMARY"
+
+  package:
+    name: Extension packaging
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and validate extension ZIP
+        run: python3 tests/ci/package-extension.py
+      - name: Upload extension archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: flawless-extension
+          path: dist/flawless-extension.zip
+          if-no-files-found: error

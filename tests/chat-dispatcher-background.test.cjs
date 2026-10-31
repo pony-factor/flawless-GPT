@@ -11,6 +11,7 @@ async function harness(t, { confirmed = false, merged = true, busy = false, afte
   const calls = [];
   let handler;
   let pausedFlag = false;
+  const sessionStorage = {};
   let state = { version: 1, paused: false, repository: 'PDF-magic/opener', events: [],
     tasks: [{ id: 'opener-0059', prompt: 'Old task', status: 'running' }, { id: 'opener-0060', prompt: 'Next task', status: 'pending' }],
     workers: Array.from({ length: 10 }, (_, slot) => ({ slot: slot + 1, tabId: slot + 1, url: `https://chatgpt.com/c/thread-${slot + 1}`, taskId: slot === 0 ? 'opener-0059' : `other-${slot}`, phase: slot === 0 ? phase : 'running', reminderSent: false })),
@@ -21,9 +22,15 @@ async function harness(t, { confirmed = false, merged = true, busy = false, afte
     reply: confirmed ? `MERGE_CONFIRMED opener-0059 https://github.com/PDF-magic/opener/pull/27 ${sha}` : 'PR is open.' }));
   const event = { addListener() {} };
   sandbox.chrome = {
-    storage: { local: { get: async () => ({ chatDispatcherState: structuredClone(state), chatDispatcherPaused: pausedFlag }), set: async value => {
-      if (value.chatDispatcherState) state = structuredClone(value.chatDispatcherState);
-      if ('chatDispatcherPaused' in value) pausedFlag = value.chatDispatcherPaused;
+    storage: { local: { get: async keys => {
+      const values = { ...sessionStorage, chatDispatcherState: structuredClone(state), chatDispatcherPaused: pausedFlag };
+      return Object.fromEntries(keys.map(key => [key, values[key]]));
+    }, set: async values => {
+      if (values.chatDispatcherState) state = structuredClone(values.chatDispatcherState);
+      if ('chatDispatcherPaused' in values) pausedFlag = values.chatDispatcherPaused;
+      for (const [key, value] of Object.entries(values)) {
+        if (!['chatDispatcherState', 'chatDispatcherPaused'].includes(key)) sessionStorage[key] = structuredClone(value);
+      }
     } } },
     runtime: { id: 'test', getURL: path => `chrome-extension://test/${path}`, onMessage: { addListener: fn => { handler = fn; } }, onStartup: event, onInstalled: event },
     scripting: { executeScript: async () => {} },
@@ -43,7 +50,8 @@ async function harness(t, { confirmed = false, merged = true, busy = false, afte
   vm.createContext(sandbox);
   for (const file of ['../js/dispatcher/core.js', '../js/dispatcher/background.js'])
     vm.runInContext(readFileSync(path.join(__dirname, file), 'utf8'), sandbox);
-  return { module: sandbox.__GHRC_DISPATCHER_TEST__, calls, snapshots, state: () => state, handler: () => handler, sandbox };
+  return { module: sandbox.__GHRC_DISPATCHER_TEST__, calls, snapshots, state: () => state, handler: () => handler,
+    sessionStorage, sandbox };
 
 }
 
@@ -230,4 +238,185 @@ test('temporary tab URLs bind through the authoritative main frame and unique re
   assert.equal(h.state().workers[0].phase, 'running');
   assert.equal(h.state().workers[0].url, h.snapshots[0].url);
   assert.equal(h.calls.some(c => c.type === 'ghrc-chat-dispatcher:commit'), false);
+});
+
+test('the third GitHub-verified job closes only the idle old chat and opens a fresh one', async t => {
+  const h = await harness(t, { confirmed: true });
+  const original = h.state().workers[0].url;
+  h.state().tasks.unshift(
+    { id: 'prior-1', status: 'merged', chatUrl: original },
+    { id: 'prior-2', status: 'merged', chatUrl: original },
+  );
+  const created = [], removed = [];
+  h.sandbox.chrome.tabs.create = async options => { created.push(options); return { id: 101, url: options.url }; };
+  h.sandbox.chrome.tabs.remove = async id => { removed.push(id); };
+  const get = h.sandbox.chrome.tabs.get;
+  h.sandbox.chrome.tabs.get = async id => id === 101 ? { id, url: 'https://chatgpt.com/' } : get(id);
+  await h.module.tick();
+  assert.equal(h.state().tasks.find(task => task.id === 'opener-0059').status, 'merged');
+  assert.equal(h.state().tasks.find(task => task.id === 'opener-0060').status, 'pending');
+  assert.equal(created.length, 1);
+  assert.equal(created[0].url, 'https://chatgpt.com/');
+  assert.equal(created[0].active, false);
+  assert.deepEqual(removed, [1]);
+  assert.equal(h.state().workers[0].tabId, 101);
+  assert.equal(h.state().workers[0].url, 'https://chatgpt.com/');
+  assert.equal(h.state().workers[0].taskId, null);
+  assert.equal(h.state().workers[0].fresh, true);
+  assert.equal(h.state().workers[0].phase, 'ready');
+  assert.equal(h.calls.filter(c => c.type === 'ghrc-chat-dispatcher:commit').length, 0);
+  assert.equal(h.state().tasks[0].chatUrl, original, 'completed task history stays attached to its old conversation');
+});
+
+test('fewer than three merged jobs do not rotate a chat', async t => {
+  const h = await harness(t, { confirmed: true });
+  h.state().tasks.unshift({ id: 'prior-1', status: 'merged', chatUrl: h.state().workers[0].url });
+  let created = 0, removed = 0;
+  h.sandbox.chrome.tabs.create = async () => { created++; };
+  h.sandbox.chrome.tabs.remove = async () => { removed++; };
+  await h.module.tick();
+  assert.equal(created, 0);
+  assert.equal(removed, 0);
+  assert.equal(h.state().tasks.find(task => task.id === 'opener-0060').status, 'running');
+});
+
+test('interrupted rotation reuses the reserved new chat and never resends a job', async t => {
+  const h = await harness(t, { confirmed: true });
+  const original = h.state().workers[0].url;
+  h.state().tasks.unshift(
+    { id: 'prior-1', status: 'merged', chatUrl: original },
+    { id: 'prior-2', status: 'merged', chatUrl: original },
+  );
+  let creations = 0, attempts = 0;
+  h.sandbox.chrome.tabs.create = async () => { creations++; return { id: 101 }; };
+  const get = h.sandbox.chrome.tabs.get;
+  h.sandbox.chrome.tabs.get = async id => id === 101 ? { id, url: 'https://chatgpt.com/' } : get(id);
+  h.sandbox.chrome.tabs.remove = async () => { if (++attempts === 1) throw Error('Closing the tab failed'); };
+  await h.module.tick();
+  assert.equal(h.state().workers[0].phase, 'rotating');
+  assert.equal(h.state().workers[0].tabId, 1);
+  assert.equal(h.state().workers[0].rotation.newTabId, 101);
+  assert.equal(h.state().tasks.find(task => task.id === 'opener-0060').status, 'pending');
+  await h.module.tick();
+  assert.equal(creations, 1);
+  assert.equal(attempts, 2);
+  assert.equal(h.state().workers[0].phase, 'ready');
+  assert.equal(h.state().workers[0].tabId, 101);
+  assert.equal(h.calls.filter(c => c.type === 'ghrc-chat-dispatcher:commit').length, 0);
+});
+
+test('busy or drafted chats are not closed during rotation', async t => {
+  const h = await harness(t, { confirmed: true });
+  const original = h.state().workers[0].url;
+  h.state().tasks.unshift(
+    { id: 'prior-1', status: 'merged', chatUrl: original },
+    { id: 'prior-2', status: 'merged', chatUrl: original },
+  );
+  h.snapshots[0].draftPresent = true;
+  let created = 0, closed = 0;
+  h.sandbox.chrome.tabs.create = async () => { created++; return { id: 101 }; };
+  h.sandbox.chrome.tabs.remove = async () => { closed++; };
+  await h.module.tick();
+  assert.equal(created, 0);
+  assert.equal(closed, 0);
+  assert.equal(h.state().tasks.find(task => task.id === 'opener-0060').status, 'pending');
+  h.snapshots[0].draftPresent = false;
+  const get = h.sandbox.chrome.tabs.get;
+  h.sandbox.chrome.tabs.get = async id => id === 101 ? { id, url: 'https://chatgpt.com/' } : get(id);
+  const send = h.sandbox.chrome.tabs.sendMessage;
+  h.sandbox.chrome.tabs.sendMessage = async (id, msg) => {
+    if (id === 1 && msg.type === 'ghrc-chat-dispatcher:snapshot' && created) h.snapshots[0].active = true;
+    return send(id, msg);
+  };
+  await h.module.tick();
+  assert.equal(created, 1);
+  assert.equal(closed, 0);
+  assert.equal(h.state().workers[0].phase, 'rotating');
+});
+
+const SESSION_A = '11111111-1111-4111-8111-111111111111';
+const SESSION_B = '22222222-2222-4222-8222-222222222222';
+
+test('independent dispatchers retain separate task manifests and preferences', async t => {
+  const h = await harness(t);
+  await h.module.command({ type: 'import', repository: 'PDF-magic/opener',
+    manifest: [{ id: 'one', prompt: 'First manifest' }] }, SESSION_A);
+  await h.module.command({ type: 'import', repository: 'pony-factor/flawless-GPT',
+    manifest: [{ id: 'two', prompt: 'Second manifest' }] }, SESSION_B);
+  await h.module.command({ type: 'preferences', preferCodexPony: true }, SESSION_A);
+  const a = (await h.module.command({ type: 'state' }, SESSION_A)).state;
+  const b = (await h.module.command({ type: 'state' }, SESSION_B)).state;
+  assert.equal(a.id, SESSION_A);
+  assert.equal(b.id, SESSION_B);
+  assert.equal(a.repository, 'PDF-magic/opener');
+  assert.equal(b.repository, 'pony-factor/flawless-GPT');
+  assert.deepEqual(a.tasks.map(t => t.id), ['one']);
+  assert.deepEqual(b.tasks.map(t => t.id), ['two']);
+  assert.equal(a.preferCodexPony, true);
+  assert.equal(Boolean(b.preferCodexPony), false);
+  assert.equal(h.state().tasks[0].id, 'opener-0059', 'legacy progress remains intact');
+  const sessions = await h.module.listSessions();
+  assert.deepEqual(Array.from(sessions, s => s.id), ['legacy', SESSION_A, SESSION_B]);
+});
+
+test('two dispatchers can start their own ten-chat pools without cross-session changes', async t => {
+  const h = await harness(t);
+  for (const [id, name] of [[SESSION_A, 'one'], [SESSION_B, 'two']]) {
+    await h.module.command({ type: 'import', repository: 'PDF-magic/opener',
+      manifest: [{ id: name, prompt: 'Independent task' }] }, id);
+  }
+  let nextTab = 100;
+  h.sandbox.chrome.tabs.create = async options => ({ id: ++nextTab, url: options.url });
+  await h.module.command({ type: 'start' }, SESSION_A);
+  await h.module.command({ type: 'start' }, SESSION_B);
+  const first = (await h.module.command({ type: 'state' }, SESSION_A)).state;
+  const second = (await h.module.command({ type: 'state' }, SESSION_B)).state;
+  assert.equal(first.workers.length, 10);
+  assert.equal(second.workers.length, 10);
+  assert.equal(new Set([...first.workers.map(w => w.tabId), ...second.workers.map(w => w.tabId)]).size, 20);
+  assert.equal(first.tasks[0].id, 'one');
+  assert.equal(second.tasks[0].id, 'two');
+  assert.equal(h.state().workers[0].tabId, 1, 'legacy pool must be unchanged');
+});
+
+test('pausing a dashboard leaves the other dispatcher running', async t => {
+  const h = await harness(t);
+  for (const id of [SESSION_A, SESSION_B]) {
+    await h.module.command({ type: 'import', repository: 'PDF-magic/opener',
+      manifest: [{ id: 'job', prompt: 'Run me' }] }, id);
+  }
+  h.sessionStorage['chatDispatcherState:' + SESSION_A].paused = false;
+  h.sessionStorage['chatDispatcherState:' + SESSION_B].paused = false;
+  let pauseResponse;
+  h.handler()({ type: 'ghrc-chat-dispatcher:pause', sessionId: SESSION_A },
+    { id: 'test', url: 'chrome-extension://test/chat-dispatcher.html?session=' + SESSION_A },
+    value => { pauseResponse = value; });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(pauseResponse.ok, true);
+  assert.equal((await h.module.command({ type: 'state' }, SESSION_A)).state.paused, true);
+  assert.equal((await h.module.command({ type: 'state' }, SESSION_B)).state.paused, false);
+  assert.equal(h.sessionStorage['chatDispatcherPaused:' + SESSION_B], undefined);
+});
+
+test('a dashboard cannot impersonate another dispatcher session', async t => {
+  const h = await harness(t);
+  let reply;
+  h.handler()({ type: 'ghrc-chat-dispatcher:pause', sessionId: SESSION_B },
+    { id: 'test', url: 'chrome-extension://test/chat-dispatcher.html?session=' + SESSION_A },
+    value => { reply = value; });
+  assert.match(reply.error, /does not match/);
+  assert.equal(h.sessionStorage['chatDispatcherPaused:' + SESSION_B], undefined);
+});
+
+test('binding rejects chats already managed by another dispatcher', async t => {
+  const h = await harness(t);
+  await h.module.command({ type: 'state' }, SESSION_A);
+  await assert.rejects(h.module.command({ type: 'bind', tabIds: Array.from({ length: 10 }, (_, i) => i + 1) }, SESSION_A),
+    /already owned by another dispatcher/);
+  assert.equal((await h.module.command({ type: 'state' }, SESSION_A)).state.workers.length, 0);
+});
+
+test('session IDs reject unexpected values', async t => {
+  const h = await harness(t);
+  await assert.rejects(h.module.command({ type: 'state' }, '../other'), /Invalid dispatcher session/);
 });

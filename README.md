@@ -70,7 +70,10 @@ added, removed, or reordered at any time. Existing single-token settings are
 migrated automatically. Use a fine-grained token with read-only access to only
 the repository metadata the extension should display.
 
-The **Open clipboard URL** button on New Chat also supports local `file:///` links.
+The **Open clipboard URL** button on New Chat opens recognized web and local
+`file:///` links in the current tab. If the clipboard does not contain a
+recognized URL, the button instead searches that text using the browser's
+configured default search engine (via the extension's search permission).
 For local files, enable **Allow access to file URLs** in Flawless ChatGPT's
 `chrome://extensions` or `brave://extensions` details. The local file opens in
 the current tab; this feature does not upload its contents.
@@ -222,9 +225,16 @@ Close it with the browser’s **Close This View** control. Browsers without nati
 split support use an embedded preview; close that preview with **Close** or
 **Escape**. Websites may block embedding, so the preview also provides
 **Open in new tab**. Modifier clicks keep browser behavior.
+
+On conversation pages, **Refresh view** requests an in-place refresh through ChatGPT's existing router without reloading the document. It asks you to wait for active responses to finish and spaces manual requests at least 30 seconds apart. If the router is unavailable, it uses the conversation error screen's native retry when available and reports unsupported refreshes explicitly. Server rate limits can still prevent a conversation from loading. Missing-answer recovery retains only the final text needed for broken turns, rather than the full fetched conversation.
+
+Automatic answer recovery is capped at three saved-conversation reads for the same group of broken turns. It skips hidden and offline tabs, backs off after failures, and honors the server's `Retry-After` cooldown even across navigation or manual refresh. **Refresh view** can open a new recovery attempt window after cooldown. Research quota data updates through normal ChatGPT activity or an explicit click on the tracker; its periodic local redraw makes no automatic quota requests.
+
 The history setting hides the known conversation-history rate-limit modal, clears the page locks it
 leaves behind, and preserves native wheel and touch scrolling if stale modal
 listeners remain. Link previews load the destination in a sandboxed iframe.
+
+Recognized rate-limit and conversation-loading error panels get a pony-themed card with the existing mascot, lavender colors, and light/dark styling. Their original error messages and controls remain available. The artwork is a CSS background; it is never inserted as a message or attachment, and this styling makes no network requests to refresh the conversation.
 
 ### Browsing GitHub pages inside the sidebar
 
@@ -403,4 +413,4 @@ including calls made by imported scripts. Tests refer directly to feature paths.
 
 ## Chat dispatcher
 
-The popup and full settings include **ChatGPT → Open chat dispatcher**. Start opens ten fresh chats and reuses that pool, sends only after stable completion, and requires GitHub-verified merge confirmations before advancing a slot. It uses Flawless's existing GitHub connection and runs inside the extension without a separate app or terminal process. See the [dispatcher guide](docs/chat-dispatcher.md) for Start/Pause and migration from the Studio prototype.
+The popup and full settings include **ChatGPT → Open chat dispatcher**. This feature reuses ten existing chats, sends only after stable completion, and requires GitHub-verified merge confirmations before advancing a slot. It uses Flawless's existing GitHub connection and runs inside the extension without a separate app or terminal process. See the [dispatcher guide](docs/chat-dispatcher.md) for adoption, Start/Pause, and migration from the Studio prototype.

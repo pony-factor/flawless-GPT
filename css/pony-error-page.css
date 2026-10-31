@@ -1,0 +1,45 @@
+/* Decoration stays in CSS, outside message content and attachment detection. */
+[data-ghrc-pony-error] {
+  box-sizing: border-box;
+  max-width: min(440px, calc(100vw - 32px));
+  margin-inline: auto;
+  padding: 158px 24px 24px !important;
+  border: 1px solid #bba4e6 !important;
+  border-radius: 24px !important;
+  background-color: #f8f3ff !important;
+  background-image: url("../artwork/squeaky-belle-full.webp"), radial-gradient(ellipse at top, #e9dcff, transparent 75%) !important;
+  background-repeat: no-repeat !important;
+  background-position: center 24px, center !important;
+  background-size: 136px auto, cover !important;
+  color: #473665 !important;
+  box-shadow: 0 12px 40px #76519b1a;
+  text-align: center;
+  flex-direction: column;
+  gap: 12px;
+}
+[data-ghrc-pony-error]::after {
+  content: "A little breather, then back to the magic.";
+  display: block;
+  margin-top: 12px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #70598d;
+}
+[data-ghrc-pony-error] :is(button, a[href]) {
+  border-radius: 12px !important;
+  border-color: #a88bcf !important;
+}
+[data-ghrc-pony-error] :is(button, a[href]):focus-visible {
+  outline: 2px solid #8152b6;
+  outline-offset: 4px;
+}
+html.dark [data-ghrc-pony-error] {
+  background-color: #241d32 !important;
+  background-image: url("../artwork/squeaky-belle-full.webp"), radial-gradient(ellipse at top, #49345f, transparent 75%) !important;
+  border-color: #81619f !important;
+  color: #eee2ff !important;
+}
+html.dark [data-ghrc-pony-error]::after { color: #c8b2e0; }
+@media (prefers-contrast: more) {
+  [data-ghrc-pony-error] { border-width: 2px !important; }
+}

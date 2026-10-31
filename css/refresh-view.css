@@ -1,0 +1,5 @@
+#ghrc-refresh-view { position: fixed; right: 16px; bottom: 16px; z-index: 60; max-width: 240px; text-align: right; font: 12px/1.4 system-ui, sans-serif; }
+#ghrc-refresh-view[hidden] { display: none; }
+#ghrc-refresh-view button { padding: 6px 10px; border: 1px solid color-mix(in srgb, currentColor 20%, transparent); border-radius: 8px; color: inherit; background: var(--main-surface-primary, Canvas); cursor: pointer; }
+#ghrc-refresh-view button:disabled { opacity: .6; cursor: wait; }
+#ghrc-refresh-view [role="status"]:not(:empty) { margin-top: 6px; padding: 8px; border-radius: 8px; background: var(--main-surface-primary, Canvas); }
