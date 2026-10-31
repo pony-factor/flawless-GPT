@@ -21,7 +21,7 @@ test("cached dashboard controls and highlights mount before the host page finish
     }
     entry.matches = ["http://127.0.0.1/*"];
   }
-  for (const file of ["artwork/calligraphy-initials.png", "artwork/spellcheck-only.png"]) {
+  for (const file of ["artwork/calligraphy-initials.png", "artwork/spellcheck-only.jpg"]) {
     fs.mkdirSync(path.dirname(path.join(extension, file)), { recursive: true });
     fs.copyFileSync(path.join(root, file), path.join(extension, file));
   }

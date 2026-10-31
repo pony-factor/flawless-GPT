@@ -6,7 +6,7 @@
   const ENABLED_KEY = "showSpellcheckGptLauncher";
   const LEGACY_ICON_KEY = "spellcheckGptCanonicalIcon";
   const PLUGIN_NAME = "Spellcheck Only";
-  const ICON_PATH = "artwork/spellcheck-only.png";
+  const ICON_PATH = "artwork/spellcheck-only.jpg";
   const MENTION_RETRY_MS = 100;
   const MENTION_TIMEOUT_MS = 5_000;
   const SUBMIT_RETRY_MS = 100;

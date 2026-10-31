@@ -203,12 +203,12 @@
     {
       "resources": [
         "link-preview.html",
-        "artwork/spellcheck-only.png",
+        "artwork/spellcheck-only.jpg",
         "artwork/calligraphy-initials.png",
         "artwork/research-telescope.png",
-        "artwork/squeaky-belle-full.webp",
-        "artwork/squeaky-belle-full.gif",
-        "artwork/searching-complete.png"
+        "artwork/SB-icon.webp",
+        "artwork/SB-icon.gif",
+        "artwork/thinking-cannon.png"
       ],
       "matches": [
         "https://chatgpt.com/*"

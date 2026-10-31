@@ -63,8 +63,8 @@
       const image = document.createElement("img");
       image.alt = "";
       image.draggable = false;
-      const stillSource = chrome.runtime.getURL("artwork/squeaky-belle-full.webp");
-      const animatedSource = chrome.runtime.getURL("artwork/squeaky-belle-full.gif");
+      const stillSource = chrome.runtime.getURL("artwork/SB-icon.webp");
+      const animatedSource = chrome.runtime.getURL("artwork/SB-icon.gif");
       image.src = stillSource;
       // Warm the GIF cache so the first hover does not flash an empty image.
       const animatedPreload = new Image();

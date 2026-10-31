@@ -228,3 +228,12 @@ test('spellcheck launcher shows artwork without a CSS border or shadow ring', ()
   assert.match(css, /#ghrc-spellcheck-gpt-launcher\s*\{[^}]*border:\s*0;/s);
   assert.match(css, /#ghrc-spellcheck-gpt-launcher\s*\{[^}]*box-shadow:\s*none;/s);
 });
+
+test('Spellcheck Only artwork references the bundled JPG', () => {
+  const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, '../manifest.json'), 'utf8'));
+  const asset = 'artwork/spellcheck-only.jpg';
+  assert.ok(fs.existsSync(path.join(__dirname, '..', asset)));
+  assert.match(source, /const ICON_PATH = "artwork\/spellcheck-only\.jpg";/);
+  assert.ok(manifest.web_accessible_resources.some(entry => entry.resources?.includes(asset)));
+  assert.ok(!manifest.web_accessible_resources.some(entry => entry.resources?.includes('artwork/spellcheck-only.png')));
+});
