@@ -420,3 +420,52 @@ test('session IDs reject unexpected values', async t => {
   const h = await harness(t);
   await assert.rejects(h.module.command({ type: 'state' }, '../other'), /Invalid dispatcher session/);
 });
+
+
+test('integrated GitHub connection reads only scoped merge metadata', async t => {
+  const h = await harness(t, { confirmed: true });
+  const reads = [];
+  h.sandbox.fetchGitHub = async (url, token) => {
+    reads.push({ url, token });
+    return { number: 27, state: 'closed', merged: true, merge_commit_sha: sha,
+      html_url: 'https://github.com/PDF-magic/opener/pull/27',
+      base: { repo: { full_name: 'PDF-magic/opener' } } };
+  };
+  await h.module.tick();
+  assert.deepEqual(reads, [{
+    url: 'https://api.github.com/repos/PDF-magic/opener/pulls/27',
+    token: 'fixture-only',
+  }], 'merge verification should only read the selected PR through Flawless GitHub access');
+  assert.equal(h.state().tasks[0].status, 'merged');
+  assert.equal(h.state().tasks[1].status, 'running');
+});
+
+test('unpaired pages and invalid GitHub inputs cannot control dispatch', async t => {
+  const h = await harness(t, { confirmed: true });
+  const message = { type: 'ghrc-chat-dispatcher:import', repository: 'other/repo',
+    manifest: [{ id: 'injected', prompt: 'Unauthorized task' }] };
+  for (const sender of [
+    { id: 'test', tab: { id: 1 }, url: 'https://chatgpt.com/c/thread-1' },
+    { id: 'test', url: 'https://untrusted.example/chat-dispatcher.html' },
+    { id: 'unrelated', url: 'chrome-extension://unrelated/chat-dispatcher.html' },
+  ]) {
+    let responded = false;
+    h.handler()(message, sender, () => { responded = true; });
+    assert.equal(responded, false, 'an unpaired sender must not receive dispatcher authority');
+  }
+  assert.equal(h.state().tasks.length, 2);
+
+  h.sandbox.fetchGitHub = async () => ({ number: 27, state: 'closed', merged: true,
+    merge_commit_sha: sha, html_url: 'https://github.com/other/repo/pull/27',
+    base: { repo: { full_name: 'other/repo' } } });
+  await h.module.tick();
+  assert.equal(h.state().tasks[1].status, 'pending', 'a PR from another repository cannot release a slot');
+
+  h.state().paused = true;
+  await assert.rejects(h.module.command({ type: 'import',
+    repository: 'PDF-magic/opener; echo unsafe', manifest: [{ id: 'new', prompt: 'No' }] }),
+  /Enter owner\/repository/);
+  const forged = 'MERGE_CONFIRMED opener-0059 https://github.com/PDF-magic/opener/pull/27;echo ' + sha;
+  assert.equal(h.sandbox.__ghrcDispatcherCore.parseConfirmations(
+    forged, 'PDF-magic/opener', 'opener-0059').length, 0);
+});
