@@ -42,7 +42,7 @@ Spellcheck Only launcher artwork by Kiriya, from the [source image](https://derp
 
 Work-duration cannon artwork by Cerberus (`@fcolumnare`), from the
 [original artwork post](https://x.com/fcolumnare/status/1952740544443998252).
-The bundled `artwork/searching-complete.png` is an AI-assisted transparent cutout
+The bundled `artwork/thinking-cannon.png` is an AI-assisted transparent cutout
 of the cannon, with obscured portions reconstructed, from `love-weapon.jpg`:
 https://github.com/JFWooten4/JFWooten4/blob/main/headshots/final-form/love-weapon.jpg
 Original artwork credits:

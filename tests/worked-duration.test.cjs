@@ -117,7 +117,7 @@ test("completed worked-for timing becomes cannon minutes while preserving its fu
   assert.equal(f.element.getAttribute("title"), "Worked for 8m 41s");
   assert.equal(f.element.textContent, "Worked for 8m 41s");
   assert.equal(f.element.hasAttribute("data-ghrc-worked-duration"), true);
-  assert.equal(f.element.style.getPropertyValue("--ghrc-worked-artwork"), 'url("chrome-extension://fixture/artwork/searching-complete.png")');
+  assert.equal(f.element.style.getPropertyValue("--ghrc-worked-artwork"), 'url("chrome-extension://fixture/artwork/thinking-cannon.png")');
   f.update("Worked for 10m 5s");
   assert.equal(f.element.getAttribute("data-ghrc-worked-minutes"), "10m");
   assert.equal(f.element.getAttribute("title"), "Worked for 10m 5s");
