@@ -36,6 +36,12 @@ When the imported manifest identifies earlier tasks sent to an adopted conversat
 
 The local verifier binds only to `127.0.0.1:8794`, accepts only the paired extension origin, and only queries the repository passed on its command line. It cannot execute prompts, change GitHub data, or merge a PR itself.
 
+## Migrated test coverage
+
+All 27 historical Studio test cases are covered by active Flawless dispatcher tests under the root `tests/chat-dispatcher-*.test.cjs` files. Twenty-four cases retain their original test names. The three standalone localhost-verifier cases have equivalent active integration tests for Flawless's scoped GitHub read access, dashboard authorization, and preview safety. A root test checks the historical-to-active case mapping so future changes cannot silently leave archival coverage behind.
+
+The archive's 27 tests remain unchanged for reference; Flawless CI exercises their migrated counterparts against the integrated implementation rather than running the obsolete local companion.
+
 ## Development
 
 Run `npm install` followed by `npm test`. Runtime code uses browser APIs and Node's standard library. Tests cover completion races, draft preservation, native Stop/Send replacement, uncertain sends, merge confirmation matching, verifier origin restrictions, and recovery behavior.
