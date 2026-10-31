@@ -1,5 +1,16 @@
-html[data-ghrc-hide-share-label] [data-ghrc-share-label] {
-  display: none !important;
+/* Hide the Share label without replacing React-owned text nodes. */
+html[data-ghrc-hide-share-label] [data-ghrc-share-button],
+html[data-ghrc-hide-share-label] [data-ghrc-share-button] :not(svg):not(svg *) {
+  font-size: 0 !important;
+}
+
+html[data-ghrc-hide-share-label] [data-ghrc-share-button] {
+  gap: 0 !important;
+}
+
+/* Keep icons sized in em units visible when the button's text is zero-sized. */
+html[data-ghrc-hide-share-label] [data-ghrc-share-button] svg {
+  font-size: 1rem !important;
 }
 
 /* Apply the default before asynchronous preferences and React hydration. */
