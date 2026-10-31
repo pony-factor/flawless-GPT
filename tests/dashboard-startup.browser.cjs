@@ -36,6 +36,7 @@ test("cached dashboard controls and highlights mount before the host page finish
       if (message.type === "load-repositories") reply({ok:true,mode:"public",ownerOrder:["octo"],repositories:[{name:"example",fullName:"octo/example",url:"https://github.com/octo/example",pushedAt:new Date().toISOString(),owner:{login:"octo",type:"User",displayName:"Octo",avatarUrl:""}}]});
       else {
         if (message.type === "open-wooten-link") globalThis.wootenSearchUrl = message.url;
+        if (message.type === "open-chat-dispatcher") globalThis.openedDispatcher = true;
         reply({ok:true});
       }
     });
@@ -83,6 +84,19 @@ test("cached dashboard controls and highlights mount before the host page finish
     assert.equal(state.styled, "flex");
     assert.ok(state.imageHeight > 0 && state.imageHeight < 50);
     assert.equal(state.launcher, true);
+    const bulkMerge = page.locator(".ghrc-chat-dispatcher");
+    assert.equal(await bulkMerge.count(), 1, "bulk merge stays enabled for existing users");
+    assert.equal(await bulkMerge.getAttribute("aria-label"), "Bulk merge");
+    assert.equal(await bulkMerge.getAttribute("title"), "Open Chat Dispatcher in a new tab");
+    assert.equal(await bulkMerge.locator("svg.ghrc-sort-icon path").count(), 5);
+    assert.equal(await bulkMerge.innerText(), "", "button is icon-only");
+    await bulkMerge.click();
+    assert.equal(await worker.evaluate(() => globalThis.openedDispatcher), true);
+    await worker.evaluate(() => chrome.storage.local.set({ showBulkMergeButton: false }));
+    await bulkMerge.waitFor({ state: "detached" });
+    assert.equal(await bulkMerge.count(), 0, "hiding the shortcut does not remove the dashboard");
+    await worker.evaluate(() => chrome.storage.local.set({ showBulkMergeButton: true }));
+    await bulkMerge.waitFor({ state: "visible" });
     const iconSubmit = page.locator(".ghrc-wooten-link-mark-submit");
     const wootenInput = page.locator(".ghrc-wooten-link-search input");
     assert.equal(await iconSubmit.getAttribute("type"), "submit");
