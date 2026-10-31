@@ -17,7 +17,7 @@ The pasted checklist is **not** sent immediately. Import replaces the currently 
 The dispatcher requires all of the following:
 
 - The latest assistant reply is complete and unchanged for at least 1.5 seconds.
-- No Stop, thinking, streaming, pending submission, existing queue entry, attachment, quote, or user draft is present.
+- No Stop, thinking, streaming, pending submission, existing queue entry, attachment, or selected context is present. Text drafts are protected by default; the paused-only **Replace existing text drafts** option permits replacing them with the dispatch prompt.
 - The current task has a `MERGE_CONFIRMED` line naming its task ID, PR URL, and full merge commit SHA.
 - GitHub independently reports that same repository, PR number, merged state, and merge SHA.
 
@@ -39,7 +39,9 @@ The content adapter reuses Flawless's composer selection, native Send lookup, an
 
 Each send first reserves a particular tab, conversation, reply, and prompt. It checks completion before writing and again immediately before clicking the genuine native Send node. Activity resuming, a route change, a changed draft, or Send becoming Stop aborts the operation. Unsent text is preserved for review.
 
-Reservations are saved before changing the composer. A crash or an unconfirmed submission blocks that slot instead of retrying a potentially successful send. In Work layouts that omit user prompts, each reply echoes a unique dispatch receipt before the slot is bound. An uncertain task can also recover automatically from its exact GitHub-verified merge proof, without replaying the prompt. While paused, review the chat and select the matching confirmation action in its card. Existing drafts are never automatically erased.
+Reservations are saved before changing the composer. A crash or an unconfirmed submission blocks that slot instead of retrying a potentially successful send. In Work layouts that omit user prompts, each reply echoes a unique dispatch receipt before the slot is bound. An uncertain task can also recover automatically from its exact GitHub-verified merge proof, without replaying the prompt. While paused, review the chat and select the matching confirmation action in its card. Existing drafts are never erased by default.
+
+To reuse a ChatGPT window with pre-filled text, pause that dispatcher and enable **Replace existing text drafts in worker ChatGPT windows**. This is an opt-in setting scoped to that dispatcher session, and the next permitted task or merge follow-up replaces the text rather than appending it. The original text is intentionally discarded, so copy anything you want to keep before enabling the option. Attachments, quoted or selected context, queued messages, active replies, and uncertain submissions remain protected. Draft replacement does not allow closing a drafted tab during chat rotation; if a submission is interrupted, the new unsent prompt remains available for review. Disable the setting while paused to restore the default behavior.
 
 ## Moving from the Studio prototype
 
