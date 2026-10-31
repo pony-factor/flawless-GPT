@@ -189,7 +189,7 @@ test("unrelated messages and quoted prose are left unchanged", () => {
 });
 
 test("badge uses bundled cannon artwork without replacing the native label", () => {
-  assert.match(source, /chrome\.runtime\.getURL\("artwork\/searching-complete\.png"\)/);
+  assert.match(source, /chrome\.runtime\.getURL\("artwork\/thinking-cannon\.png"\)/);
   assert.match(style, /var\(--ghrc-worked-artwork\)/);
   assert.match(style, /content:\s*attr\(data-ghrc-worked-minutes\)/);
   assert.doesNotMatch(source, /replaceChild|innerHTML\s*=/);
