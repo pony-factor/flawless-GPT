@@ -461,9 +461,10 @@ test('unpaired pages and invalid GitHub inputs cannot control dispatch', async t
   await h.module.tick();
   assert.equal(h.state().tasks[1].status, 'pending', 'a PR from another repository cannot release a slot');
 
-  h.state().paused = true;
+  // Validate repository inputs in a separate, paused session with no assigned workers.
+  // An active pool rejects all imports before reaching repository validation.
   await assert.rejects(h.module.command({ type: 'import',
-    repository: 'PDF-magic/opener; echo unsafe', manifest: [{ id: 'new', prompt: 'No' }] }),
+    repository: 'PDF-magic/opener; echo unsafe', manifest: [{ id: 'new', prompt: 'No' }] }, SESSION_A),
   /Enter owner\/repository/);
   const forged = 'MERGE_CONFIRMED opener-0059 https://github.com/PDF-magic/opener/pull/27;echo ' + sha;
   assert.equal(h.sandbox.__ghrcDispatcherCore.parseConfirmations(
