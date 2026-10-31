@@ -30,6 +30,8 @@ test('dashboard supplies all controls and uses namespaced storage and messages',
   assert.match(script, /ghrc-chat-dispatcher:/);
   assert.match(script, /chatDispatcherState/);
   assert.doesNotMatch(script, /127\.0\.0\.1|extension-id|setup-command/);
+  assert.match(html, /id="replace-existing-drafts"/);
+  assert.match(script, /replaceExistingDrafts/);
 });
 
 test('integrated worker uses existing GitHub access and has no companion dependency', () => {

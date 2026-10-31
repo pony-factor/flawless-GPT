@@ -79,6 +79,49 @@ test('only an independently verified merge releases the next task', async t => {
   assert.equal(h.calls.filter(c => c.type === 'ghrc-chat-dispatcher:commit').length, 1, 'a second cycle must not duplicate the send');
 });
 
+test('draft replacement is paused-only, opt-in, and passed only for text drafts', async t => {
+  const h = await harness(t, { confirmed: true });
+  Object.assign(h.snapshots[0], { draftPresent: true, draftTextPresent: true, hasContext: false });
+  await h.module.tick();
+  assert.equal(h.calls.filter(call => call.type === 'ghrc-chat-dispatcher:prepare').length, 0);
+  assert.equal(h.state().tasks[1].status, 'pending');
+  await assert.rejects(h.module.command({ type: 'preferences', replaceExistingDrafts: true }), /Pause/);
+  h.state().paused = true;
+  await h.module.command({ type: 'preferences', replaceExistingDrafts: true });
+  assert.equal(h.state().replaceExistingDrafts, true);
+  h.state().paused = false;
+  await h.module.tick();
+  const prepare = h.calls.find(call => call.type === 'ghrc-chat-dispatcher:prepare');
+  assert.equal(prepare.replaceDraft, true);
+  assert.match(prepare.prompt, /Task: opener-0060/);
+  assert.equal(h.state().tasks[1].status, 'running');
+});
+
+test('draft replacement never replaces contextual or unverified drafts', async t => {
+  for (const draft of [
+    { draftPresent: true, draftTextPresent: true, hasContext: true },
+    { draftPresent: true, draftTextPresent: undefined, hasContext: undefined },
+  ]) {
+    const h = await harness(t, { confirmed: true });
+    h.state().replaceExistingDrafts = true;
+    Object.assign(h.snapshots[0], draft);
+    await h.module.tick();
+    assert.equal(h.calls.some(call => call.type === 'ghrc-chat-dispatcher:prepare'), false);
+    assert.equal(h.state().tasks[1].status, 'pending');
+  }
+});
+
+test('draft replacement is also applied to a merge follow-up without assigning a new task', async t => {
+  const h = await harness(t);
+  h.state().replaceExistingDrafts = true;
+  Object.assign(h.snapshots[0], { draftPresent: true, draftTextPresent: true, hasContext: false });
+  await h.module.tick();
+  const prepare = h.calls.find(call => call.type === 'ghrc-chat-dispatcher:prepare');
+  assert.equal(prepare.replaceDraft, true);
+  assert.match(prepare.prompt, /Finish your existing/);
+  assert.equal(h.state().tasks[1].status, 'pending');
+});
+
 test('pause during prepare prevents commit', async t => {
   const h = await harness(t, { confirmed: true, afterPrepare: async ({ setPaused }) => setPaused() }); await h.module.tick();
   assert.equal(h.calls.filter(c => c.type === 'ghrc-chat-dispatcher:commit').length, 0);
@@ -156,6 +199,11 @@ test('publishing preference can only change while paused', async t => {
   h.state().paused = true;
   await h.module.command({ type: 'preferences', preferCodexPony: true });
   assert.equal(h.state().preferCodexPony, true);
+  await h.module.command({ type: 'preferences', replaceExistingDrafts: true });
+  assert.equal(h.state().preferCodexPony, true, 'independent preference update preserves publishing choice');
+  assert.equal(h.state().replaceExistingDrafts, true);
+  await h.module.command({ type: 'preferences', replaceExistingDrafts: false });
+  assert.equal(h.state().replaceExistingDrafts, false);
 });
 
 

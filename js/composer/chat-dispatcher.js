@@ -57,6 +57,7 @@
       || (turn && all(turn, 'button[data-testid="copy-turn-action-button"], .turn-action-controls button[aria-label="Copy"], .turn-action-controls button[aria-label*="Regenerate" i]').length)));
     const queueLength = Math.max(shared?.queueLength || 0, all(document, '.ghrc-message-queue-item, [aria-label^="Queued message "]').length);
     const draft = read(input);
+    const contextPresent = hasContext(input) || Boolean(shared?.hasContext);
     const inferredTask = [...(user?.textContent || '').matchAll(/\b(?:Task:\s*|task\s+)([A-Za-z0-9_-]+-\d+)\b/g)].at(-1)?.[1] || null;
     return {
       url: location.href, fresh, workOnly, known: fresh || Boolean((user || workOnly) && assistant) && (!shared || shared.stateReady && shared.roleStateKnown), active,
@@ -64,7 +65,7 @@
       latestUserAnswered: workOnly || latestUserAnswered && (!shared || shared.latestUserAnswered),
       composerReady: Boolean(input && !input.disabled && input.getAttribute('aria-disabled') !== 'true'),
       queueLength, submissionPending: submissionPending || Boolean(shared?.submissionPending), signature, stableSince, observedAt: Date.now(), reply,
-      draftPresent: Boolean(draft.trim()) || hasContext(input) || Boolean(shared?.hasContext), hasContext: hasContext(input) || Boolean(shared?.hasContext), taskId: inferredTask,
+      draftPresent: Boolean(draft.trim()) || contextPresent, draftTextPresent: Boolean(draft.trim()), hasContext: contextPresent, taskId: inferredTask,
       confirmationText: all(root(), '[data-message-author-role="assistant"], [data-content-search-unit-key$=":assistant"]').map(node => node.innerText || '').join('\n'),
     };
   }
@@ -92,10 +93,14 @@
 
   async function prepare(message) {
     const before = snapshot();
-    if (!idle(before) || before.draftPresent || before.signature !== message.signature) return { ok: false, reason: 'Chat changed, is busy, or contains a draft.' };
+    if (!idle(before) || before.signature !== message.signature || before.hasContext
+      || (before.draftPresent && !(message.replaceDraft === true && before.draftTextPresent))) {
+      return { ok: false, reason: 'Chat changed, is busy, or contains a protected draft or attachment.' };
+    }
     if (typeof message.prompt !== 'string' || !message.prompt.trim() || message.prompt.length > 120000) return { ok: false, reason: 'Invalid prompt.' };
     const input = composer();
     const original = read(input);
+    if (Boolean(original.trim()) !== before.draftTextPresent) return { ok: false, reason: 'Composer draft changed before replacement.' };
     if (!write(input, message.prompt)) return { ok: false, reason: 'Composer did not accept text; draft retained for review.' };
     reservation = { nonce: message.nonce, input, original, prompt: message.prompt, signature: before.signature, url: before.url, fresh: before.fresh, expires: Date.now() + 15000 };
     await new Promise(resolve => setTimeout(resolve, 100));

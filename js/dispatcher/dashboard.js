@@ -55,6 +55,8 @@ function render() {
   $('repository').disabled = !state.paused;
   $('prefer-codex-pony').checked = Boolean(state.preferCodexPony);
   $('prefer-codex-pony').disabled = !state.paused || !connected;
+  $('replace-existing-drafts').checked = state.replaceExistingDrafts === true;
+  $('replace-existing-drafts').disabled = !state.paused || !connected;
   $('manifest').disabled = !state.paused || !connected;
   $('checklist-text').disabled = !state.paused || !connected;
   $('import-checklist').disabled = !state.paused || !connected;
@@ -128,6 +130,7 @@ $('import-checklist').addEventListener('click', async () => {
 $('start').addEventListener('click', () => action({ type: 'start' }));
 $('pause').addEventListener('click', () => action({ type: 'pause' }));
 $('prefer-codex-pony').addEventListener('change', () => action({ type: 'preferences', preferCodexPony: $('prefer-codex-pony').checked }));
+$('replace-existing-drafts').addEventListener('change', () => action({ type: 'preferences', replaceExistingDrafts: $('replace-existing-drafts').checked }));
 $('reset').addEventListener('click', () => action({ type: 'reset-pool' }));
 $('export').addEventListener('click', () => {
   const url = URL.createObjectURL(new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' }));

@@ -36,7 +36,7 @@ test('a user Copy message control cannot complete an unanswered turn', () => {
   dom.window.close();
 });
 
-test('existing drafts and attachments are never overwritten', async () => {
+test('existing drafts and attachments remain protected without opt-in', async () => {
   const { dom, w, adapter } = fixture();
   const input = w.document.querySelector('textarea'); input.value = 'My draft';
   const response = await adapter.prepare({ nonce: 'n', signature: adapter.snapshot().signature, prompt: 'Next task' });
@@ -45,6 +45,70 @@ test('existing drafts and attachments are never overwritten', async () => {
   const attachment = w.document.createElement('button'); attachment.setAttribute('aria-label', 'Remove file'); input.closest('form').append(attachment);
   assert.equal((await adapter.prepare({ nonce: 'n', signature: adapter.snapshot().signature, prompt: 'Next task' })).ok, false);
   assert.equal(input.value, ''); dom.window.close();
+});
+
+test('explicit opt-in replaces a pre-filled text draft and sends only the dispatch prompt', async () => {
+  const { dom, w, adapter } = fixture();
+  const input = w.document.querySelector('textarea');
+  input.value = 'Old pre-filled text';
+  const nonce = 'replace-draft';
+  const prompt = `Assigned work\nDispatch reference: ${nonce}`;
+  let clicks = 0;
+  w.document.querySelector('[data-testid="send-button"]').addEventListener('click', event => {
+    event.preventDefault();
+    clicks++;
+    const user = w.document.createElement('div');
+    user.dataset.messageAuthorRole = 'user';
+    user.textContent = input.value;
+    w.document.querySelector('main').append(user);
+    input.value = '';
+  });
+  assert.equal(adapter.snapshot().draftTextPresent, true);
+  const ready = await adapter.prepare({ nonce, signature: adapter.snapshot().signature, prompt, replaceDraft: true });
+  assert.equal(ready.ok, true);
+  assert.equal(input.value, prompt);
+  assert.equal((await adapter.commit({ nonce })).ok, true);
+  assert.equal(clicks, 1);
+  assert.equal([...w.document.querySelectorAll('[data-message-author-role="user"]')].at(-1).textContent, prompt);
+  dom.window.close();
+});
+
+test('draft replacement still refuses attachments and shared composer context', async () => {
+  const { dom, w, adapter } = fixture();
+  const input = w.document.querySelector('textarea');
+  input.value = 'Do not lose this';
+  const attachment = w.document.createElement('button');
+  attachment.setAttribute('aria-label', 'Remove attachment');
+  input.closest('form').append(attachment);
+  let observed = adapter.snapshot();
+  assert.equal(observed.hasContext, true);
+  assert.equal((await adapter.prepare({ nonce: 'n', signature: observed.signature, prompt: 'Next task', replaceDraft: true })).ok, false);
+  assert.equal(input.value, 'Do not lose this');
+  attachment.remove();
+  w.__ghrcMessageQueue = { getDispatcherLifecycle: () => ({
+    stateReady: true, roleStateKnown: true, latestAssistantComplete: true,
+    latestUserAnswered: true, queueLength: 0, hasContext: true,
+  }) };
+  observed = adapter.snapshot();
+  assert.equal(observed.hasContext, true);
+  assert.equal((await adapter.prepare({ nonce: 'n', signature: observed.signature, prompt: 'Next task', replaceDraft: true })).ok, false);
+  assert.equal(input.value, 'Do not lose this');
+  dom.window.close();
+});
+
+test('an edited replacement prompt cannot be sent automatically', async () => {
+  const { dom, w, adapter } = fixture();
+  const input = w.document.querySelector('textarea');
+  input.value = 'Original draft';
+  let clicks = 0;
+  w.document.querySelector('[data-testid="send-button"]').addEventListener('click', () => { clicks++; });
+  const ready = await adapter.prepare({ nonce: 'n', signature: adapter.snapshot().signature, prompt: 'Dispatch task', replaceDraft: true });
+  assert.equal(ready.ok, true);
+  input.value = 'Edited after replacement';
+  assert.equal((await adapter.commit({ nonce: 'n' })).ok, false);
+  assert.equal(input.value, 'Edited after replacement');
+  assert.equal(clicks, 0);
+  dom.window.close();
 });
 
 test('Stop appearing after draft preparation prevents submission', async () => {

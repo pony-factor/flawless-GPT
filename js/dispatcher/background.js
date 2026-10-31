@@ -7,7 +7,7 @@ const REGISTRY_KEY = 'chatDispatcherSessionIds';
 const SESSION_ID = /^(?:legacy|[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})$/i;
 const stateKey = id => id === 'legacy' ? 'chatDispatcherState' : `chatDispatcherState:${id}`;
 const pausedKey = id => id === 'legacy' ? 'chatDispatcherPaused' : `chatDispatcherPaused:${id}`;
-const blank = id => ({ id, version: 2, paused: true, repository: 'PDF-magic/opener', tasks: [], workers: [], events: [] });
+const blank = id => ({ id, version: 2, paused: true, repository: 'PDF-magic/opener', replaceExistingDrafts: false, tasks: [], workers: [], events: [] });
 const serials = new Map();
 const pauseRequested = new Set();
 const pauseEpoch = new Map();
@@ -77,9 +77,17 @@ async function snapshot(tabId, allowFresh = false) {
   return result;
 }
 
+// A draft can only be replaced with explicit consent and positive evidence that
+// it consists of ordinary text. Unknown/older adapters and contextual content block.
+function draftBlocksDispatch(state, observed) {
+  if (observed.hasContext === true) return true;
+  if (!observed.draftPresent) return false;
+  return !(state.replaceExistingDrafts === true && observed.draftTextPresent === true && observed.hasContext === false);
+}
+
 async function sendToWorker(state, worker, task, prompt) {
   const observed = await snapshot(worker.tabId, worker.fresh === true);
-  if (!validSnapshot(observed, Date.now(), worker.fresh === true) || observed.draftPresent) return false;
+  if (!validSnapshot(observed, Date.now(), worker.fresh === true) || draftBlocksDispatch(state, observed)) return false;
   if (worker.url !== observed.url) throw Error('Worker conversation changed.');
   const nonce = crypto.randomUUID();
   // Persist the reservation before any UI mutation. A service-worker restart
@@ -89,7 +97,7 @@ async function sendToWorker(state, worker, task, prompt) {
   worker.reservation = { nonce, taskId: task?.id || worker.taskId, kind: task ? 'task' : 'follow-up', previousPhase, time: Date.now() };
   if (task) task.status = 'dispatching';
   await save(state);
-  const ready = await chrome.tabs.sendMessage(worker.tabId, { type: 'ghrc-chat-dispatcher:prepare', nonce, signature: observed.signature, prompt: `${prompt}\n\nStart your response with this exact receipt line, then complete the task:\nDISPATCH_RECEIVED ${nonce}\n\nDispatch reference: ${nonce}` });
+  const ready = await chrome.tabs.sendMessage(worker.tabId, { type: 'ghrc-chat-dispatcher:prepare', nonce, signature: observed.signature, replaceDraft: state.replaceExistingDrafts === true && observed.draftTextPresent === true && observed.hasContext === false, prompt: `${prompt}\n\nStart your response with this exact receipt line, then complete the task:\nDISPATCH_RECEIVED ${nonce}\n\nDispatch reference: ${nonce}` });
   if (!ready?.ok) {
     worker.phase = 'review';
     worker.error = ready?.reason || 'The composer refused the prompt.';
@@ -290,7 +298,7 @@ async function tick(id = 'legacy') {
         await save(state);
         continue;
       }
-      worker.activity = observed.draftPresent ? 'Draft present — left untouched' : 'Idle';
+      worker.activity = draftBlocksDispatch(state, observed) ? 'Draft or composer context present — left untouched' : 'Idle';
       if (worker.taskId && worker.phase !== 'merged') {
         worker.pendingTaskIds ||= [worker.taskId];
         worker.verifiedTaskIds ||= [];
@@ -312,17 +320,23 @@ async function tick(id = 'legacy') {
         if (merged) worker.phase = 'merged';
         if (!merged) {
           worker.phase = 'awaiting-merge';
-          if (!observed.draftPresent && !worker.reminderSent) {
+          if (!draftBlocksDispatch(state, observed) && !worker.reminderSent) {
             await sendToWorker(state, worker, null, mergeReminder(worker, state.repository));
-          } else if (worker.reminderSent && !observed.draftPresent) {
+          } else if (worker.reminderSent && !draftBlocksDispatch(state, observed)) {
             worker.activity = 'Awaiting a matching GitHub-verified merge confirmation';
           }
           await save(state);
           continue;
         }
       }
-      if (canAssign(worker) && !observed.draftPresent) {
+      if (canAssign(worker) && !draftBlocksDispatch(state, observed)) {
         if (shouldRotate(state.tasks, worker)) {
+          // Replacing a draft for a send never authorizes deleting its tab.
+          if (observed.draftPresent) {
+            worker.activity = 'Draft present — waiting to rotate without closing it';
+            await save(state);
+            continue;
+          }
           await rotateWorker(state, worker);
           continue;
         }
@@ -348,8 +362,15 @@ async function command(message, id = 'legacy') {
   if (message.type === 'state') return { ok: true, state };
   if (message.type === 'sessions') return { ok: true, sessions: await listSessions() };
   if (message.type === 'preferences') {
-    if (!state.paused) throw Error('Pause before changing publishing preferences.');
-    state.preferCodexPony = message.preferCodexPony === true;
+    if (!state.paused) throw Error('Pause before changing dispatcher preferences.');
+    if ('preferCodexPony' in message) {
+      if (typeof message.preferCodexPony !== 'boolean') throw Error('Invalid publishing preference.');
+      state.preferCodexPony = message.preferCodexPony;
+    }
+    if ('replaceExistingDrafts' in message) {
+      if (typeof message.replaceExistingDrafts !== 'boolean') throw Error('Invalid draft replacement preference.');
+      state.replaceExistingDrafts = message.replaceExistingDrafts;
+    }
     await save(state);
     return { ok: true };
   }
