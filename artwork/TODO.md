@@ -1,2 +1,2 @@
-bulk-seach bg crop
+bulk-search bg crop
 zipp
