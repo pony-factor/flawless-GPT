@@ -77,25 +77,30 @@ test('unconnected dashboard preview cannot dispatch tasks', () => {
   }
 });
 
-test('all 27 archived Studio cases have active Flawless test counterparts', () => {
-  const historical = ['core', 'background', 'content', 'server'].flatMap(group => {
-    const source = fs.readFileSync(path.join(root, 'tools/chat-dispatcher-prototype/tests', group + '.test.mjs'), 'utf8');
-    return [...source.matchAll(/\btest\(\s*['"\x60]([^'"\x60]+)['"\x60]/g)].map(match => match[1]);
-  });
-  const active = new Set(['core', 'background', 'content', 'integration'].flatMap(group => {
+test('all 27 Studio scenarios remain covered after removing the obsolete prototype', () => {
+  const inventory = JSON.parse(fs.readFileSync(
+    path.join(root, 'tests/fixtures/chat-dispatcher-studio-coverage.json'), 'utf8'));
+  assert.equal(inventory.length, 27, 'preserve the 27 original Studio scenarios');
+  assert.equal(new Set(inventory.map(item => item.legacy)).size, 27, 'legacy cases must be unique');
+  assert.equal(new Set(inventory.map(item => item.active)).size, 27, 'each case needs a distinct active counterpart');
+
+  const activeSuites = new Map(['core', 'background', 'content', 'integration'].map(group => {
     const source = fs.readFileSync(path.join(root, 'tests', 'chat-dispatcher-' + group + '.test.cjs'), 'utf8');
-    return [...source.matchAll(/\btest\(\s*['"\x60]([^'"\x60]+)['"\x60]/g)].map(match => match[1]);
+    return [group, new Set([...source.matchAll(/\btest\(\s*['"\x60]([^'"\x60]+)['"\x60]/g)]
+      .map(match => match[1]))];
   }));
-  const replacements = new Map([
-    ['the paired extension receives read-only merge metadata',
-      'integrated GitHub connection reads only scoped merge metadata'],
-    ['unpaired websites, arbitrary repositories, and command-like PR numbers are rejected',
-      'unpaired pages and invalid GitHub inputs cannot control dispatch'],
-    ['preview dashboard serves locally without dispatch authority',
-      'unconnected dashboard preview cannot dispatch tasks'],
-  ]);
-  assert.equal(historical.length, 27, 'review the migration when archived test cases change');
-  for (const name of historical) {
-    assert.ok(active.has(replacements.get(name) || name), 'Studio case has no active counterpart: ' + name);
+  for (const item of inventory) {
+    assert.ok(activeSuites.get(item.activeSuite)?.has(item.active),
+      'Missing active test for former Studio case: ' + item.legacy);
   }
+  assert.equal(fs.existsSync(path.join(root, 'tools/chat-dispatcher-prototype')), false,
+    'the unused standalone Studio runtime must not be restored');
+});
+
+test('the preserved PDF Opener manifest is importable without a Studio runtime', () => {
+  const manifest = JSON.parse(fs.readFileSync(
+    path.join(root, 'tools/task-manifests/opener-tasks.json'), 'utf8'));
+  assert.equal(manifest.repository, 'PDF-magic/opener');
+  assert.ok(Array.isArray(manifest.tasks) && manifest.tasks.length > 0);
+  assert.ok(manifest.tasks.every(item => typeof item.task_id === 'string' && typeof item.prompt === 'string'));
 });

@@ -1,0 +1,164 @@
+[
+  {
+    "legacy": "unknown, active, incomplete, queued, stale, and unsettled chats cannot send",
+    "sourceSuite": "core",
+    "active": "unknown, active, incomplete, queued, stale, and unsettled chats cannot send",
+    "activeSuite": "core"
+  },
+  {
+    "legacy": "only exact current-task merge confirmations in the scoped repository are accepted",
+    "sourceSuite": "core",
+    "active": "only exact current-task merge confirmations in the scoped repository are accepted",
+    "activeSuite": "core"
+  },
+  {
+    "legacy": "open and closed-unmerged PRs, wrong merge commits, and wrong repositories never release a slot",
+    "sourceSuite": "core",
+    "active": "open and closed-unmerged PRs, wrong merge commits, and wrong repositories never release a slot",
+    "activeSuite": "core"
+  },
+  {
+    "legacy": "imports preserve already-sent exclusions and reject duplicates",
+    "sourceSuite": "core",
+    "active": "imports preserve already-sent exclusions and reject duplicates",
+    "activeSuite": "core"
+  },
+  {
+    "legacy": "active chats are observation-only",
+    "sourceSuite": "background",
+    "active": "active chats are observation-only",
+    "activeSuite": "background"
+  },
+  {
+    "legacy": "a merge claim without GitHub merged=true cannot advance the task",
+    "sourceSuite": "background",
+    "active": "a merge claim without GitHub merged=true cannot advance the task",
+    "activeSuite": "background"
+  },
+  {
+    "legacy": "only an independently verified merge releases the next task",
+    "sourceSuite": "background",
+    "active": "only an independently verified merge releases the next task",
+    "activeSuite": "background"
+  },
+  {
+    "legacy": "pause during prepare prevents commit",
+    "sourceSuite": "background",
+    "active": "pause during prepare prevents commit",
+    "activeSuite": "background"
+  },
+  {
+    "legacy": "an uncertain reservation after restart is not replayed",
+    "sourceSuite": "background",
+    "active": "an uncertain reservation after restart is not replayed",
+    "activeSuite": "background"
+  },
+  {
+    "legacy": "content scripts cannot import tasks or start the dispatcher",
+    "sourceSuite": "background",
+    "active": "content scripts cannot import tasks or start the dispatcher",
+    "activeSuite": "background"
+  },
+  {
+    "legacy": "merge follow-up is sent at most once and never advances new work itself",
+    "sourceSuite": "background",
+    "active": "merge follow-up is sent at most once and never advances new work itself",
+    "activeSuite": "background"
+  },
+  {
+    "legacy": "an earlier unverified task in an adopted chat also blocks advancement",
+    "sourceSuite": "background",
+    "active": "an earlier unverified task in an adopted chat also blocks advancement",
+    "activeSuite": "background"
+  },
+  {
+    "legacy": "reviewing an unsent merge follow-up does not requeue its existing task",
+    "sourceSuite": "background",
+    "active": "reviewing an unsent merge follow-up does not requeue its existing task",
+    "activeSuite": "background"
+  },
+  {
+    "legacy": "immediate Pause changes only its separate gate and preserves task progress",
+    "sourceSuite": "background",
+    "active": "immediate Pause changes only its separate gate and preserves task progress",
+    "activeSuite": "background"
+  },
+  {
+    "legacy": "the installed full-page extension dashboard can address its worker",
+    "sourceSuite": "background",
+    "active": "the installed full-page extension dashboard can address its worker",
+    "activeSuite": "background"
+  },
+  {
+    "legacy": "a missing Stop button does not imply completion while thinking",
+    "sourceSuite": "content",
+    "active": "a missing Stop button does not imply completion while thinking",
+    "activeSuite": "content"
+  },
+  {
+    "legacy": "a user Copy message control cannot complete an unanswered turn",
+    "sourceSuite": "content",
+    "active": "a user Copy message control cannot complete an unanswered turn",
+    "activeSuite": "content"
+  },
+  {
+    "legacy": "existing drafts and attachments are never overwritten",
+    "sourceSuite": "content",
+    "active": "existing drafts and attachments remain protected without opt-in",
+    "activeSuite": "content"
+  },
+  {
+    "legacy": "Stop appearing after draft preparation prevents submission",
+    "sourceSuite": "content",
+    "active": "Stop appearing after draft preparation prevents submission",
+    "activeSuite": "content"
+  },
+  {
+    "legacy": "Send morphing into Stop is never clicked",
+    "sourceSuite": "content",
+    "active": "Send morphing into Stop is never clicked",
+    "activeSuite": "content"
+  },
+  {
+    "legacy": "interrupt hats are rejected even when they look like Send",
+    "sourceSuite": "content",
+    "active": "interrupt hats are rejected even when they look like Send",
+    "activeSuite": "content"
+  },
+  {
+    "legacy": "changed conversations and edited drafts invalidate a prepared send",
+    "sourceSuite": "content",
+    "active": "changed conversations and edited drafts invalidate a prepared send",
+    "activeSuite": "content"
+  },
+  {
+    "legacy": "a real native send is correlated with its new user turn",
+    "sourceSuite": "content",
+    "active": "a real native send is correlated with its new user turn",
+    "activeSuite": "content"
+  },
+  {
+    "legacy": "unconfirmed sends stay blocked and cannot replay automatically",
+    "sourceSuite": "content",
+    "active": "unconfirmed sends stay blocked and cannot replay automatically",
+    "activeSuite": "content"
+  },
+  {
+    "legacy": "the paired extension receives read-only merge metadata",
+    "sourceSuite": "server",
+    "active": "integrated GitHub connection reads only scoped merge metadata",
+    "activeSuite": "background"
+  },
+  {
+    "legacy": "unpaired websites, arbitrary repositories, and command-like PR numbers are rejected",
+    "sourceSuite": "server",
+    "active": "unpaired pages and invalid GitHub inputs cannot control dispatch",
+    "activeSuite": "background"
+  },
+  {
+    "legacy": "preview dashboard serves locally without dispatch authority",
+    "sourceSuite": "server",
+    "active": "unconnected dashboard preview cannot dispatch tasks",
+    "activeSuite": "integration"
+  }
+]

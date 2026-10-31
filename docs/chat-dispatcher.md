@@ -43,11 +43,13 @@ Reservations are saved before changing the composer. A crash or an unconfirmed s
 
 To reuse a ChatGPT window with pre-filled text, pause that dispatcher and enable **Replace existing text drafts in worker ChatGPT windows**. This is an opt-in setting scoped to that dispatcher session, and the next permitted task or merge follow-up replaces the text rather than appending it. The original text is intentionally discarded, so copy anything you want to keep before enabling the option. Attachments, quoted or selected context, queued messages, active replies, and uncertain submissions remain protected. Draft replacement does not allow closing a drafted tab during chat rotation; if a submission is interrupted, the new unsent prompt remains available for review. Disable the setting while paused to restore the default behavior.
 
-## Moving from the Studio prototype
+## Importing earlier Studio task manifests
 
-Keep the Studio dispatcher paused. Export its session or import the existing task manifest into this dashboard, then press Start to create the fresh pool. Previously submitted checklist tasks remain excluded. The Flawless feature has separate storage keys and does not read the other extension's storage or change unrelated Flawless settings.
+The dispatcher is fully integrated into Flawless; the former standalone Brave extension, macOS launcher, and localhost GitHub verifier have been retired. No separate process, companion service, or local GitHub CLI is needed for dispatcher operation.
 
-Once the Flawless pool is adopted, keep the old prototype paused or disable it so there is only one dispatcher. No localhost verifier is used by this integration; GitHub checks use the connection already managed by Flawless. Public repository metadata can use public access if no saved connection is available; rate limits or unavailable access block advancement.
+For the prepared PDF Magic Opener checklist, import `tools/task-manifests/opener-tasks.json` from the paused Flawless dispatcher dashboard. The manifest has been preserved unchanged, including previously dispatched task statuses; those tasks will not be assigned again. Other Studio-format JSON task manifests can also be imported.
+
+If the separate Studio extension is still installed on your computer, disable it to prevent two dispatchers from controlling the same chats. Flawless uses separate storage and its existing GitHub connection, so it does not import the other extension's local session state automatically. Unavailable GitHub access blocks merge verification and task advancement.
 
 ## Tests
 
