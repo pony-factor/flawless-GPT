@@ -4,6 +4,9 @@
   const LAUNCHER_ID = "ghrc-spellcheck-gpt-launcher";
   const HOST_ATTR = "data-ghrc-spellcheck-launcher-host";
   const ENABLED_KEY = "showSpellcheckGptLauncher";
+  const IMAGE_KEY = "spellcheckLauncherImage";
+  const MAX_IMAGE_LENGTH = Math.ceil((1024 * 1024) / 3) * 4 + 64;
+  const IMAGE_DATA_URL = /^data:image\/(?:png|jpeg|webp|gif);base64,[A-Za-z0-9+/]+={0,2}$/;
   const LEGACY_ICON_KEY = "spellcheckGptCanonicalIcon";
   const PLUGIN_NAME = "Spellcheck Only";
   const ICON_PATH = "artwork/spellcheck-only.jpg";
@@ -13,6 +16,14 @@
   const SUBMIT_TIMEOUT_MS = 5_000;
 
   let enabled = false;
+  let iconSource = chrome.runtime.getURL(ICON_PATH);
+
+  function setIconSource(value) {
+    iconSource = typeof value === "string" && value.length <= MAX_IMAGE_LENGTH && IMAGE_DATA_URL.test(value)
+      ? value : chrome.runtime.getURL(ICON_PATH);
+    const image = document.getElementById(LAUNCHER_ID)?.querySelector("img");
+    if (image && image.src !== iconSource) image.src = iconSource;
+  }
   let mountScheduled = false;
   let launchStarted = false;
 
@@ -340,7 +351,11 @@
     button.setAttribute("aria-label", `Run ${PLUGIN_NAME} plugin`);
 
     const image = document.createElement("img");
-    image.src = chrome.runtime.getURL(ICON_PATH);
+    image.src = iconSource;
+    image.addEventListener("error", () => {
+      const fallback = chrome.runtime.getURL(ICON_PATH);
+      if (image.src !== fallback) image.src = fallback;
+    });
     image.alt = "";
     image.setAttribute("aria-hidden", "true");
     button.append(image);
@@ -392,17 +407,21 @@
   }
 
   async function loadSettings() {
-    const settings = await chrome.storage.local.get({ [ENABLED_KEY]: false });
+    const settings = await chrome.storage.local.get({ [ENABLED_KEY]: false, [IMAGE_KEY]: null });
     if (!context.active()) return;
     enabled = Boolean(settings[ENABLED_KEY]);
+    setIconSource(settings[IMAGE_KEY]);
     await chrome.storage.local.remove(LEGACY_ICON_KEY);
     scheduleMount();
   }
 
   chrome.storage.onChanged.addListener((changes, areaName) => {
-    if (areaName !== "local" || !changes[ENABLED_KEY]) return;
-    enabled = Boolean(changes[ENABLED_KEY].newValue);
-    scheduleMount();
+    if (areaName !== "local") return;
+    if (changes[IMAGE_KEY]) setIconSource(changes[IMAGE_KEY].newValue);
+    if (changes[ENABLED_KEY]) {
+      enabled = Boolean(changes[ENABLED_KEY].newValue);
+      scheduleMount();
+    }
   });
 
   void context.run(loadSettings);
