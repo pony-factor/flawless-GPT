@@ -11,7 +11,7 @@ test('import chooses a category, cancellation never publishes, and report links 
     page.on('pageerror', e => errors.push(e.message));
     await page.route('https://example.com/', route => route.fulfill({ body: '<html></html>', contentType: 'text/html' }));
     await page.goto('https://example.com');
-    await page.setContent('<section><div><button aria-label="Export">Export</button><button aria-label="Expand">Expand</button></div><article class="_reportPage_fixture"><h1>Report</h1><p>Full report <a href="https://example.org/source" target="_blank">Source</a></p></article></section>');
+    await page.setContent('<section><div><button aria-label="Export">Export</button><button aria-label="Expand">Expand</button></div><article class="_reportPage_fixture"><h1>Report</h1><p>Full report <a href="https://example.org/source" target="_blank">Source</a>.</p><p>Footnotes <sup><a href="https://example.org/source">1</a></sup> and <sup><a href="https://example.org/source">2</a></sup>, with H<sub>2</sub>O.</p></article></section>');
     await page.evaluate(() => {
       window.calls = [];
       window.chrome = { storage: { local: { get: async d => ({ ...d, researchPublisherEnabled: true }) }, onChanged: { addListener() {} } }, runtime: { sendMessage: async m => {
@@ -41,6 +41,11 @@ test('import chooses a category, cancellation never publishes, and report links 
     assert.equal(report.category, 'Markets');
     assert.match(report.markdown, /# Report/);
     assert.match(report.markdown, /Full report/);
+    assert.equal((report.markdown.match(/https:\/\/example\.org\/source/g) || []).length, 3,
+      'repeated footnote destinations must all remain linked');
+    assert.match(report.markdown, /<sup>\[1\]\(https:\/\/example\.org\/source\)<\/sup>/);
+    assert.match(report.markdown, /<sup>\[2\]\(https:\/\/example\.org\/source\)<\/sup>/);
+    assert.match(report.markdown, /H<sub>2<\/sub>O/);
     await page.getByRole('link', { name: 'https://github.com/example/Research/blob/main/Markets/report.md', exact: true }).waitFor();
     await page.getByRole('link', { name: 'Source' }).click();
     assert.equal(await page.evaluate(() => calls.filter(x => x.type === 'open-research-link').length), 1);

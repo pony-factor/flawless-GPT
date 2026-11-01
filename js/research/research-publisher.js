@@ -165,7 +165,6 @@
     root.querySelectorAll('script, style, button, [aria-hidden="true"]').forEach((node) => node.remove());
     const converter = new TurndownService({ headingStyle: 'atx', codeBlockStyle: 'fenced', bulletListMarker: '-' });
     converter.use(turndownPluginGfm.gfm);
-    const links = new Set();
     converter.addRule('report-links', {
       filter: 'a',
       replacement(content, node) {
@@ -174,10 +173,16 @@
         let url;
         try { url = new URL(raw, scope.ownerDocument.URL); } catch { return content; }
         if (!['https:', 'http:'].includes(url.protocol)) return content;
-        if (links.has(url.href)) return content === url.href ? '' : content;
-        links.add(url.href);
-        if (url.hostname === 'github.com') return url.href;
+        // Each citation retains its own link, even when multiple notes share a source.
         return `[${content || url.hostname}](${url.href.replace(/\(/g, '%28').replace(/\)/g, '%29')})`;
+      },
+    });
+    converter.addRule('report-script-position', {
+      filter: ['sup', 'sub'],
+      replacement(content, node) {
+        // Markdown has no superscript/subscript syntax; GitHub renders these safe tags.
+        const tag = node.nodeName.toLowerCase();
+        return `<${tag}>${content}</${tag}>`;
       },
     });
     const markdown = converter.turndown(root).trim() + '\n';
