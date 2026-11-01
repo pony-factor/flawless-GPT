@@ -39,6 +39,12 @@ Extension icon and settings artwork by [Squeaky_Belle](https://disqus.com/by/Squ
 from the provided [source post](https://x.com/Squeaky_Belle/status/1855267207577731504).
 
 Spellcheck Only launcher artwork by Kiriya, from the [source image](https://derpibooru.org/images/3394656).
+In **ChatGPT → Interaction**, both the popup and full settings allow replacing the
+launcher icon with a PNG, JPEG, WebP, or GIF up to 1 MB, and restoring the default.
+The image is stored in the browser extension's local
+`chrome.storage.local.spellcheckLauncherImage` record, survives normal extension
+updates, and is not uploaded or browser-synced. It is not encrypted like GitHub
+tokens, since the artwork is not a secret. An open ChatGPT tab updates immediately.
 
 Work-duration cannon artwork by Cerberus (`@fcolumnare`), from the
 [original artwork post](https://x.com/fcolumnare/status/1952740544443998252).
