@@ -73,7 +73,7 @@ jobs:
 
   browser-startup:
     name: Chromium extension startup
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
@@ -92,7 +92,7 @@ jobs:
 
   browser-queue:
     name: Chromium queue regressions (advisory)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
@@ -119,7 +119,7 @@ jobs:
 
   browser-highlights:
     name: Chromium highlighted pages (advisory)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
