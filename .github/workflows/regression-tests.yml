@@ -23,6 +23,8 @@ jobs:
           npx playwright install --with-deps chromium
       - name: Unit tests
         run: node --test tests/*.test.cjs
+      - name: Source image CSP browser regression (required)
+        run: node --test --test-name-pattern="source SVG event handlers" tests/unavailable-images.browser.cjs
       - name: User-message and sidebar-icon browser regressions (required)
         run: node --test --test-name-pattern="modern conversation roles|own-message links|external-link arrows|hidden arrow wrappers" tests/external-links.browser.cjs
       - name: Full external-link browser suite (advisory until baseline is green)
