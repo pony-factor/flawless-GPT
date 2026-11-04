@@ -167,3 +167,45 @@ test('matches source image filenames when alt text is an unrelated caption', asy
     assert.equal(await page.locator('#missing').isVisible(), true);
   } finally { await browser.close(); }
 });
+
+test('source SVG event handlers cannot execute during image recovery parsing', async () => {
+  const browser = await chromium.launch({
+    ...(process.env.BROWSER_EXECUTABLE ? { executablePath: process.env.BROWSER_EXECUTABLE } : {}),
+    headless: true,
+  });
+  const page = await browser.newPage();
+  try {
+    await page.route('https://pictures.example/pony.png', route => route.fulfill({
+      contentType: 'image/png',
+      body: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=', 'base64'),
+    }));
+    await page.setContent('<div data-message-author-role="assistant"><a href="https://catalog.example/artwork">Source</a><div data-d-component="row"><div id="missing" role="img" aria-label="Image unavailable"></div><strong>Moon Garden</strong></div></div>');
+    await page.evaluate(() => {
+      window.__ghrcExtensionContext = { active: () => true, onStop: () => {} };
+      window.chrome = { runtime: { sendMessage: async () => ({
+        ok: true, url: 'https://catalog.example/artwork',
+        html: '<section><svg onload="window.svgHandlerRan=true"><animate onbegin="window.svgHandlerRan=true"></animate></svg><img alt="Moon Garden" src="https://pictures.example/pony.png"></section>',
+      }) } };
+      const parse = DOMParser.prototype.parseFromString;
+      DOMParser.prototype.parseFromString = function(html, mimeType) {
+        window.parsedSourceHtml = html;
+        return parse.call(this, html, mimeType);
+      };
+    });
+    await page.addScriptTag({ content: fs.readFileSync(path.join(__dirname, '../js/links/unavailable-images.js'), 'utf8') });
+    await page.waitForFunction(() => document.querySelector('#missing img')?.naturalWidth === 1);
+    const parsed = await page.evaluate(() => ({
+      html: window.parsedSourceHtml,
+      handlerRan: window.svgHandlerRan,
+    }));
+    assert.doesNotMatch(parsed.html, /<\/?svg(?=[\s/>])/i);
+    assert.doesNotMatch(parsed.html, /\son(?:load|begin)\s*=/i);
+    assert.match(parsed.html, /data-ghrc-onload=/);
+    assert.match(parsed.html, /data-ghrc-onbegin=/);
+    assert.match(parsed.html, /data-ghrc-src=/);
+    assert.equal(parsed.handlerRan, undefined);
+    assert.equal(await page.locator('#missing img').getAttribute('src'), 'https://pictures.example/pony.png');
+  } finally {
+    await browser.close();
+  }
+});
