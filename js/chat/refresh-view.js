@@ -58,7 +58,8 @@
     }
     pending = true;
     button.disabled = true;
-    button.textContent = "Refreshing…";
+    button.setAttribute("aria-label", "Refreshing view");
+    button.setAttribute("aria-busy", "true");
     status.textContent = "";
     const path = location.pathname;
     nextRefresh = Date.now() + 30_000;
@@ -85,7 +86,8 @@
     } finally {
       pending = false;
       button.disabled = false;
-      button.textContent = "↻ Refresh view";
+      button.setAttribute("aria-label", "Refresh view");
+      button.removeAttribute("aria-busy");
     }
   }
 
@@ -96,7 +98,8 @@
       control.id = "ghrc-refresh-view";
       button = document.createElement("button");
       button.type = "button";
-      button.textContent = "↻ Refresh view";
+      button.textContent = "↻";
+      button.setAttribute("aria-label", "Refresh view");
       button.title = "Refresh this conversation without reloading the page";
       button.addEventListener("click", refresh);
       status = document.createElement("div");
