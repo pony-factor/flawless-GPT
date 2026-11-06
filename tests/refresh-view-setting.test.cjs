@@ -67,6 +67,7 @@ test("both settings pages expose the default-on Refresh view switch", () => {
     const html = read(page);
     assert.equal((html.match(/id="show-refresh-view"/g) || []).length, 1);
     assert.match(html, /id="show-refresh-view" type="checkbox" checked/);
+    assert.match(html, /bottom left of conversations/);
   }
   const settings = read("js/settings/options.js");
   assert.match(settings, /showRefreshView: showRefreshViewInput\.checked/);
@@ -76,4 +77,5 @@ test("both settings pages expose the default-on Refresh view switch", () => {
 test("hidden preference applies CSS without removing the refresh button", () => {
   assert.match(css, /:root\[data-ghrc-hide-refresh-view\] #ghrc-refresh-view \{ display: none !important; \}/);
   assert.doesNotMatch(source, /#ghrc-refresh-view.*remove\(/);
+  assert.match(css, /#ghrc-refresh-view \{ position: fixed; left: 16px; bottom: 16px;/);
 });
