@@ -3,10 +3,11 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const { chromium } = require('playwright');
+const executablePath = process.env.BROWSER_EXECUTABLE || '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser';
 const source = ['js/core/chatgpt-route-events.js', 'js/chat/refresh-view.js']
   .map(file => fs.readFileSync(path.join(__dirname, '..', file), 'utf8')).join('\n;\n');
 let browser;
-before(async () => { browser = await chromium.launch({ executablePath: '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser', headless: true }); });
+before(async () => { browser = await chromium.launch({ executablePath, headless: true }); });
 after(async () => { await browser?.close(); });
 
 async function fixture({ router = true, active = false, error = false, held = false } = {}) {
