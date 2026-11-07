@@ -131,6 +131,7 @@ const hideConversationFeedbackPromptInput = document.getElementById("hide-conver
 const hideChatTimestampsInput = document.getElementById("hide-chat-timestamps");
 const workedDurationDotsInput = document.getElementById("worked-duration-dots");
 const wrapChatResponsesInput = document.getElementById("wrap-chat-responses");
+const showRefreshViewInput = document.getElementById("show-refresh-view");
 const composerPlaceholderInput = document.getElementById("composer-placeholder");
 const hideChatgptDisclaimerInput = document.getElementById("hide-chatgpt-disclaimer");
 const hideCookiePreferencesInput = document.getElementById("hide-cookie-preferences");
@@ -491,6 +492,7 @@ async function loadSettings() {
     hideChatTimestamps: false,
     workedDurationDots: false,
     wrapChatResponses: true,
+    showRefreshView: true,
     composerPlaceholder: "",
   });
   const storedOwnerOrder = normalizedOwnerOrder(settings.ownerOrder);
@@ -564,6 +566,7 @@ async function loadSettings() {
   hideModelControlsInput.checked = settings.hideModelControls !== false;
   hideConversationFeedbackPromptInput.checked = settings.hideConversationFeedbackPrompt !== false;
   wrapChatResponsesInput.checked = settings.wrapChatResponses !== false;
+  showRefreshViewInput.checked = settings.showRefreshView !== false;
   hideChatTimestampsInput.checked = Boolean(settings.hideChatTimestamps);
   workedDurationDotsInput.checked = Boolean(settings.workedDurationDots);
   composerPlaceholderInput.value = typeof settings.composerPlaceholder === "string" ? settings.composerPlaceholder : "";
@@ -686,6 +689,7 @@ async function saveSettings() {
       hideChatTimestamps: hideChatTimestampsInput.checked,
       workedDurationDots: workedDurationDotsInput.checked,
       wrapChatResponses: wrapChatResponsesInput.checked,
+      showRefreshView: showRefreshViewInput.checked,
       composerPlaceholder: composerPlaceholderInput.value.trim(),
     });
     ownerListDirty = false;

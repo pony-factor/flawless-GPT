@@ -3,10 +3,11 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const { chromium } = require('playwright');
+const executablePath = process.env.BROWSER_EXECUTABLE || '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser';
 const source = ['js/core/chatgpt-route-events.js', 'js/chat/refresh-view.js']
   .map(file => fs.readFileSync(path.join(__dirname, '..', file), 'utf8')).join('\n;\n');
 let browser;
-before(async () => { browser = await chromium.launch({ executablePath: '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser', headless: true }); });
+before(async () => { browser = await chromium.launch({ executablePath, headless: true }); });
 after(async () => { await browser?.close(); });
 
 async function fixture({ router = true, active = false, error = false, held = false } = {}) {
@@ -52,10 +53,13 @@ async function fixture({ router = true, active = false, error = false, held = fa
 
 test('refreshes in place while preserving draft, real attachment, queue, scroll and document', async () => {
   const f = await fixture();
+  assert.equal(await f.p.locator('#ghrc-refresh-view button').textContent(), '↻');
+  assert.equal(await f.p.locator('#ghrc-refresh-view').evaluate(element => Math.round(element.getBoundingClientRect().left)), 16);
   await f.p.locator('input[type=file]').setInputFiles({ name: 'draft.txt', mimeType: 'text/plain', buffer: Buffer.from('unsent') });
   await f.p.evaluate(() => { window.scrollTo(0, 200); window.documentMarker = {}; });
-  await f.p.getByRole('button', { name: '↻ Refresh view', exact: true }).click();
+  await f.p.getByRole('button', { name: 'Refresh view', exact: true }).click();
   assert.equal(await f.p.locator('#answer').textContent(), 'Fresh view');
+  assert.equal(await f.p.locator('#ghrc-refresh-view button').textContent(), '↻');
   assert.equal(await f.p.locator('textarea').inputValue(), 'Unsent draft');
   assert.equal(await f.p.locator('input[type=file]').evaluate(e => e.files[0].name), 'draft.txt');
   assert.equal(await f.p.locator('#ghrc-message-queue').textContent(), 'Queued prompt');
@@ -63,7 +67,7 @@ test('refreshes in place while preserving draft, real attachment, queue, scroll 
   assert.equal(await f.p.evaluate(() => Boolean(window.documentMarker)), true);
   assert.equal(await f.p.evaluate(() => window.listeners.size), 0);
   assert.equal(f.loads(), 1);
-  await f.p.getByRole('button', { name: '↻ Refresh view', exact: true }).click();
+  await f.p.getByRole('button', { name: 'Refresh view', exact: true }).click();
   assert.equal(await f.p.evaluate(() => window.refreshes), 1);
   assert.match(await f.p.getByRole('status').textContent(), /wait a moment/);
   await f.p.close();
@@ -71,7 +75,7 @@ test('refreshes in place while preserving draft, real attachment, queue, scroll 
 
 test('active generation is not refreshed', async () => {
   const f = await fixture({ active: true });
-  await f.p.getByRole('button', { name: '↻ Refresh view', exact: true }).click();
+  await f.p.getByRole('button', { name: 'Refresh view', exact: true }).click();
   assert.equal(await f.p.evaluate(() => window.refreshes), 0);
   assert.match(await f.p.getByRole('status').textContent(), /current response/);
   await f.p.close();
@@ -79,7 +83,7 @@ test('active generation is not refreshed', async () => {
 
 test('error-screen retry works without a router or reload', async () => {
   const f = await fixture({ router: false, error: true });
-  await f.p.getByRole('button', { name: '↻ Refresh view', exact: true }).click();
+  await f.p.getByRole('button', { name: 'Refresh view', exact: true }).click();
   assert.equal(await f.p.evaluate(() => window.refreshes), 1);
   assert.match(await f.p.getByRole('status').textContent(), /Retry requested/);
   assert.equal(f.loads(), 1);
@@ -88,7 +92,7 @@ test('error-screen retry works without a router or reload', async () => {
 
 test('unsupported pages report the limitation and route changes hide the control', async () => {
   const f = await fixture({ router: false });
-  await f.p.getByRole('button', { name: '↻ Refresh view', exact: true }).click();
+  await f.p.getByRole('button', { name: 'Refresh view', exact: true }).click();
   assert.match(await f.p.getByRole('status').textContent(), /does not expose/);
   await f.p.evaluate(() => history.pushState({}, '', '/'));
   await f.p.waitForFunction(() => document.getElementById('ghrc-refresh-view').hidden);
@@ -98,10 +102,13 @@ test('unsupported pages report the limitation and route changes hide the control
 
 test('a stalled refresh times out and releases its router subscription', async () => {
   const f = await fixture({ held: true });
-  await f.p.getByRole('button', { name: '↻ Refresh view', exact: true }).click();
-  assert.equal(await f.p.getByRole('button', { name: 'Refreshing…', exact: true }).isDisabled(), true);
+  await f.p.getByRole('button', { name: 'Refresh view', exact: true }).click();
+  assert.equal(await f.p.getByRole('button', { name: 'Refreshing view', exact: true }).isDisabled(), true);
+  assert.equal(await f.p.locator('#ghrc-refresh-view button').textContent(), '↻');
+  assert.equal(await f.p.locator('#ghrc-refresh-view button').getAttribute('aria-busy'), 'true');
   await f.p.clock.runFor(15_001);
   assert.equal(await f.p.evaluate(() => window.listeners.size), 0);
   assert.match(await f.p.getByRole('status').textContent(), /did not finish/);
+  assert.equal(await f.p.getByRole('button', { name: 'Refresh view', exact: true }).textContent(), '↻');
   await f.p.close();
 });
