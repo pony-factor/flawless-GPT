@@ -403,9 +403,19 @@
               <input id="show-spellcheck-gpt-launcher" type="checkbox" />
               <span>
                 <strong>Show Spellcheck Only launcher</strong>
-                <small>Adds a circular shortcut beside the new-chat composer using the bundled artwork.</small>
+                <small>Adds a circular shortcut beside the new-chat composer with customizable artwork.</small>
               </span>
             </label>
+          <div class="spellcheck-launcher-artwork">
+            <img id="spellcheck-launcher-image-preview" src="artwork/spellcheck-only.jpg" alt="Spellcheck Only launcher preview" width="48" height="48" />
+            <div class="spellcheck-launcher-artwork-controls">
+              <label for="spellcheck-launcher-image-file">Custom launcher image</label>
+              <input id="spellcheck-launcher-image-file" type="file" accept="image/png,image/jpeg,image/webp,image/gif" />
+              <small>PNG, JPEG, WebP or GIF; up to 1 MB. Stored only in this browser.</small>
+              <button id="reset-spellcheck-launcher-image" type="button" class="secondary">Restore default image</button>
+            </div>
+            <small id="spellcheck-launcher-image-status" role="status" aria-live="polite"></small>
+          </div>
             <label class="preference">
             <input id="show-2048-launcher" type="checkbox" />
             <span>
@@ -657,6 +667,7 @@
     <script src="js/github/token-vault.js"></script>
     <script src="js/dashboard/repository-search-shortcut.js"></script>
     <script src="js/settings/options.js"></script>
+    <script src="js/settings/spellcheck-launcher-image.js"></script>
     <script src="js/dashboard/pinned-issues-model.js"></script>
     <script src="js/settings/pinned-issues-options.js"></script>
     <script src="js/settings/highlighted-pages-options.js"></script>

@@ -715,3 +715,49 @@ button.secondary {
   border:1px dashed light-dark(#d0d7de,#3d444d);border-radius:6px;
   color:light-dark(#656d76,#9198a1);font-size:13px;margin:0;padding:12px;text-align:center;
 }
+
+/* Image picker shared by the popup and standalone settings. */
+.spellcheck-launcher-artwork {
+  display: flex;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 8px 0 0 26px;
+}
+
+#spellcheck-launcher-image-preview {
+  border-radius: 50%;
+  flex: 0 0 48px;
+  width: 48px;
+  height: 48px;
+  object-fit: cover;
+}
+
+.spellcheck-launcher-artwork-controls {
+  display: grid;
+  flex: 1 1 180px;
+  min-width: 0;
+  gap: 6px;
+}
+
+.spellcheck-launcher-artwork-controls label {
+  font-size: 13px;
+  margin: 0;
+}
+
+.spellcheck-launcher-artwork-controls input[type="file"] {
+  font-size: 12px;
+  max-width: 100%;
+  padding: 6px;
+}
+
+.spellcheck-launcher-artwork-controls small,
+#spellcheck-launcher-image-status {
+  color: light-dark(#656d76, #9198a1);
+  font-size: 12px;
+  line-height: 1.4;
+  font-weight: 400;
+}
+
+.spellcheck-launcher-artwork-controls button { justify-self: start; }
+#spellcheck-launcher-image-status { flex-basis: 100%; min-height: 1em; margin: 0; }
