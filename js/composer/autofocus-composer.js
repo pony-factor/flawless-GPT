@@ -2,6 +2,12 @@
   const SETTING_KEY = "autoFocusComposer";
   const HOMEPAGE_BOOT_ATTR = "data-ghrc-homepage-booting";
   const COMPOSER_READY_ATTR = "data-ghrc-composer-ready";
+  const DASHBOARD_SEARCH_SELECTOR = [
+    '#github-repositories-for-chatgpt .ghrc-search input[type="search"]',
+    "#github-repositories-for-chatgpt .ghrc-search-override-form input",
+    '#github-repositories-for-chatgpt .ghrc-wooten-link-search input[type="search"]',
+    '#github-repositories-for-chatgpt .ghrc-youtube-search input[type="search"]',
+  ].join(", ");
   const CONFIRM_DELAY_MS = 160;
   const SETTLE_DELAY_MS = 1800;
   const RETRY_DELAYS_MS = [0, 160, 320, 900, SETTLE_DELAY_MS];
@@ -25,6 +31,10 @@
     return document.activeElement === composer || composer.contains(document.activeElement);
   }
 
+  function isDashboardSearchField(element) {
+    return Boolean(element?.matches?.(DASHBOARD_SEARCH_SELECTOR));
+  }
+
   function hasBlockingDialog() {
     return Boolean(document.querySelector('[role="dialog"][aria-modal="true"]'));
   }
@@ -33,6 +43,10 @@
     if (!enabled || !pendingFocus || document.visibilityState === "hidden") return;
     if (document.documentElement.hasAttribute(HOMEPAGE_BOOT_ATTR)) return;
     if (hasBlockingDialog()) return;
+    if (isDashboardSearchField(document.activeElement)) {
+      cancelFocusCycle();
+      return;
+    }
 
     const composer = findComposerInput();
     if (!composer) return;
@@ -114,6 +128,10 @@
       document.documentElement.setAttribute(COMPOSER_READY_ATTR, "true");
       return;
     }
+    if (isDashboardSearchField(document.activeElement)) {
+      cancelFocusCycle();
+      return;
+    }
 
     RETRY_DELAYS_MS.forEach((delay) => {
       const timer = window.setTimeout(() => {
@@ -124,17 +142,21 @@
     });
   }
 
+  function cancelFocusCycle() {
+    focusedComposer = null;
+    pendingFocus = false;
+    focusGeneration += 1;
+    clearFocusTimers();
+    document.documentElement.setAttribute(COMPOSER_READY_ATTR, "true");
+  }
+
   function cancelFocusCycleForUserInput(event) {
     if (!event.isTrusted) return;
 
     const composer = findComposerInput();
     if (composer && (event.target === composer || composer.contains(event.target))) return;
 
-    focusedComposer = null;
-    pendingFocus = false;
-    focusGeneration += 1;
-    clearFocusTimers();
-    document.documentElement.setAttribute(COMPOSER_READY_ATTR, "true");
+    cancelFocusCycle();
   }
 
   async function loadPreference() {
@@ -183,6 +205,7 @@
   document.addEventListener("focusin", event => {
     const composer = findComposerInput();
     focusedComposer = composer && (event.target === composer || composer.contains(event.target)) ? composer : null;
+    if (enabled && isDashboardSearchField(event.target)) cancelFocusCycle();
   }, true);
 
   document.addEventListener("visibilitychange", () => {
