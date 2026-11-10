@@ -76,3 +76,53 @@ test('composer focus survives hydration and explicit chat actions without steali
     await browser.close();
   }
 });
+
+test('dashboard search fields keep their cursor during composer autofocus and route changes', async () => {
+  const browser = await chromium.launch({ executablePath: '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser', headless: true });
+  try {
+    const page = await browser.newPage();
+    const errors = [];
+    page.on('pageerror', error => errors.push(error.message));
+    await page.setContent(`
+      <div data-composer-markdown contenteditable="true"></div>
+      <div id="github-repositories-for-chatgpt">
+        <label class="ghrc-search"><input id="repo-search" type="search"></label>
+        <form class="ghrc-search-override-form"><input id="custom-repo-search" type="text"></form>
+        <form class="ghrc-wooten-link-search"><input id="wooten-search" type="search"></form>
+        <form class="ghrc-youtube-search"><input id="youtube-search" type="search"></form>
+      </div>
+      <button id="ask">Ask ChatGPT</button>
+    `);
+    await page.evaluate(() => {
+      window.chrome = { storage: {
+        local: { get: async defaults => defaults },
+        onChanged: { addListener: () => {} },
+      } };
+    });
+
+    // An input focused before extension startup must also remain focused.
+    await page.locator('#repo-search').focus();
+    await page.addScriptTag({ content: fs.readFileSync(path.join(__dirname, '../js/composer/autofocus-composer.js'), 'utf8') });
+    await page.waitForTimeout(1950);
+    assert.equal(await page.evaluate(() => document.activeElement.id), 'repo-search');
+
+    for (const id of ['repo-search', 'custom-repo-search', 'wooten-search', 'youtube-search']) {
+      const input = page.locator(`#${id}`);
+      await input.focus();
+      await page.evaluate(() => window.dispatchEvent(new Event('ghrc:route-change')));
+      await input.pressSequentially('pony');
+      // Includes the final delayed retry, which must not redirect keystrokes.
+      await page.waitForTimeout(1950);
+      assert.equal(await page.evaluate(() => document.activeElement.id), id);
+      assert.equal(await input.inputValue(), 'pony');
+      await input.fill('');
+    }
+
+    // A deliberate ChatGPT action still restores composer focus.
+    await page.locator('#ask').click();
+    await page.waitForFunction(() => document.activeElement.matches('[data-composer-markdown]'));
+    assert.deepEqual(errors, []);
+  } finally {
+    await browser.close();
+  }
+});
