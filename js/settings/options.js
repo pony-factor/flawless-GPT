@@ -70,6 +70,7 @@ const preserveScrollPositionOnSendInput = document.getElementById("preserve-scro
 const messageQueueMaxHeightPercentInput = document.getElementById("message-queue-max-height-percent");
 const hideShareLabelInput = document.getElementById("hide-share-label");
 const compactNewChatHeaderInput = document.getElementById("compact-new-chat-header");
+const hideNewChatComposerInput = document.getElementById("hide-new-chat-composer");
 const disableWorkModeInput = document.getElementById("disable-work-mode");
 const disableManualWebSearchInput = document.getElementById("disable-manual-web-search");
 const showSpellcheckGptLauncherInput = document.getElementById("show-spellcheck-gpt-launcher");
@@ -450,6 +451,7 @@ async function loadSettings() {
     messageQueueMaxHeightPercent: DEFAULT_MESSAGE_QUEUE_MAX_HEIGHT_PERCENT,
     hideShareLabel: false,
     compactNewChatHeader: true,
+    hideNewChatComposer: false,
     disableManualWebSearch: false,
     disableWorkMode: false,
     showSpellcheckGptLauncher: false,
@@ -524,6 +526,7 @@ async function loadSettings() {
   messageQueueMaxHeightPercentInput.value = normalizedMessageQueueMaxHeightPercent(settings.messageQueueMaxHeightPercent);
   hideShareLabelInput.checked = Boolean(settings.hideShareLabel);
   compactNewChatHeaderInput.checked = Boolean(settings.compactNewChatHeader);
+  hideNewChatComposerInput.checked = Boolean(settings.hideNewChatComposer);
   disableWorkModeInput.checked = Boolean(settings.disableWorkMode);
   disableManualWebSearchInput.checked = Boolean(settings.disableManualWebSearch);
   showSpellcheckGptLauncherInput.checked = Boolean(settings.showSpellcheckGptLauncher);
@@ -648,6 +651,7 @@ async function saveSettings() {
       messageQueueMaxHeightPercent: normalizedMessageQueueMaxHeightPercent(messageQueueMaxHeightPercentInput.value),
       hideShareLabel: hideShareLabelInput.checked,
       compactNewChatHeader: compactNewChatHeaderInput.checked,
+      hideNewChatComposer: hideNewChatComposerInput.checked,
       disableWorkMode: disableWorkModeInput.checked,
       disableManualWebSearch: disableManualWebSearchInput.checked,
       showSpellcheckGptLauncher: showSpellcheckGptLauncherInput.checked,

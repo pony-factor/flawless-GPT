@@ -5,6 +5,7 @@
   const NEW_CHAT_ATTR = "data-ghrc-new-chat";
   const COMPACT_HEADER_ATTR = "data-ghrc-compact-header";
   const COMPACT_LAYOUT_READY_ATTR = "data-ghrc-compact-layout-ready";
+  const HIDE_COMPOSER_ATTR = "data-ghrc-hide-new-chat-composer";
   const COMPOSER_STACK_CLASS = "ghrc-compact-composer-stack";
   const WELCOME_REGION_CLASS = "ghrc-compact-welcome-region";
   let activeStack = null;
@@ -194,17 +195,25 @@
   }
   window.addEventListener("ghrc:route-change", updateRoute);
   window.addEventListener("popstate", updateRoute);
+  function updateComposerPreference(changes, area) {
+    if (area === "local" && changes.hideNewChatComposer) {
+      document.documentElement.toggleAttribute(HIDE_COMPOSER_ATTR, Boolean(changes.hideNewChatComposer.newValue));
+    }
+  }
+  chrome.storage.onChanged.addListener(updateComposerPreference);
   context.onStop(() => {
     pageObserver.disconnect();
     preferenceObserver.disconnect();
     window.removeEventListener("ghrc:route-change", updateRoute);
     window.removeEventListener("popstate", updateRoute);
+    chrome.storage.onChanged.removeListener?.(updateComposerPreference);
   });
 
   applyCompactLayout();
   void context.run(async () => {
-    const settings = await chrome.storage.local.get({ compactNewChatHeader: true });
+    const settings = await chrome.storage.local.get({ compactNewChatHeader: true, hideNewChatComposer: false });
     if (!context.active()) return;
+    document.documentElement.toggleAttribute(HIDE_COMPOSER_ATTR, Boolean(settings.hideNewChatComposer));
     document.documentElement.toggleAttribute(COMPACT_HEADER_ATTR, Boolean(settings.compactNewChatHeader));
     if (location.pathname === "/" && !document.querySelector('[data-message-author-role]')) {
       document.documentElement.setAttribute(NEW_CHAT_ATTR, "true");
