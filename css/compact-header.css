@@ -1,4 +1,3 @@
-/* The compact homepage no longer needs the native header's top inset. */
 /* Hide the editor surface, preserving its nodes, draft, and dashboard siblings. */
 html[data-ghrc-new-chat][data-ghrc-hide-new-chat-composer]
   :is(form:has(#prompt-textarea, [data-composer-markdown]),
@@ -7,6 +6,7 @@ html[data-ghrc-new-chat][data-ghrc-hide-new-chat-composer]
   display: none !important;
 }
 
+/* The compact homepage no longer needs the native header's top inset. */
 html[data-ghrc-new-chat][data-ghrc-compact-header] main {
   padding-top: 0 !important;
 }

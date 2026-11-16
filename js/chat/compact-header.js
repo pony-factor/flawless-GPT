@@ -206,7 +206,7 @@
     preferenceObserver.disconnect();
     window.removeEventListener("ghrc:route-change", updateRoute);
     window.removeEventListener("popstate", updateRoute);
-    chrome.storage.onChanged.removeListener?.(updateComposerPreference);
+    chrome.storage?.onChanged?.removeListener?.(updateComposerPreference);
   });
 
   applyCompactLayout();
