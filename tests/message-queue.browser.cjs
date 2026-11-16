@@ -322,6 +322,49 @@ async function sentCount(page, count) {
   await page.waitForFunction(n => sent.length === n, count, { timeout: 10000 });
 }
 
+for (const liveMarkup of [false, true]) {
+  for (const assistantRole of [false, true]) test(`queue resumes after stopped thinking (${liveMarkup ? 'grouped' : 'article'}, assistant role=${assistantRole})`, async () => {
+    const p = await fixture({ active: true, liveMarkup });
+    await enqueue(p, 'Continue after cancellation');
+    await p.locator('[data-composer-markdown]').fill('Keep my draft');
+    await p.evaluate(assistantRole => {
+      const assistant = document.querySelector('[data-message-author-role="assistant"], [data-content-search-unit-key$=":assistant"]');
+      const turn = assistant.parentElement;
+      if (!assistantRole) assistant.remove();
+      turn.insertAdjacentHTML('beforeend', '<button aria-label="Stopped thinking">Stopped thinking</button>');
+    }, assistantRole);
+    // The marker cannot override a native Stop control while work is active.
+    await p.waitForTimeout(1800);
+    assert.deepEqual(await p.evaluate(() => sent), []);
+    await p.evaluate(() => { window.active = false; update(); });
+    await sentCount(p, 1);
+    await p.waitForFunction(() => read() === 'Keep my draft' && !document.querySelector('.ghrc-message-queue-editor'));
+    assert.deepEqual(await p.evaluate(() => sent), ['Continue after cancellation']);
+    assert.equal(await p.locator('.ghrc-message-queue-editor').count(), 0);
+    assert.deepEqual(p.errors, []);
+    await p.close();
+  });
+}
+
+test('old, hidden, and side-panel stopped-thinking controls cannot release a newer unanswered turn', async () => {
+  const p = await fixture({ liveMarkup: true });
+  await p.evaluate(() => {
+    document.getElementById('turns').setAttribute('aria-label', 'Conversation');
+    addTurn('user'); addTurn('assistant');
+    document.querySelector('[data-fixture-turn]').insertAdjacentHTML('beforeend', '<button>Stopped thinking</button>');
+    addTurn('user');
+    document.querySelector('[data-fixture-turn]:last-child').insertAdjacentHTML('beforeend', '<button hidden>Stopped thinking</button>');
+    document.body.insertAdjacentHTML('beforeend', '<aside><button>Stopped thinking</button></aside>');
+  });
+  await enqueue(p, 'Wait for the current reply');
+  await p.waitForTimeout(2000);
+  assert.deepEqual(await p.evaluate(() => sent), []);
+  await p.evaluate(() => addTurn('assistant', true));
+  await sentCount(p, 1);
+  assert.deepEqual(p.errors, []);
+  await p.close();
+});
+
 for (const liveMarkup of [false, true]) test(`queue follows the latest reply after unanswered earlier messages (${liveMarkup ? 'grouped' : 'article'} turns)`, async () => {
   const p = await fixture({ liveMarkup });
   await p.evaluate(() => {

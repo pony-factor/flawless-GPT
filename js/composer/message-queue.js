@@ -534,6 +534,21 @@
     return document.querySelector('[aria-label="Conversation"]') || document;
   }
 
+  function isStoppedThinkingControl(node) {
+    return node.matches('button') && isVisible(node)
+      && [node.getAttribute("aria-label"), node.textContent]
+        .some(label => /^stopped thinking$/i.test((label || "").trim()));
+  }
+
+  function latestResponseWasStopped(latestUser) {
+    if (!latestUser) return false;
+    // A cancelled thinking-only reply may have no assistant role or toolbar.
+    // Ignore stopped replies before the current user message and side panels.
+    return [...conversationRoot().querySelectorAll('button')].some(button =>
+      isStoppedThinkingControl(button)
+      && Boolean(latestUser.compareDocumentPosition(button) & Node.DOCUMENT_POSITION_FOLLOWING));
+  }
+
   function generationIndicatorIsActive() {
     const latestAssistant = [...conversationRoot().querySelectorAll(
       '[data-message-author-role="assistant"], [data-content-search-unit-key$=":assistant"], [data-testid="generated-image-gallery"]'
@@ -553,7 +568,8 @@
       '[aria-busy="true"]',
     ];
     if (selectors.some((selector) =>
-      [...root.querySelectorAll(selector)].some(isVisible)
+      [...root.querySelectorAll(selector)].some(node => isVisible(node)
+        && !(selector === '[aria-label*="thinking" i]' && isStoppedThinkingControl(node)))
     )) return true;
 
     return [...root.querySelectorAll('[role="status"], [aria-live="polite"], [aria-live="assertive"]')]
@@ -791,7 +807,8 @@
     // Check message order instead of requiring lifetime counts to balance.
     const latestUser = [...conversationRoot().querySelectorAll('[data-message-author-role="user"], [data-content-search-unit-key$=":user"]')].at(-1);
     const latestAssistant = [...conversationRoot().querySelectorAll('[data-message-author-role="assistant"], [data-content-search-unit-key$=":assistant"], [data-testid="generated-image-gallery"]')].at(-1);
-    const latestUserAnswered = Boolean(latestUser && latestAssistant
+    const responseStopped = latestResponseWasStopped(latestUser);
+    const latestUserAnswered = responseStopped || Boolean(latestUser && latestAssistant
       && (latestUser.compareDocumentPosition(latestAssistant) & Node.DOCUMENT_POSITION_FOLLOWING));
     const turnCount = conversationRoot().querySelectorAll('[data-testid^="conversation-turn-"], [data-content-search-unit-key]').length;
     const roleStateKnown = turnCount === 0 || userTurns.length + assistantTurns.length > 0;
@@ -803,7 +820,7 @@
       userTurns: userTurns.length,
       assistantTurns: assistantTurns.length,
       latestUserAnswered,
-      latestAssistantComplete: latestAssistantIsComplete(assistantTurns),
+      latestAssistantComplete: responseStopped || latestAssistantIsComplete(assistantTurns),
       roleStateKnown,
       latestUser,
       latestAssistant,
