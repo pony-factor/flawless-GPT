@@ -3,9 +3,10 @@ html[data-ghrc-new-chat][data-ghrc-compact-header] main {
   padding-top: 0 !important;
 }
 
-/* The current app shell reserves toolbar space even with model controls hidden. */
+/* Both app shells reserve toolbar space even with model controls hidden.
+   The newer frame also clips its centered composer against this inset. */
 html[data-ghrc-new-chat][data-ghrc-compact-header]:not([data-ghrc-show-model-controls])
-  [data-app-shell-main-content-layout] {
+  :is([data-app-shell-main-content-layout], [data-app-shell-thread-edge-divider]) {
   --app-shell-main-content-frame-top-offset: 0px !important;
 }
 
