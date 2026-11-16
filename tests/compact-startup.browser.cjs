@@ -100,7 +100,7 @@ for (const [route, width, legacy, enabled] of [
     fs.writeFileSync(path.join(extension, 'background.js'), 'chrome.runtime.onInstalled.addListener(() => {});');
     // Exercise the real settings controls and save handler with an empty vault.
     // This isolated extension never loads the user's credentials or profile.
-    for (const file of ['js/settings/options.js', 'js/dashboard/repository-search-shortcut.js']) {
+    for (const file of ['js/settings/options.js', 'js/settings/popup.js', 'js/settings/options-page.js', 'js/dashboard/repository-search-shortcut.js']) {
       fs.mkdirSync(path.dirname(path.join(extension, file)), { recursive: true });
       fs.copyFileSync(path.join(root, file), path.join(extension, file));
     }
@@ -108,7 +108,7 @@ for (const [route, width, legacy, enabled] of [
     for (const file of ['popup.html', 'options.html']) {
       const markup = fs.readFileSync(path.join(root, file), 'utf8')
         .replace(/<script\b[^>]*>[\s\S]*?<\/script>/g, '')
-        .replace('</body>', '<script src="empty-vault.js"></script><script src="js/dashboard/repository-search-shortcut.js"></script><script src="js/settings/options.js"></script></body>');
+        .replace('</body>', `<script src="empty-vault.js"></script><script src="js/dashboard/repository-search-shortcut.js"></script><script src="js/settings/options.js"></script><script src="js/settings/${file === 'popup.html' ? 'popup' : 'options-page'}.js"></script></body>`);
       fs.writeFileSync(path.join(extension, file), markup);
     }
     fs.writeFileSync(path.join(extension, 'manifest.json'), JSON.stringify({
@@ -175,6 +175,7 @@ for (const [route, width, legacy, enabled] of [
           settingsPage.on('pageerror', error => errors.push(error.message));
           await settingsPage.goto(worker.url().replace(/background\.js$/, file));
           await settingsPage.waitForFunction(() => tokenStateLoaded);
+          await settingsPage.getByRole('tab', { name: 'ChatGPT', exact: true }).click();
           const toggle = settingsPage.getByRole('checkbox', { name: /Hide new-chat composer bar/ });
           assert.equal(await toggle.isChecked(), false);
           await toggle.check();
@@ -182,6 +183,7 @@ for (const [route, width, legacy, enabled] of [
           assert.equal(await page.locator('form').isVisible(), false);
           await settingsPage.reload();
           await settingsPage.waitForFunction(() => tokenStateLoaded);
+          await settingsPage.getByRole('tab', { name: 'ChatGPT', exact: true }).click();
           assert.equal(await toggle.isChecked(), true, 'saved preference survives reopening settings');
           await toggle.uncheck();
           await page.waitForFunction(() => !document.documentElement.hasAttribute('data-ghrc-hide-new-chat-composer'));
