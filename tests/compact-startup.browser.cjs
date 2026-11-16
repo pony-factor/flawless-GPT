@@ -7,6 +7,67 @@ const os = require('node:os');
 const http = require('node:http');
 const { chromium } = require('playwright');
 
+test('compact composer stays inside the current app shell scroll boundary', async () => {
+  const browser = await chromium.launch({
+    executablePath: process.env.BROWSER_EXECUTABLE || '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser',
+    headless: true,
+  });
+  try {
+    const page = await browser.newPage();
+    await page.setContent(`
+      <style>
+        body { margin: 0 }
+        main { height: 800px; overflow: hidden }
+        [data-app-shell-thread-edge-divider] {
+          --app-shell-main-content-frame-top-offset: 52px;
+          --app-shell-main-content-offset: var(--app-shell-main-content-frame-top-offset);
+          margin-top: var(--app-shell-main-content-frame-top-offset);
+        }
+        [role="presentation"] { height: 700px; overflow-y: auto }
+        .home-composer-centered { margin-top: calc(-1 * var(--app-shell-main-content-offset)) }
+        form { height: 52px; background: #303030; color: white }
+      </style>
+      <main><div data-app-shell-thread-edge-divider><div role="presentation">
+        <div class="group/home-composer-layout"><div class="home-composer-centered">
+          <form><div contenteditable="true">Dash</div><button>Send</button></form>
+          <section style="height:1000px">Repositories</section>
+        </div></div>
+      </div></div></main>
+    `);
+    const geometry = () => page.evaluate(() => {
+      const form = document.querySelector('form').getBoundingClientRect();
+      const boundary = document.querySelector('[role="presentation"]').getBoundingClientRect();
+      const hit = document.elementFromPoint(form.left + 10, form.top + 2);
+      return { top: form.top, bottom: form.bottom, boundaryTop: boundary.top,
+        hit: Boolean(hit?.closest('form')), draft: document.querySelector('[contenteditable]').textContent };
+    });
+    await page.evaluate(() => {
+      document.documentElement.setAttribute('data-ghrc-new-chat', 'true');
+      document.documentElement.setAttribute('data-ghrc-compact-header', 'true');
+    });
+    const before = await geometry();
+    assert.ok(before.top < before.boundaryTop, 'native centering reproduces the clipped composer');
+    await page.addStyleTag({ path: path.join(__dirname, '../css/compact-header.css') });
+    for (const width of [1280, 390]) {
+      await page.setViewportSize({ width, height: 800 });
+      const after = await geometry();
+      assert.equal(after.top, 28);
+      assert.ok(after.top >= after.boundaryTop && after.bottom <= 800);
+      assert.equal(after.hit, true, 'top of composer is visible and receives pointer input');
+      assert.equal(after.draft, 'Dash');
+    }
+    await page.evaluate(() => document.documentElement.setAttribute('data-ghrc-show-model-controls', 'true'));
+    assert.equal((await geometry()).boundaryTop, 52, 'visible model controls retain their inset');
+    await page.evaluate(() => {
+      document.documentElement.removeAttribute('data-ghrc-show-model-controls');
+      document.documentElement.removeAttribute('data-ghrc-compact-header');
+    });
+    assert.equal((await geometry()).boundaryTop, 52, 'disabling compact mode restores native spacing');
+  } finally {
+    await browser.close();
+  }
+});
+
 for (const [route, width, legacy, enabled] of [
   ['/', 1280, false, true],
   ['/?temporary-chat=true', 390, true, true],
@@ -37,6 +98,19 @@ for (const [route, width, legacy, enabled] of [
       };
     `);
     fs.writeFileSync(path.join(extension, 'background.js'), 'chrome.runtime.onInstalled.addListener(() => {});');
+    // Exercise the real settings controls and save handler with an empty vault.
+    // This isolated extension never loads the user's credentials or profile.
+    for (const file of ['js/settings/options.js', 'js/settings/popup.js', 'js/settings/options-page.js', 'js/dashboard/repository-search-shortcut.js']) {
+      fs.mkdirSync(path.dirname(path.join(extension, file)), { recursive: true });
+      fs.copyFileSync(path.join(root, file), path.join(extension, file));
+    }
+    fs.writeFileSync(path.join(extension, 'empty-vault.js'), 'globalThis.TokenVault={loadTokens:async()=>[],saveTokens:async()=>{},clearTokens:async()=>{}};');
+    for (const file of ['popup.html', 'options.html']) {
+      const markup = fs.readFileSync(path.join(root, file), 'utf8')
+        .replace(/<script\b[^>]*>[\s\S]*?<\/script>/g, '')
+        .replace('</body>', `<script src="empty-vault.js"></script><script src="js/dashboard/repository-search-shortcut.js"></script><script src="js/settings/options.js"></script><script src="js/settings/${file === 'popup.html' ? 'popup' : 'options-page'}.js"></script></body>`);
+      fs.writeFileSync(path.join(extension, file), markup);
+    }
     fs.writeFileSync(path.join(extension, 'manifest.json'), JSON.stringify({
       manifest_version: 3, name: 'Compact first paint fixture', version: '1.0', permissions: ['storage'],
       background: {service_worker: 'background.js'},
@@ -82,6 +156,42 @@ for (const [route, width, legacy, enabled] of [
       assert.equal(final.welcomeVisible, !home || !enabled);
       if (home && enabled) assert.equal(final.top, 28);
       if (!home || !enabled) assert.ok(final.top > 300);
+      await page.locator('#prompt-textarea').fill('Keep this draft');
+      await page.evaluate(() => document.querySelector('form').insertAdjacentHTML('afterend',
+        '<button id="ghrc-spellcheck-gpt-launcher">Spellcheck</button><button id="ghrc-clipboard-open-url-button">Clipboard</button><section id="github-repositories-for-chatgpt">Repositories</section>'));
+      await worker.evaluate(() => chrome.storage.local.set({ hideNewChatComposer: true }));
+      await page.waitForFunction(() => document.documentElement.hasAttribute('data-ghrc-hide-new-chat-composer'));
+      assert.equal(await page.locator('form').isVisible(), !home);
+      assert.equal(await page.locator('#ghrc-spellcheck-gpt-launcher').isVisible(), !home);
+      assert.equal(await page.locator('#ghrc-clipboard-open-url-button').isVisible(), !home);
+      assert.equal(await page.locator('#github-repositories-for-chatgpt').isVisible(), true);
+      await worker.evaluate(() => chrome.storage.local.set({ hideNewChatComposer: false }));
+      await page.waitForFunction(() => !document.documentElement.hasAttribute('data-ghrc-hide-new-chat-composer'));
+      assert.equal(await page.locator('form').isVisible(), true);
+      assert.equal(await page.locator('#prompt-textarea').innerText(), 'Keep this draft');
+      if (home && enabled && width === 1280) {
+        for (const file of ['popup.html', 'options.html']) {
+          const settingsPage = await context.newPage();
+          settingsPage.on('pageerror', error => errors.push(error.message));
+          await settingsPage.goto(worker.url().replace(/background\.js$/, file));
+          await settingsPage.waitForFunction(() => tokenStateLoaded);
+          await settingsPage.getByRole('tab', { name: 'ChatGPT', exact: true }).click();
+          const toggle = settingsPage.getByRole('checkbox', { name: /Hide new-chat composer bar/ });
+          assert.equal(await toggle.isChecked(), false);
+          await toggle.check();
+          await page.waitForFunction(() => document.documentElement.hasAttribute('data-ghrc-hide-new-chat-composer'));
+          assert.equal(await page.locator('form').isVisible(), false);
+          await settingsPage.reload();
+          await settingsPage.waitForFunction(() => tokenStateLoaded);
+          await settingsPage.getByRole('tab', { name: 'ChatGPT', exact: true }).click();
+          assert.equal(await toggle.isChecked(), true, 'saved preference survives reopening settings');
+          await toggle.uncheck();
+          await page.waitForFunction(() => !document.documentElement.hasAttribute('data-ghrc-hide-new-chat-composer'));
+          assert.equal(await page.locator('form').isVisible(), true);
+          assert.equal(await page.locator('#prompt-textarea').innerText(), 'Keep this draft');
+          await settingsPage.close();
+        }
+      }
       assert.deepEqual(errors, []);
     } finally {
       for (const timer of timers) clearTimeout(timer);
