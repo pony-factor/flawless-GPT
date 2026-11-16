@@ -7,6 +7,67 @@ const os = require('node:os');
 const http = require('node:http');
 const { chromium } = require('playwright');
 
+test('compact composer stays inside the current app shell scroll boundary', async () => {
+  const browser = await chromium.launch({
+    executablePath: process.env.BROWSER_EXECUTABLE || '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser',
+    headless: true,
+  });
+  try {
+    const page = await browser.newPage();
+    await page.setContent(`
+      <style>
+        body { margin: 0 }
+        main { height: 800px; overflow: hidden }
+        [data-app-shell-thread-edge-divider] {
+          --app-shell-main-content-frame-top-offset: 52px;
+          --app-shell-main-content-offset: var(--app-shell-main-content-frame-top-offset);
+          margin-top: var(--app-shell-main-content-frame-top-offset);
+        }
+        [role="presentation"] { height: 700px; overflow-y: auto }
+        .home-composer-centered { margin-top: calc(-1 * var(--app-shell-main-content-offset)) }
+        form { height: 52px; background: #303030; color: white }
+      </style>
+      <main><div data-app-shell-thread-edge-divider><div role="presentation">
+        <div class="group/home-composer-layout"><div class="home-composer-centered">
+          <form><div contenteditable="true">Dash</div><button>Send</button></form>
+          <section style="height:1000px">Repositories</section>
+        </div></div>
+      </div></div></main>
+    `);
+    const geometry = () => page.evaluate(() => {
+      const form = document.querySelector('form').getBoundingClientRect();
+      const boundary = document.querySelector('[role="presentation"]').getBoundingClientRect();
+      const hit = document.elementFromPoint(form.left + 10, form.top + 2);
+      return { top: form.top, bottom: form.bottom, boundaryTop: boundary.top,
+        hit: Boolean(hit?.closest('form')), draft: document.querySelector('[contenteditable]').textContent };
+    });
+    await page.evaluate(() => {
+      document.documentElement.setAttribute('data-ghrc-new-chat', 'true');
+      document.documentElement.setAttribute('data-ghrc-compact-header', 'true');
+    });
+    const before = await geometry();
+    assert.ok(before.top < before.boundaryTop, 'native centering reproduces the clipped composer');
+    await page.addStyleTag({ path: path.join(__dirname, '../css/compact-header.css') });
+    for (const width of [1280, 390]) {
+      await page.setViewportSize({ width, height: 800 });
+      const after = await geometry();
+      assert.equal(after.top, 28);
+      assert.ok(after.top >= after.boundaryTop && after.bottom <= 800);
+      assert.equal(after.hit, true, 'top of composer is visible and receives pointer input');
+      assert.equal(after.draft, 'Dash');
+    }
+    await page.evaluate(() => document.documentElement.setAttribute('data-ghrc-show-model-controls', 'true'));
+    assert.equal((await geometry()).boundaryTop, 52, 'visible model controls retain their inset');
+    await page.evaluate(() => {
+      document.documentElement.removeAttribute('data-ghrc-show-model-controls');
+      document.documentElement.removeAttribute('data-ghrc-compact-header');
+    });
+    assert.equal((await geometry()).boundaryTop, 52, 'disabling compact mode restores native spacing');
+  } finally {
+    await browser.close();
+  }
+});
+
 for (const [route, width, legacy, enabled] of [
   ['/', 1280, false, true],
   ['/?temporary-chat=true', 390, true, true],
