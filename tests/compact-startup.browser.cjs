@@ -98,6 +98,19 @@ for (const [route, width, legacy, enabled] of [
       };
     `);
     fs.writeFileSync(path.join(extension, 'background.js'), 'chrome.runtime.onInstalled.addListener(() => {});');
+    // Exercise the real settings controls and save handler with an empty vault.
+    // This isolated extension never loads the user's credentials or profile.
+    for (const file of ['js/settings/options.js', 'js/dashboard/repository-search-shortcut.js']) {
+      fs.mkdirSync(path.dirname(path.join(extension, file)), { recursive: true });
+      fs.copyFileSync(path.join(root, file), path.join(extension, file));
+    }
+    fs.writeFileSync(path.join(extension, 'empty-vault.js'), 'globalThis.TokenVault={loadTokens:async()=>[],saveTokens:async()=>{},clearTokens:async()=>{}};');
+    for (const file of ['popup.html', 'options.html']) {
+      const markup = fs.readFileSync(path.join(root, file), 'utf8')
+        .replace(/<script\b[^>]*>[\s\S]*?<\/script>/g, '')
+        .replace('</body>', '<script src="empty-vault.js"></script><script src="js/dashboard/repository-search-shortcut.js"></script><script src="js/settings/options.js"></script></body>');
+      fs.writeFileSync(path.join(extension, file), markup);
+    }
     fs.writeFileSync(path.join(extension, 'manifest.json'), JSON.stringify({
       manifest_version: 3, name: 'Compact first paint fixture', version: '1.0', permissions: ['storage'],
       background: {service_worker: 'background.js'},
@@ -143,6 +156,40 @@ for (const [route, width, legacy, enabled] of [
       assert.equal(final.welcomeVisible, !home || !enabled);
       if (home && enabled) assert.equal(final.top, 28);
       if (!home || !enabled) assert.ok(final.top > 300);
+      await page.locator('#prompt-textarea').fill('Keep this draft');
+      await page.evaluate(() => document.querySelector('form').insertAdjacentHTML('afterend',
+        '<button id="ghrc-spellcheck-gpt-launcher">Spellcheck</button><button id="ghrc-clipboard-open-url-button">Clipboard</button><section id="github-repositories-for-chatgpt">Repositories</section>'));
+      await worker.evaluate(() => chrome.storage.local.set({ hideNewChatComposer: true }));
+      await page.waitForFunction(() => document.documentElement.hasAttribute('data-ghrc-hide-new-chat-composer'));
+      assert.equal(await page.locator('form').isVisible(), !home);
+      assert.equal(await page.locator('#ghrc-spellcheck-gpt-launcher').isVisible(), !home);
+      assert.equal(await page.locator('#ghrc-clipboard-open-url-button').isVisible(), !home);
+      assert.equal(await page.locator('#github-repositories-for-chatgpt').isVisible(), true);
+      await worker.evaluate(() => chrome.storage.local.set({ hideNewChatComposer: false }));
+      await page.waitForFunction(() => !document.documentElement.hasAttribute('data-ghrc-hide-new-chat-composer'));
+      assert.equal(await page.locator('form').isVisible(), true);
+      assert.equal(await page.locator('#prompt-textarea').innerText(), 'Keep this draft');
+      if (home && enabled && width === 1280) {
+        for (const file of ['popup.html', 'options.html']) {
+          const settingsPage = await context.newPage();
+          settingsPage.on('pageerror', error => errors.push(error.message));
+          await settingsPage.goto(worker.url().replace(/background\.js$/, file));
+          await settingsPage.waitForFunction(() => tokenStateLoaded);
+          const toggle = settingsPage.getByRole('checkbox', { name: /Hide new-chat composer bar/ });
+          assert.equal(await toggle.isChecked(), false);
+          await toggle.check();
+          await page.waitForFunction(() => document.documentElement.hasAttribute('data-ghrc-hide-new-chat-composer'));
+          assert.equal(await page.locator('form').isVisible(), false);
+          await settingsPage.reload();
+          await settingsPage.waitForFunction(() => tokenStateLoaded);
+          assert.equal(await toggle.isChecked(), true, 'saved preference survives reopening settings');
+          await toggle.uncheck();
+          await page.waitForFunction(() => !document.documentElement.hasAttribute('data-ghrc-hide-new-chat-composer'));
+          assert.equal(await page.locator('form').isVisible(), true);
+          assert.equal(await page.locator('#prompt-textarea').innerText(), 'Keep this draft');
+          await settingsPage.close();
+        }
+      }
       assert.deepEqual(errors, []);
     } finally {
       for (const timer of timers) clearTimeout(timer);
