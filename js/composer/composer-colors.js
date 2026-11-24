@@ -1,5 +1,6 @@
 (() => {
   "use strict";
+  if (globalThis.__ghrcSettingsContext?.active() === false) return;
   const STORAGE_KEY = "composerColors";
   const SOURCE_KEY = "composerColorSource";
   const SPECS = [["surface","Bar background","#303030"],["surface-border","Bar border","#666666"],["focus-ring","Focus border and ring","#a97dee"],["text","Typed text","#ffffff"],["caret","Typing cursor","#a97dee"],["placeholder","Placeholder text","#a1a1aa"],["selection-background","Selected text background","#8556c6"],["selection-text","Selected text","#ffffff"],["toolbar-background","Toolbar button backgrounds","#444444"],["toolbar-icon","Toolbar icons and labels","#ffffff"],["toolbar-hover","Toolbar hover","#555555"],["send-background","Send button background","#ffffff"],["send-icon","Send button icon","#202020"],["send-hover","Send button hover","#dadada"],["stop-background","Stop button background","#ffffff"],["stop-icon","Stop button icon","#202020"],["plus-background","+ button background","#444444"],["plus-icon","+ button icon","#ffffff"],["plus-hover","+ button hover","#555555"],["clipboard-background","Clipboard paste background","#444444"],["clipboard-icon","Clipboard paste icon","#ffffff"],["clipboard-hover","Clipboard paste hover","#555555"],["attachment-background","Attachment background","#404040"],["attachment-text","Attachment text","#ffffff"],["attachment-border","Attachment border","#747474"],["edit-cancel-background","Edit message Cancel background","#303030"],["edit-cancel-text","Edit message Cancel text","#f5f5f5"],["edit-cancel-hover","Edit message Cancel hover","#454545"],["edit-send-background","Edit message Send background","#f5f5f5"],["edit-send-text","Edit message Send text","#202020"],["edit-send-hover","Edit message Send hover","#dadada"]];
@@ -47,7 +48,7 @@
       if (!loaded) return;
       const snapshot = { ...colors };
       reset.disabled = Object.keys(snapshot).length === 0;
-      pending = pending.catch(() => {}).then(() => chrome.storage.local.set({ [STORAGE_KEY]: snapshot }));
+      pending = pending.catch(() => {}).then(() => chrome.storage.local.set({ [STORAGE_KEY]: snapshot })).catch((globalThis.__ghrcSettingsContext?.report || console.error));
     }
     for (const [key, title, preview] of SPECS) {
       const row = document.createElement("div");
@@ -138,7 +139,7 @@
         render(stored[STORAGE_KEY]);
       }
       loaded = true;
-    });
+    }).catch((globalThis.__ghrcSettingsContext?.report || console.error));
     chrome.storage.onChanged?.addListener?.((changes, area) => {
       if (area !== "local" || !changes[SOURCE_KEY]) return;
       sourceColors = valid(changes[SOURCE_KEY].newValue);

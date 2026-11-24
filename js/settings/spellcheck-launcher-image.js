@@ -1,4 +1,5 @@
 (() => {
+  if (globalThis.__ghrcSettingsContext?.active() === false) return;
   const IMAGE_KEY = "spellcheckLauncherImage";
   const MAX_BYTES = 1024 * 1024;
   const MAX_LENGTH = Math.ceil(MAX_BYTES / 3) * 4 + 64;

@@ -1,4 +1,5 @@
 (() => {
+  if (globalThis.__ghrcSettingsContext?.active() === false) return;
   const AUTO_FOCUS_SETTING_KEY = "autoFocusComposer";
   const FORCE_HIGH_SETTING_KEY = "forceHighThinking";
   const CLIPBOARD_SEND_SETTING_KEY = "showClipboardSendButton";
@@ -10,10 +11,10 @@
 
     void chrome.storage.local.get({ [settingKey]: defaultValue }).then((settings) => {
       input.checked = Boolean(settings[settingKey]);
-    });
+    }).catch((globalThis.__ghrcSettingsContext?.report || console.error));
 
     input.addEventListener("change", () => {
-      void chrome.storage.local.set({ [settingKey]: input.checked });
+      void chrome.storage.local.set({ [settingKey]: input.checked }).catch((globalThis.__ghrcSettingsContext?.report || console.error));
     });
   }
 
@@ -22,10 +23,10 @@
 
     void chrome.storage.local.get({ [settingKey]: defaultValue }).then((settings) => {
       input.checked = !Boolean(settings[settingKey]);
-    });
+    }).catch((globalThis.__ghrcSettingsContext?.report || console.error));
 
     input.addEventListener("change", () => {
-      void chrome.storage.local.set({ [settingKey]: !input.checked });
+      void chrome.storage.local.set({ [settingKey]: !input.checked }).catch((globalThis.__ghrcSettingsContext?.report || console.error));
     });
   }
 

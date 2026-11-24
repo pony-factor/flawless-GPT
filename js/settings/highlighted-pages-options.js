@@ -1,5 +1,6 @@
 (() => {
   "use strict";
+  if (globalThis.__ghrcSettingsContext?.active() === false) return;
 
   const STORAGE_KEY = "highlightedPages";
   const MAX_PAGES = 20;
@@ -77,7 +78,7 @@
     else list.insertBefore(sibling, row);
     reorderFromDom();
     updateControls();
-    void save();
+    void save().catch((globalThis.__ghrcSettingsContext?.report || console.error));
   }
 
   async function fetchPreview(urlValue) {
@@ -156,10 +157,17 @@
     });
     row.querySelector(".refresh-highlight").addEventListener("click", () => void refreshPage(page, row));
     row.querySelector(".remove-highlight").addEventListener("click", async () => {
+      const previous = pages;
       pages = pages.filter((entry) => entry.id !== page.id);
-      await save();
-      render();
-      showStatus("Highlighted webpage removed.", "success");
+      try {
+        await save();
+        render();
+        showStatus("Highlighted webpage removed.", "success");
+      } catch (error) {
+        pages = previous;
+        (globalThis.__ghrcSettingsContext?.report || console.error)(error);
+        showStatus(error.message, "error");
+      }
     });
     return row;
   }
@@ -238,7 +246,7 @@
     draggedRow = null;
     reorderFromDom();
     updateControls();
-    void save();
+    void save().catch((globalThis.__ghrcSettingsContext?.report || console.error));
   });
 
   addButton.addEventListener("click", () => void addPage());
@@ -257,5 +265,5 @@
   chrome.storage.local.get({ [STORAGE_KEY]: [] }).then((stored) => {
     pages = normalizedPages(stored[STORAGE_KEY]);
     render();
-  });
+  }).catch((globalThis.__ghrcSettingsContext?.report || console.error));
 })();
