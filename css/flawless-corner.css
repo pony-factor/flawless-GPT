@@ -26,6 +26,21 @@
   width: 100%;
 }
 
+.ghrc-flawless-toolbar-new-chat > .ghrc-flawless-mascot-image {
+  border-radius: 4px;
+  display: block;
+  flex: none;
+  height: 33px;
+  object-fit: cover;
+  object-position: center 40%;
+  pointer-events: none;
+  width: 33px;
+}
+
+.ghrc-flawless-toolbar-new-chat > svg {
+  display: none;
+}
+
 #ghrc-flawless-corner:focus-visible {
   outline: 2px solid #a68df3;
   outline-offset: -2px;
