@@ -638,13 +638,18 @@ test('source cards in a popup also use new tabs, but disabled new tabs preserve 
   }
 });
 
-test('source card copy controls appear on hover, copy each card URL, and preserve popup width', async () => {
+test('source card copy controls appear when the popup opens and follow card hover', async () => {
   const page = await fixture({ openExternalLinksInSplitView: true });
   await page.evaluate(() => {
+    const chip = document.createElement('button');
+    chip.id = 'source-trigger';
+    chip.setAttribute('data-d-component', 'popover-trigger');
+    chip.textContent = 'Sources';
+    document.querySelector('main').prepend(chip);
     const popup = document.createElement('div');
     popup.id = 'source-popup';
     popup.setAttribute('role', 'dialog');
-    popup.style.cssText = 'box-sizing:border-box;position:relative;width:260px;padding:12px;border:1px solid gray';
+    popup.style.cssText = 'box-sizing:border-box;position:fixed;top:532px;left:0;width:260px;padding:12px;border:1px solid gray';
     for (const [id, href] of [
       ['first-card', 'https://example.org/first?utm_source=chatgpt&keep=1#part'],
       ['second-card', 'https://example.org/second?keep=2'],
@@ -669,7 +674,10 @@ test('source card copy controls appear on hover, copy each card URL, and preserv
       popup.append(card);
     }
     window.nativeSourceClicks = 0;
-    document.body.append(popup);
+    chip.addEventListener('pointerenter', () => {
+      popup.dataset.state = 'open';
+      document.body.append(popup);
+    }, { once: true });
   });
 
   const popup = page.locator('#source-popup');
@@ -677,10 +685,10 @@ test('source card copy controls appear on hover, copy each card URL, and preserv
   const second = page.locator('#second-card + .ghrc-citation-actions');
   const firstCopy = first.locator('.ghrc-link-copy-button');
   const secondCopy = second.locator('.ghrc-link-copy-button');
+  await page.locator('#source-trigger').hover();
   await firstCopy.waitFor({ state: 'attached' });
-  await secondCopy.waitFor({ state: 'attached' });
-  assert.equal(await firstCopy.isVisible(), false);
-  assert.equal(await secondCopy.isVisible(), false);
+  assert.equal(await popup.evaluate(element => element.matches(':hover')), false);
+  assert.equal(await firstCopy.isVisible(), true);
   assert.equal(await page.locator('main .ghrc-link-copy-button').count(), 0);
 
   const originalWidth = await popup.evaluate(element => element.getBoundingClientRect().width);
