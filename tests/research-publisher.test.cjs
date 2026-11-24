@@ -26,7 +26,9 @@ function background(enabled, nativeResult = { ok: true, repository: 'research', 
       },
     },
   };
-  vm.runInNewContext(fs.readFileSync('js/research/research-publisher-background.js', 'utf8'), { chrome, URL, TextEncoder, Date, Error });
+  const context = vm.createContext({ chrome, URL, TextEncoder, Date, Error });
+  for (const file of ['research-report-origin.js', 'research-publisher-background.js'])
+    vm.runInContext(fs.readFileSync('js/research/' + file, 'utf8'), context);
   const sender = { id: 'test-extension', url: 'https://connector-openai-deep-research.web-sandbox.oaiusercontent.com/', tab: { id: 1, url: 'https://chatgpt.com/c/example' } };
   return {
     calls,
@@ -95,6 +97,22 @@ test('current MCP report origin forwards the selected category', async () => {
   assert.equal((await app.send({ type: 'publish-research-report', title: 'Report', markdown: '# Report', category: 'Markets/Ownership' }, sender)).ok, true);
   assert.equal(app.calls[0][1].category, 'Markets/Ownership');
   assert.equal((await app.send({ type: 'publish-research-report', title: 'Report', markdown: '# Report', category: '../outside' }, sender)).ok, false);
+  assert.equal(app.calls.length, 1);
+});
+
+test('connector ID report origins can publish only from a ChatGPT tab', async () => {
+  const app = background(true);
+  const origin = 'https://connector-id-0123456789abcdef0123456789abcdef.web-sandbox.oaiusercontent.com';
+  const sender = { id: 'test-extension', origin, url: 'about:blank', tab: { id: 1, url: 'https://chatgpt.com/c/report' } };
+  assert.equal((await app.send(undefined, sender)).ok, true);
+  for (const candidate of [
+    { ...sender, origin: origin + '.example.com' },
+    { ...sender, origin: origin.replace('https:', 'http:') },
+    { ...sender, origin: origin.replace('0123456789abcdef0123456789abcdef', 'unrelated') },
+    { ...sender, tab: { id: 1, url: 'https://example.com/' } },
+  ]) {
+    assert.equal((await app.send(undefined, candidate)).ok, false);
+  }
   assert.equal(app.calls.length, 1);
 });
 

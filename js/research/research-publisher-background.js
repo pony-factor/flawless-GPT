@@ -1,8 +1,11 @@
 (() => {
   function reportSender(sender) {
-    const host = new URL(sender.origin || sender.url).hostname;
-    return /^(connector-openai-deep-research|mcp-app-[a-f0-9]+)\.web-sandbox\.oaiusercontent\.com$/.test(host)
-      && new URL(sender.tab?.url).origin === 'https://chatgpt.com';
+    try {
+      return globalThis.__ghrcIsResearchReportOrigin(sender.origin || sender.url)
+        && new URL(sender.tab?.url).origin === 'https://chatgpt.com';
+    } catch {
+      return false;
+    }
   }
   const HOST = 'org.research.publisher';
   const CONNECTION_KEY = 'researchPublisherConnection';

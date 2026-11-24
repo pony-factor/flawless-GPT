@@ -25,13 +25,14 @@ test("cached dashboard controls and highlights mount before the host page finish
     fs.mkdirSync(path.dirname(path.join(extension, file)), { recursive: true });
     fs.copyFileSync(path.join(root, file), path.join(extension, file));
   }
+  const workerScript = "dashboard-startup-worker.js";
   fs.writeFileSync(path.join(extension, "manifest.json"), JSON.stringify({
     manifest_version: 3, name: "Dashboard startup fixture", version: "1.0",
-    permissions: ["storage"], background: { service_worker: "background.js" },
+    permissions: ["storage"], background: { service_worker: workerScript },
     content_scripts: scripts,
     web_accessible_resources: [{ resources: ["artwork/*"], matches: ["http://127.0.0.1/*"] }],
   }));
-  fs.writeFileSync(path.join(extension, "background.js"), `
+  fs.writeFileSync(path.join(extension, workerScript), `
     chrome.runtime.onMessage.addListener((message, sender, reply) => {
       if (message.type === "load-repositories") reply({ok:true,mode:"public",ownerOrder:["octo"],repositories:[{name:"example",fullName:"octo/example",url:"https://github.com/octo/example",pushedAt:new Date().toISOString(),owner:{login:"octo",type:"User",displayName:"Octo",avatarUrl:""}}]});
       else {
@@ -56,7 +57,22 @@ test("cached dashboard controls and highlights mount before the host page finish
       executablePath: process.env.BROWSER_EXECUTABLE || "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser",
       headless: true, args: [`--disable-extensions-except=${extension}`, `--load-extension=${extension}`],
     });
-    const worker = context.serviceWorkers()[0] || await context.waitForEvent("serviceworker");
+    // Chromium can expose unrelated service workers in a persistent context.
+    // Select this fixture explicitly before touching extension-only APIs.
+    const isDashboardWorker = candidate => {
+      const url = new URL(candidate.url());
+      return url.protocol === "chrome-extension:" && url.pathname === `/${workerScript}`;
+    };
+    const worker = context.serviceWorkers().find(isDashboardWorker)
+      || await context.waitForEvent("serviceworker", { predicate: isDashboardWorker, timeout: 10000 });
+    // A worker target can be reported before its extension API bindings are ready.
+    let storageReady = false;
+    for (let attempt = 0; attempt < 100; attempt++) {
+      storageReady = await worker.evaluate(() => Boolean(globalThis.chrome?.storage?.local));
+      if (storageReady) break;
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+    assert.ok(storageReady, `Dashboard fixture storage unavailable in ${worker.url()}`);
     await worker.evaluate(() => chrome.storage.local.set({
       showWootenLinkSearch: true, compactNewChatHeader: true, show2048Launcher: true,
       highlightedPages: [{ id: "saved", url: "https://example.com/", title: "Saved highlight" }],

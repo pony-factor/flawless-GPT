@@ -1,15 +1,17 @@
 (() => {
   const context = globalThis.__ghrcExtensionContext;
   if (context && !context.active()) return;
+  const isReportOrigin = globalThis.__ghrcIsResearchReportOrigin;
   function handleResearchContext(message, sender, respond) {
     if (message?.type !== 'research-report-context') return false;
     const title = document.title.replace(/\s*[-–|]\s*ChatGPT\s*$/i, '').trim();
     const frames = [...document.querySelectorAll('iframe')].filter(node =>
-      /^https:\/\/(connector-openai-deep-research|mcp-app-[a-f0-9]+)\.web-sandbox\.oaiusercontent\.com(?:\/|$)/.test(node.src)
+      isReportOrigin(node.src)
       && node.getBoundingClientRect().width > 0);
     const frame = frames.find(node => typeof message.reportUrl === 'string'
       && node.src.split('#')[0] === message.reportUrl.split('#')[0]) || frames.at(-1);
-    const prompts = [...document.querySelectorAll('[data-message-author-role="user"]')];
+    const explicit = document.querySelectorAll('[data-message-author-role="user"]');
+    const prompts = [...(explicit.length ? explicit : document.querySelectorAll('[data-content-search-unit-key$=":user"]'))];
     const preceding = frame ? prompts.filter(node => node.compareDocumentPosition(frame) & Node.DOCUMENT_POSITION_FOLLOWING) : prompts;
     const prompt = preceding.at(-1)?.textContent.trim() || '';
     respond({ title: title && !/^(ChatGPT|New chat)$/i.test(title) ? title : prompt.slice(0, 2000), prompt: prompt.slice(0, 2000) });
@@ -19,7 +21,6 @@
   const reports = new Map();
   const finalized = new WeakMap();
   const ATTRIBUTE = 'data-ghrc-research-fullscreen';
-  const REPORT_ORIGIN = /^https:\/\/(connector-openai-deep-research|mcp-app-[a-f0-9]+)\.web-sandbox\.oaiusercontent\.com$/;
   let observer = null;
   let scheduled = false;
   let disposed = false;
@@ -72,7 +73,7 @@
   }
   function handleReportMessage(event) {
     if (disposed || (context && !context.active())) return;
-    if (!REPORT_ORIGIN.test(event.origin) || ![
+    if (!isReportOrigin(event.origin) || ![
       'ghrc-research-report-state', 'ghrc-research-report-finalized',
     ].includes(event.data?.type)) return;
     const frame = [...document.querySelectorAll('iframe')].find(node => node.contentWindow === event.source);
