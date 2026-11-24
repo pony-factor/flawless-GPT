@@ -209,3 +209,22 @@ test("custom highlight names survive refresh and reload, and can be cancelled or
   await page.locator(".rename-highlight").click();
   await page.waitForFunction(() => document.querySelector(".ghrc-highlighted-page-copy strong").textContent === "report.pdf");
 });
+
+test("saved GitHub highlights display only a lowercase g even with a cached preview", async () => {
+  const url = "https://github.com/orgs/stellar/discussions/categories/tokenomics";
+  await page.evaluate(async url => {
+    const { highlightedPages } = await chrome.storage.local.get("highlightedPages");
+    await chrome.storage.local.set({ highlightedPages: [...highlightedPages, {
+      id: "github", url, title: "Build software better, together", hostname: "github.com",
+      imageDataUrl: "data:image/png;base64,example", faviconDataUrl: "data:image/png;base64,example",
+      description: "Cached description", customTitle: "Tokenomics discussions",
+    }] });
+  }, url);
+  const card = page.getByRole("link", { name: "Tokenomics discussions" });
+  await card.waitFor();
+  assert.equal(await card.textContent(), "g");
+  assert.equal(await card.locator("*").count(), 0);
+  assert.equal(await card.getAttribute("href"), url);
+  assert.equal(await card.getAttribute("title"), null);
+  assert.equal(await page.locator(".ghrc-highlighted-page-pdf img").count(), 1);
+});

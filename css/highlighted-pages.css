@@ -58,6 +58,16 @@
   border-color: light-dark(#c7c7c7, #4a4a4a);
 }
 
+#ghrc-highlighted-pages .ghrc-highlighted-page.ghrc-highlighted-page-github {
+  align-self: start;
+  flex-basis: 112px;
+  font-size: 30px;
+  font-weight: 700;
+  grid-template-rows: 1fr;
+  height: 112px;
+  place-items: center;
+}
+
 #ghrc-highlighted-pages .ghrc-highlighted-page-image,
 #ghrc-highlighted-pages .ghrc-highlighted-page-fallback {
   background: light-dark(#f2f2f2, #111111);

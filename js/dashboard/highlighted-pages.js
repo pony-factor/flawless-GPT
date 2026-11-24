@@ -36,10 +36,18 @@
   function createCard(page) {
     const card = document.createElement("a");
     card.className = "ghrc-highlighted-page";
-    if (page.documentType === "pdf") card.classList.add("ghrc-highlighted-page-pdf");
     card.href = page.url;
     card.target = "_self";
     card.rel = "noopener noreferrer";
+
+    if (page.documentType !== "pdf" && ["github.com", "www.github.com"].includes(card.hostname)) {
+      card.classList.add("ghrc-highlighted-page-github");
+      card.setAttribute("aria-label", page.customTitle || `GitHub: ${card.pathname}`);
+      card.textContent = "g";
+      return card;
+    }
+
+    if (page.documentType === "pdf") card.classList.add("ghrc-highlighted-page-pdf");
     card.title = page.url;
 
     if (page.imageDataUrl) {
