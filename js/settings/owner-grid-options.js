@@ -1,4 +1,5 @@
 (() => {
+  if (globalThis.__ghrcSettingsContext?.active() === false) return;
   const OWNER_GROUPS_PER_ROW_KEY = "ownerGroupsPerRow";
   const HIDE_REPOSITORY_DASHBOARD_KEY = "hideRepositoryDashboard";
   const PERSONAL_REPOSITORY_COLUMN_TITLE_KEY = "personalRepositoryColumnTitle";
@@ -76,13 +77,13 @@
   input.addEventListener("change", async () => {
     const ownerGroupsPerRow = normalizedGroupsPerRow(input.value);
     input.value = ownerGroupsPerRow;
-    await chrome.storage.local.set({ [OWNER_GROUPS_PER_ROW_KEY]: ownerGroupsPerRow });
+    await chrome.storage.local.set({ [OWNER_GROUPS_PER_ROW_KEY]: ownerGroupsPerRow }).catch((globalThis.__ghrcSettingsContext?.report || console.error));
   });
 
   hideRepositoryDashboardInput?.addEventListener("change", async () => {
     await chrome.storage.local.set({
       [HIDE_REPOSITORY_DASHBOARD_KEY]: hideRepositoryDashboardInput.checked,
-    });
+    }).catch((globalThis.__ghrcSettingsContext?.report || console.error));
   });
 
   personalRepositoryColumnTitleInput?.addEventListener("change", async () => {
@@ -90,8 +91,8 @@
     personalRepositoryColumnTitleInput.value = title;
     await chrome.storage.local.set({
       [PERSONAL_REPOSITORY_COLUMN_TITLE_KEY]: title,
-    });
+    }).catch((globalThis.__ghrcSettingsContext?.report || console.error));
   });
 
-  void loadSettings();
+  void loadSettings().catch((globalThis.__ghrcSettingsContext?.report || console.error));
 })();

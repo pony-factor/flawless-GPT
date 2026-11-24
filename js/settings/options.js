@@ -608,6 +608,7 @@ tokenList.addEventListener("input", () => {
 });
 
 async function saveSettings() {
+  if (globalThis.__ghrcSettingsContext?.active() === false) return;
   const enteredOwnerOrder = githubAccountOrderFromList();
   const hiddenOwners = hiddenOwnersFromList();
   const ownerGroupsPerPage = normalizedOwnerGroupsPerPage(ownerGroupsPerPageInput.value);
@@ -748,4 +749,9 @@ clearTokensButton.addEventListener("click", async () => {
   }
 });
 
-void loadSettings();
+if (globalThis.__ghrcSettingsContext?.active() !== false) {
+  void loadSettings().catch((error) => {
+    (globalThis.__ghrcSettingsContext?.report || console.error)(error);
+    showStatus(`Settings could not be loaded: ${error.message}`, "error");
+  });
+}

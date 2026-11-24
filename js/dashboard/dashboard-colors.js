@@ -1,5 +1,6 @@
 (() => {
   "use strict";
+  if (globalThis.__ghrcSettingsContext?.active() === false) return;
   const STORAGE_KEY = "dashboardColors";
   const SPECS = [
     ["accentLight", "Dashboard accent (light mode)", "#0969da", "--ghrc-dashboard-accent-light"],
@@ -46,7 +47,7 @@
     function persist() {
       if (!loaded) return;
       const snapshot = { ...colors };
-      pending = pending.catch(() => {}).then(() => chrome.storage.local.set({ [STORAGE_KEY]: snapshot }));
+      pending = pending.catch(() => {}).then(() => chrome.storage.local.set({ [STORAGE_KEY]: snapshot })).catch((globalThis.__ghrcSettingsContext?.report || console.error));
     }
 
     for (const [key, title, preview] of SPECS) {
@@ -118,7 +119,7 @@
       for (const { picker, hex, clear } of fields.values()) {
         picker.disabled = hex.disabled = clear.disabled = false;
       }
-    });
+    }).catch((globalThis.__ghrcSettingsContext?.report || console.error));
     chrome.storage.onChanged?.addListener?.((changes, area) => {
       if (loaded && area === "local" && changes[STORAGE_KEY]) {
         render(changes[STORAGE_KEY].newValue);

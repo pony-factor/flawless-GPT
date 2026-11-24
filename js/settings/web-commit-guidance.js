@@ -1,5 +1,6 @@
 (() => {
   "use strict";
+  if (globalThis.__ghrcSettingsContext?.active() === false) return;
 
   const GUIDANCE_KEY = "webCommitGuidance";
   const STATUS_KEY = "webCommitGuidanceSyncStatus";
@@ -40,7 +41,7 @@
 
   function scheduleSave() {
     clearTimeout(saveTimer);
-    saveTimer = setTimeout(() => void save(), 250);
+    saveTimer = setTimeout(() => void save().catch((globalThis.__ghrcSettingsContext?.report || console.error)), 250);
   }
 
   async function load() {
@@ -82,7 +83,7 @@
   textarea.addEventListener("input", scheduleSave);
   textarea.addEventListener("change", () => {
     clearTimeout(saveTimer);
-    void save();
+    void save().catch((globalThis.__ghrcSettingsContext?.report || console.error));
   });
 
   chrome.storage.onChanged.addListener((changes, areaName) => {
@@ -97,5 +98,5 @@
     }
   });
 
-  void load();
+  void load().catch((globalThis.__ghrcSettingsContext?.report || console.error));
 })();
