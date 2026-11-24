@@ -49,7 +49,7 @@
   }
 
   function previewImage(page) {
-    return page.imageDataUrl || page.faviconDataUrl || "";
+    return page.screenshotDataUrl || page.imageDataUrl || page.faviconDataUrl || "";
   }
 
   async function save() {
@@ -114,7 +114,13 @@
     try {
       const preview = await fetchPreview(page.url);
       const index = pages.findIndex((entry) => entry.id === page.id);
-      if (index >= 0) pages[index] = { ...preview, id: page.id, customTitle: pages[index].customTitle || "" };
+      if (index >= 0) {
+        const previous = pages[index];
+        if (preview.url === previous.url && preview.documentType !== "pdf" && !preview.screenshotDataUrl) {
+          preview.screenshotDataUrl = previous.screenshotDataUrl || "";
+        }
+        pages[index] = { ...preview, id: page.id, customTitle: previous.customTitle || "" };
+      }
       await save();
       render();
       showStatus("Cached preview refreshed.", "success");
@@ -131,6 +137,7 @@
     row.dataset.id = page.id;
     const image = previewImage(page);
     if (page.documentType === "pdf") row.classList.add("highlighted-page-setting-pdf");
+    if (page.screenshotDataUrl) row.classList.add("highlighted-page-setting-screenshot");
     if (image) {
       row.querySelector(".highlighted-page-setting-preview").style.backgroundImage = `url("${image}")`;
     }

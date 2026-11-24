@@ -16,14 +16,14 @@ before(async () => {
   for (const directory of ["js", "css", "vendor/pdfjs"]) {
     fs.mkdirSync(path.join(extension, directory), { recursive: true });
   }
-  for (const file of ["js/links/pdf-preview.mjs", "js/dashboard/highlighted-pages-worker.js", "js/settings/highlighted-pages-options.js", "js/dashboard/highlighted-pages.js", "css/highlighted-pages.css", "css/options.css", "css/styles.css"]) {
+  for (const file of ["js/links/pdf-preview.mjs", "js/dashboard/highlighted-pages-worker.js", "js/settings/highlighted-pages-options.js", "js/dashboard/highlighted-pages.js", "css/highlighted-pages.css", "css/options.css", "css/styles.css", "vendor/html2canvas-pro.min.js"]) {
     fs.mkdirSync(path.dirname(path.join(extension, file)), { recursive: true });
     fs.copyFileSync(path.join(root, file), path.join(extension, file));
   }
   fs.cpSync(path.join(root, "vendor/pdfjs"), path.join(extension, "vendor/pdfjs"), { recursive: true });
   fs.writeFileSync(path.join(extension, "manifest.json"), JSON.stringify({
     manifest_version: 3, name: "PDF preview fixture", version: "1.0",
-    permissions: ["storage"], host_permissions: ["http://127.0.0.1/*"],
+    permissions: ["storage", "scripting"], host_permissions: ["http://127.0.0.1/*"],
     background: { service_worker: "js/dashboard/highlighted-pages-worker.js" },
     content_security_policy: JSON.parse(fs.readFileSync(path.join(root, "manifest.json"))).content_security_policy,
   }));
@@ -48,6 +48,13 @@ before(async () => {
     if (request.url.startsWith("/redirect")) {
       response.writeHead(302, { location: "/report.pdf" });
       return response.end();
+    }
+    if (request.url === "/website") {
+      response.writeHead(200, { "content-type": "text/html" });
+      return response.end(`<!doctype html><title>Example website</title>
+        <meta name="description" content="A saved website">
+        <style>body{margin:0}header{height:70px;background:rgb(24, 164, 66)}main{height:1800px;background:#04f}</style>
+        <header>Website header</header><main>Website content</main>`);
     }
     response.writeHead(200, { "content-type": "application/pdf" });
     response.end(request.url.startsWith("/invalid") ? "invalid PDF" : pdf);
@@ -113,20 +120,17 @@ test("adding and refreshing a PDF caches the complete first page, preserves link
     const highlights = document.getElementById("ghrc-highlighted-pages");
     const repositoryBounds = widget.getBoundingClientRect();
     const highlightBounds = highlights.getBoundingClientRect();
-    return { separate: widget.nextElementSibling === highlights, below: highlightBounds.top > repositoryBounds.bottom, sameWidth: repositoryBounds.width === highlightBounds.width, title: highlights.querySelector("h2").textContent };
+    return { separate: widget.nextElementSibling === highlights, below: highlightBounds.top > repositoryBounds.bottom, sameWidth: repositoryBounds.width === highlightBounds.width, label: highlights.getAttribute("aria-label"), hasHeading: Boolean(highlights.querySelector("h2")) };
   });
-  assert.deepEqual(layout, { separate: true, below: true, sameWidth: true, title: "Highlights" });
+  assert.deepEqual(layout, { separate: true, below: true, sameWidth: true, label: "Highlights", hasHeading: false });
   const centered = await page.evaluate(() => {
-    const heading = document.querySelector("#ghrc-highlighted-pages h2");
     const row = document.querySelector(".ghrc-highlighted-pages-row");
     const card = row.firstElementChild;
     const bounds = row.getBoundingClientRect();
     const cardBounds = card.getBoundingClientRect();
-    return { heading: getComputedStyle(heading).textAlign, gap: parseFloat(getComputedStyle(heading).marginBottom), card: getComputedStyle(card).textAlign, offset: Math.abs(bounds.left + bounds.width / 2 - cardBounds.left - cardBounds.width / 2) };
+    return { card: getComputedStyle(card).textAlign, offset: Math.abs(bounds.left + bounds.width / 2 - cardBounds.left - cardBounds.width / 2) };
   });
-  assert.equal(centered.heading, "center");
   assert.equal(centered.card, "center");
-  assert.ok(centered.gap >= 20);
   assert.ok(centered.offset < 1);
   assert.equal(await page.locator(".ghrc-highlighted-page-pdf img").evaluate(image => getComputedStyle(image).objectFit), "cover");
   assert.equal(await page.locator(".ghrc-highlighted-page-pdf img").evaluate(image => getComputedStyle(image).objectPosition), "50% 0%");
@@ -210,21 +214,39 @@ test("custom highlight names survive refresh and reload, and can be cancelled or
   await page.waitForFunction(() => document.querySelector(".ghrc-highlighted-page-copy strong").textContent === "report.pdf");
 });
 
-test("saved GitHub highlights display only a lowercase g even with a cached preview", async () => {
-  const url = "https://github.com/orgs/stellar/discussions/categories/tokenomics";
+test("refreshing an existing website highlight adds a top-of-page image and keeps its text", async () => {
+  const url = `${origin}/website`;
   await page.evaluate(async url => {
     const { highlightedPages } = await chrome.storage.local.get("highlightedPages");
     await chrome.storage.local.set({ highlightedPages: [...highlightedPages, {
-      id: "github", url, title: "Build software better, together", hostname: "github.com",
-      imageDataUrl: "data:image/png;base64,example", faviconDataUrl: "data:image/png;base64,example",
-      description: "Cached description", customTitle: "Tokenomics discussions",
+      id: "website", url, title: "Example website", hostname: "127.0.0.1",
+      description: "A saved website", customTitle: "My site",
     }] });
   }, url);
-  const card = page.getByRole("link", { name: "Tokenomics discussions" });
+  const card = page.locator(".ghrc-highlighted-page").filter({ hasText: "My site" });
   await card.waitFor();
-  assert.equal(await card.textContent(), "g");
-  assert.equal(await card.locator("*").count(), 0);
+  assert.equal(await card.locator(".ghrc-highlighted-page-fallback").count(), 1);
+
+  const tabCount = context.pages().length;
+  await page.locator(".highlighted-page-setting").filter({ hasText: "My site" }).locator(".refresh-highlight").click();
+  await page.waitForFunction(() => document.querySelector("#highlighted-pages-status").textContent === "Cached preview refreshed.");
+  const image = card.locator(".ghrc-highlighted-page-image");
+  await image.waitFor();
+  assert.match(await image.getAttribute("src"), /^data:image\/webp;base64,/);
+  assert.equal(await image.evaluate(el => getComputedStyle(el).objectPosition), "50% 0%");
+  const color = await image.evaluate(async el => {
+    await el.decode();
+    const canvas = document.createElement("canvas");
+    canvas.width = el.naturalWidth;
+    canvas.height = el.naturalHeight;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(el, 0, 0);
+    return [...ctx.getImageData(el.naturalWidth / 2, 4, 1, 1).data];
+  });
+  assert.ok(color[1] > 150 && color[2] < 100, "the top of the thumbnail shows the green website header");
   assert.equal(await card.getAttribute("href"), url);
-  assert.equal(await card.getAttribute("title"), null);
+  assert.equal(await card.locator("strong").textContent(), "My site");
+  assert.equal(await card.locator(".ghrc-highlighted-page-description").textContent(), "A saved website");
   assert.equal(await page.locator(".ghrc-highlighted-page-pdf img").count(), 1);
+  assert.equal(context.pages().length, tabCount);
 });
