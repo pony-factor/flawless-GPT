@@ -2140,10 +2140,6 @@
 
     if (!shouldQueueComposerEnter(event)) return;
     if (composerAutocompleteIsOpen(composer)) return;
-    // Until ChatGPT assigns a conversation URL, let the new-chat page own Enter.
-    // Homepage shell markup can look like an incomplete conversation and must not
-    // turn the first prompt into a queued message.
-    if (!conversationIdFromPath()) return;
     const text = normalizedText(composerText(composer));
     if (event.repeat || sendingItemId || pendingEnterTexts.has(text) || enqueueRunning || interruptRunning) {
       event.preventDefault();
@@ -2154,7 +2150,19 @@
     const composerState = composerContext(composer);
     const hasMessage = Boolean(text.trim() || composerState.files.length || composerState.quote
       || composerState.selections.length || composerState.standaloneMentions.length);
-    if (hasMessage && !nativeSubmissionPending(composer) && stateLoaded
+    const submissionPending = nativeSubmissionPending(composer);
+    // An idle overview must send its first prompt natively, even before storage
+    // loads or while placeholder turn markup is present. A temporary chat or a
+    // newly submitted conversation can already be busy without a conversation ID.
+    const firstOverviewPrompt = !conversationIdFromPath() && !snapshot.responseActive
+      && !snapshot.userTurns && !submissionPending && !queue.length && !enterPending;
+    if (firstOverviewPrompt) {
+      if (hasMessage) {
+        nativeSubmission = { composer, userTurns: snapshot.userTurns, deadline: Date.now() + SUBMIT_TIMEOUT_MS };
+      }
+      return;
+    }
+    if (hasMessage && !submissionPending && stateLoaded
       && activeKey === conversationKey() && !queue.length && !enterPending && !routeSyncRunning
       && queueCanAdvance(snapshot, COMPLETE_SETTLE_MS)) {
       // Mark the gap before ChatGPT paints Stop or the next user turn.

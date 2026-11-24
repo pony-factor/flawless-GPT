@@ -580,8 +580,8 @@ test('distinct Enter requests save in FIFO order while the first save is pending
   await p.close();
 });
 
-test('Enter during delayed native submission queues without sending another message', async () => {
-  const p = await fixture({ route: '/' });
+for (const route of ['/', '/?temporary-chat=true']) test(`Enter during delayed native submission queues without sending another message on ${route}`, async () => {
+  const p = await fixture({ route });
   await p.evaluate(() => {
     window.delayedNativeSends = 0;
     document.addEventListener('keydown', event => {
@@ -910,6 +910,22 @@ for (const route of ['/', '/?temporary-chat=true']) {
     await p.close();
   });
 }
+
+test('temporary chat queues through an incomplete response even if the Stop control disappears', async () => {
+  const p = await fixture({ route: '/?temporary-chat=true', active: true });
+  await p.evaluate(() => {
+    window.active = false;
+    update();
+  });
+  await enqueue(p, 'Wait for the temporary reply', true);
+  assert.deepEqual(await p.evaluate(() => sent), []);
+  assert.equal(await p.evaluate(() => stops), 0);
+  await p.evaluate(() => finish());
+  await sentCount(p, 1);
+  assert.deepEqual(await p.evaluate(() => sent), ['Wait for the temporary reply']);
+  assert.deepEqual(p.errors, []);
+  await p.close();
+});
 
 test('new-chat Enter stays native when homepage shell has incomplete turn markup', async () => {
   const p = await fixture({ route: '/' });
