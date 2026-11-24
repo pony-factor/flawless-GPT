@@ -588,6 +588,10 @@ button.secondary {
   background-size: contain;
 }
 
+.highlighted-page-setting-screenshot .highlighted-page-setting-preview {
+  background-position: center top;
+}
+
 .highlighted-page-setting-copy {
   display: grid;
   gap: 2px;

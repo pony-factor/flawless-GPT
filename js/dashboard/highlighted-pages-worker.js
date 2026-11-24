@@ -4,6 +4,7 @@
   const MAX_HTML_BYTES = 2 * 1024 * 1024;
   const MAX_IMAGE_BYTES = 256 * 1024;
   const MAX_FAVICON_BYTES = 64 * 1024;
+  const SCREENSHOT_TIMEOUT_MS = 10000;
 
   function decodeEntities(value) {
     return String(value || "")
@@ -174,6 +175,71 @@
     };
   }
 
+  async function renderPageTop(url) {
+    const current = new URL(location.href);
+    const expected = new URL(url);
+    current.hash = expected.hash = "";
+    if (current.href !== expected.href || !document.body) return "";
+
+    const width = document.documentElement.clientWidth;
+    if (!width) return "";
+    const canvas = await globalThis.html2canvas(document.documentElement, {
+      width,
+      height: Math.min(innerHeight, Math.ceil(width * 112 / 220)),
+      x: 0,
+      y: 0,
+      scrollX: 0,
+      scrollY: 0,
+      scale: Math.min(1, 560 / width),
+      useCORS: true,
+      imageTimeout: 2000,
+      logging: false,
+    });
+    return canvas.toDataURL("image/webp", 0.8);
+  }
+
+  async function capturePageTop(url, windowId) {
+    let tabId;
+    let timeout;
+    let onUpdated;
+    try {
+      const tab = await chrome.tabs.create({ url, active: false, windowId });
+      tabId = tab.id;
+      const loaded = new Promise((resolve, reject) => {
+        onUpdated = (id, change) => {
+          if (id === tabId && change.status === "complete") resolve();
+        };
+        chrome.tabs.onUpdated.addListener(onUpdated);
+        chrome.tabs.get(tabId).then((current) => {
+          if (current.status === "complete" && current.url && !current.pendingUrl) resolve();
+        }, reject);
+      });
+      const deadline = new Promise(resolve => {
+        timeout = setTimeout(() => resolve(""), SCREENSHOT_TIMEOUT_MS);
+      });
+      const screenshot = loaded.then(async () => {
+        const target = { tabId };
+        const [injection] = await chrome.scripting.executeScript({
+          target,
+          files: ["vendor/html2canvas-pro.min.js"],
+        });
+        const [rendering] = await chrome.scripting.executeScript({
+          target: { tabId, documentIds: [injection.documentId] },
+          func: renderPageTop,
+          args: [url],
+        });
+        return rendering.result || "";
+      });
+      return await Promise.race([screenshot, deadline]);
+    } catch {
+      return "";
+    } finally {
+      clearTimeout(timeout);
+      if (onUpdated) chrome.tabs.onUpdated.removeListener(onUpdated);
+      if (tabId !== undefined) await chrome.tabs.remove(tabId).catch(() => {});
+    }
+  }
+
   const testApi = globalThis.__GHRC_HIGHLIGHTED_PAGES_TEST__;
   if (testApi) {
     Object.assign(testApi, {
@@ -188,10 +254,15 @@
     return;
   }
 
-  chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message?.type !== "load-highlighted-page-preview") return false;
     loadPreview(message.url)
-      .then((preview) => sendResponse({ ok: true, preview }))
+      .then(async (preview) => {
+        if (preview.documentType !== "pdf" && sender.url?.startsWith(chrome.runtime.getURL(""))) {
+          preview.screenshotDataUrl = await capturePageTop(preview.url, sender.tab?.windowId);
+        }
+        sendResponse({ ok: true, preview });
+      })
       .catch((error) => sendResponse({ ok: false, error: error.message }));
     return true;
   });
