@@ -11,11 +11,17 @@ html[data-ghrc-new-chat][data-ghrc-compact-header] main {
   padding-top: 0 !important;
 }
 
-/* Both app shells reserve toolbar space even with model controls hidden.
-   The newer frame also clips its centered composer against this inset. */
+/* The frame can redeclare the toolbar inset instead of inheriting it from the layout. */
 html[data-ghrc-new-chat][data-ghrc-compact-header]:not([data-ghrc-show-model-controls])
-  :is([data-app-shell-main-content-layout], [data-app-shell-thread-edge-divider]) {
+  :is([data-app-shell-main-content-layout], [data-app-shell-thread-edge-divider],
+    [data-app-shell-main-content-layout] > [class~="@container/app-shell-main-content"]) {
   --app-shell-main-content-frame-top-offset: 0px !important;
+}
+
+/* If the toolbar is visible, keep its inset and place the composer below it. */
+html[data-ghrc-new-chat][data-ghrc-compact-header][data-ghrc-show-model-controls]
+  [class~="group/home-composer-layout"] :is(.home-composer-centered, [class~="sm:home-composer-centered"]) {
+  margin-top: 0 !important;
 }
 
 html[data-ghrc-new-chat][data-ghrc-compact-header] .home-composer-anchor,
