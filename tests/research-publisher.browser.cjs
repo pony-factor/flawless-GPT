@@ -407,10 +407,42 @@ test('automatic import exposes lookup and terminal errors, then resumes after re
       await page.addScriptTag({ content: fs.readFileSync(file, 'utf8') });
     await page.waitForFunction(() => document.querySelector('.ghrc-report-status')?.textContent.includes('reconnecting'));
     await page.evaluate(() => { window.mode = 'terminal-error'; });
-    await page.waitForFunction(() => document.querySelector('.ghrc-report-status')?.textContent.includes('repository changed'));
-    await page.evaluate(() => { window.mode = 'recovered'; });
+    await page.waitForFunction(() => document.querySelector('.ghrc-report-status')?.textContent.includes('Import failed. The linked repository changed'));
+    await page.evaluate(() => {
+      window.mode = 'recovered';
+      document.querySelector('article').append(document.createElement('p'));
+    });
     await page.waitForFunction(() => window.imports === 1, null, { timeout: 15000 });
     assert.match(await page.locator('.ghrc-report-status').innerText(), /Imported: Research \/ recovered.md/);
     assert.equal(await page.evaluate(() => imports), 1);
+  } finally { await browser.close(); }
+});
+
+test('automatic import reports an oversized report without sending its contents', async () => {
+  const browser = await chromium.launch({ executablePath: '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser', headless: true });
+  try {
+    const page = await browser.newPage();
+    await page.setContent('<section><div><button aria-label="Export">Export</button></div><article class="_reportPage_fixture"><h1>Long report</h1><p></p></article></section>');
+    await page.evaluate(() => {
+      document.querySelector('article p').textContent = 'é'.repeat(2 * 1024 * 1024);
+      window.importRequests = [];
+      let job = { id: 'long-report', state: 'submitted' };
+      window.chrome = { storage: { local: { get: async d => ({ ...d, researchPublisherEnabled: true }) }, onChanged: { addListener() {} } }, runtime: { sendMessage: async m => {
+        if (m.type === 'research-launch-job') return { ok: true, job };
+        if (m.type === 'publish-research-report') {
+          importRequests.push(m);
+          const error = 'This report is too large to publish through the extension.';
+          job = { ...job, state: 'import-error', error };
+          return { ok: false, error };
+        }
+      } } };
+    });
+    for (const file of ['vendor/turndown.js', 'vendor/turndown-plugin-gfm.js', 'js/research/research-import-dialog.js', 'js/research/research-publisher.js'])
+      await page.addScriptTag({ content: fs.readFileSync(file, 'utf8') });
+    await page.waitForFunction(() => document.querySelector('.ghrc-report-status')?.textContent.startsWith('Import failed.'), null, { timeout: 15000 });
+    assert.deepEqual(await page.evaluate(() => importRequests), [
+      { type: 'publish-research-report', title: 'Long report', oversized: true, automationJobId: 'long-report' },
+    ]);
+    assert.equal(await page.getByRole('button', { name: 'Add to repo', exact: true }).isEnabled(), true);
   } finally { await browser.close(); }
 });

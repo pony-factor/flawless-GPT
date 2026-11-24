@@ -179,6 +179,27 @@ test('destination changes stop imports while transient native failures wait for 
   }
 });
 
+test('unpublishable reports persist an import failure visible to the source tab', async () => {
+  for (const [fields, reason] of [
+    [{ markdown: undefined, oversized: true }, /too large/],
+    [{ title: 'x'.repeat(501) }, /title or contents/],
+  ]) {
+    const a = app();
+    const job = await submitted(a);
+    const attempt = { ...publish(job), ...fields };
+    assert.equal((await a.send(attempt, a.report(999))).ok, false);
+    assert.equal(a.session['researchLaunch:' + job.tabId].state, 'submitted');
+    assert.match((await a.send(attempt, a.report(job.tabId))).error, reason);
+    delete a.session['researchLaunch:' + job.tabId];
+    a.restart();
+    const status = await a.send({ type: 'research-launch-status', tabId: job.tabId, id: job.id });
+    assert.equal(status.job.state, 'import-error');
+    assert.match(status.job.error, reason);
+    assert.equal((await a.send(attempt, a.report(job.tabId))).ok, false);
+    assert.equal(a.calls.filter(call => call[1]?.action === 'publish').length, 0);
+  }
+});
+
 test('closing the popup clears its handoff and reports the closure only to its source tab', async () => {
   const a = app();
   const { job } = await a.start();

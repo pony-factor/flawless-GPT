@@ -112,7 +112,8 @@
         return;
       }
       if (job?.state === 'import-error') {
-        if (status) status.textContent = job.error || 'Automatic import could not finish. Use Add to repo to retry.';
+        const failure = 'Import failed. ' + (job.error || 'Use Add to repo to try again.');
+        if (status && status.textContent !== failure) status.textContent = failure;
         return;
       }
       if (!['submitted', 'import-retry'].includes(job?.state)) return;
@@ -127,12 +128,12 @@
       }
       if (Date.now() - previous.since < 5000) return;
       const result = await request({ type: 'publish-research-report', ...report, automationJobId: job.id });
+      const currentStatus = scope.querySelector('.ghrc-report-status');
       if (!result?.ok) {
-        const status = scope.querySelector('.ghrc-report-status');
-        if (status) status.textContent = result?.error || 'Automatic import could not finish. Use Add to repo to retry.';
+        const failure = result?.error || 'Automatic import could not finish. Use Add to repo to retry.';
+        if (currentStatus && currentStatus.textContent !== failure) currentStatus.textContent = failure;
       } else {
-        const status = scope.querySelector('.ghrc-report-status');
-        if (status) globalThis.__ghrcResearchImportStatus(status, result);
+        if (currentStatus) globalThis.__ghrcResearchImportStatus(currentStatus, result);
         finalizeReport(doc);
       }
     } catch (error) {
@@ -186,7 +187,7 @@
       },
     });
     const markdown = converter.turndown(root).trim() + '\n';
-    if (new TextEncoder().encode(markdown).length > MAX_BYTES) throw new Error('This report is too large to publish through the extension.');
+    if (new TextEncoder().encode(markdown).length > MAX_BYTES) return { title, oversized: true };
     return { title, markdown };
   }
 
