@@ -7,7 +7,10 @@ const os = require('node:os');
 const http = require('node:http');
 const { chromium } = require('playwright');
 
-test('compact composer stays inside the current app shell scroll boundary', async () => {
+for (const [shell, frame] of [
+  ['thread divider', 'data-app-shell-thread-edge-divider'],
+  ['main content container', 'class="@container/app-shell-main-content"'],
+]) test(`compact composer stays inside the ${shell} scroll boundary`, async () => {
   const browser = await chromium.launch({
     executablePath: process.env.BROWSER_EXECUTABLE || '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser',
     headless: true,
@@ -18,21 +21,26 @@ test('compact composer stays inside the current app shell scroll boundary', asyn
       <style>
         body { margin: 0 }
         main { height: 800px; overflow: hidden }
-        [data-app-shell-thread-edge-divider] {
+        :is([data-app-shell-main-content-layout], [data-app-shell-thread-edge-divider],
+            [class~="@container/app-shell-main-content"]) {
           --app-shell-main-content-frame-top-offset: 52px;
           --app-shell-main-content-offset: var(--app-shell-main-content-frame-top-offset);
+        }
+        .frame {
           margin-top: var(--app-shell-main-content-frame-top-offset);
         }
         [role="presentation"] { height: 700px; overflow-y: auto }
-        .home-composer-centered { margin-top: calc(-1 * var(--app-shell-main-content-offset)) }
+        :is(.home-composer-centered, [class~="sm:home-composer-centered"]) {
+          margin-top: calc(-1 * var(--app-shell-main-content-offset));
+        }
         form { height: 52px; background: #303030; color: white }
       </style>
-      <main><div data-app-shell-thread-edge-divider><div role="presentation">
-        <div class="group/home-composer-layout"><div class="home-composer-centered">
+      <main><div data-app-shell-main-content-layout><div ${frame}><div class="frame"><div role="presentation">
+        <div class="group/home-composer-layout"><div class="${shell === 'thread divider' ? '' : 'sm:'}home-composer-centered">
           <form><div contenteditable="true">Dash</div><button>Send</button></form>
           <section style="height:1000px">Repositories</section>
         </div></div>
-      </div></div></main>
+      </div></div></div></div></main>
     `);
     const geometry = () => page.evaluate(() => {
       const form = document.querySelector('form').getBoundingClientRect();
@@ -57,7 +65,10 @@ test('compact composer stays inside the current app shell scroll boundary', asyn
       assert.equal(after.draft, 'Dash');
     }
     await page.evaluate(() => document.documentElement.setAttribute('data-ghrc-show-model-controls', 'true'));
-    assert.equal((await geometry()).boundaryTop, 52, 'visible model controls retain their inset');
+    const withControls = await geometry();
+    assert.equal(withControls.boundaryTop, 52, 'visible model controls retain their inset');
+    assert.equal(withControls.top, 80);
+    assert.equal(withControls.hit, true);
     await page.evaluate(() => {
       document.documentElement.removeAttribute('data-ghrc-show-model-controls');
       document.documentElement.removeAttribute('data-ghrc-compact-header');
