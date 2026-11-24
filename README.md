@@ -111,25 +111,6 @@ Synchronization uses ChatGPT's own same-origin `/backend-api/user_system_message
 
 Existing guidance from the older `codexCustomInstructions` / `chatgptCustomInstructions` keys is migrated into `webCommitGuidance`. If the older Codex Web co-author preference was enabled, its trailer instruction is folded into the migrated guidance rather than kept as a separate setting. Personalization never writes `~/.codex/AGENTS.md`, inspects `CODEX_HOME`, imports PGP keys, or changes global Git configuration. Commit signing remains a separate feature.
 
-### Sidebar hover behavior
-
-The sidebar starts collapsed on page load. **ChatGPT → Reveal sidebar on hover**
-is off by default. Enable it to reveal the sidebar by holding the mouse in the
-leftmost 64 pixels, anywhere from directly below **Library** to the bottom
-of the viewport, for 650 milliseconds.
-
-The reveal area covers the entire remaining left rail, even below the last
-preset icon or when no preset icons exist. Hovering Library itself or the
-left edge above Library does not trigger the reveal.
-
-The sidebar stays open while the mouse is inside it or one of its open menus,
-including nested menus and a 12-pixel margin around those menus. It collapses
-90 milliseconds after the mouse leaves those areas. Hovering should work
-without clicking or giving the browser keyboard focus; moving keyboard focus
-away alone should not collapse it. The hover delay also works in visible but
-unfocused browser windows when animation frames pause; hidden/background tabs
-cannot respond to mouse hover because they are not visible.
-
 ### Chat creation ages
 
 Chat history entries show compact creation ages (such as `2d`, `2mo`, or `2y`).

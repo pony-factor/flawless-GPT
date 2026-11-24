@@ -1,4 +1,4 @@
-/* One mascot replaces the top branding and starts a native New chat. */
+/* Floating mascot for the legacy sidebar. */
 #ghrc-flawless-corner {
   background: transparent;
   border: 0;
@@ -26,7 +26,7 @@
   width: 100%;
 }
 
-.ghrc-flawless-toolbar-new-chat > .ghrc-flawless-mascot-image {
+.ghrc-flawless-native-icon-slot > .ghrc-flawless-mascot-image {
   border-radius: 4px;
   display: block;
   flex: none;
@@ -37,7 +37,7 @@
   width: 33px;
 }
 
-.ghrc-flawless-toolbar-new-chat > svg {
+.ghrc-flawless-native-icon-slot > svg {
   display: none;
 }
 

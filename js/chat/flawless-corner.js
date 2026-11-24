@@ -5,12 +5,14 @@
   const HEADER_TOGGLE_SELECTOR = `${TOGGLE_SELECTOR}, button[aria-label="Hide sidebar"], button[aria-label="Close sidebar"], button[aria-label="Collapse sidebar"]`;
   const NEW_CHAT_SELECTOR = 'button[aria-label="New chat"], a[aria-label="New chat"], [data-testid="create-new-chat-button"]';
   const TOOLBAR_NEW_CHAT_SELECTOR = 'header button[aria-label="New chat"]';
+  const RAIL_HOME_SELECTOR = '[data-app-navigation-rail] button[data-sidebar-destination="builtin:home"]';
   const toggles = new Set();
   const newChats = new Set();
   const wordmarks = new Set();
   let link = null;
-  let toolbarButton = null;
-  let removeToolbarMascot = null;
+  let nativeControl = null;
+  let nativeIconSlot = null;
+  let removeNativeMascot = null;
   const MASCOT_SIZE = 33;
 
   function centerOverToggle(toggle) {
@@ -55,7 +57,7 @@
     }
   }
 
-  function installMascot(control) {
+  function installMascot(control, slot = control) {
     const image = document.createElement("img");
     image.className = "ghrc-flawless-mascot-image";
     image.alt = "";
@@ -66,7 +68,7 @@
     // Warm the GIF cache so the first hover does not flash an empty image.
     const animatedPreload = new Image();
     animatedPreload.src = animatedSource;
-    control.append(image);
+    slot.append(image);
     const listeners = new AbortController();
     const updateMascotAnimation = () => {
       const source = control.matches(":hover, :focus-visible") ? animatedSource : stillSource;
@@ -93,11 +95,21 @@
     wordmarks.clear();
   }
 
-  function clearToolbarMascot() {
-    removeToolbarMascot?.();
-    toolbarButton?.classList.remove("ghrc-flawless-toolbar-new-chat");
-    toolbarButton = null;
-    removeToolbarMascot = null;
+  function setNativeMascot(control, slot = control) {
+    if (control === nativeControl && slot === nativeIconSlot
+      && (!slot || slot.querySelector(":scope > .ghrc-flawless-mascot-image"))) {
+      slot?.classList.add("ghrc-flawless-native-icon-slot");
+      return;
+    }
+    removeNativeMascot?.();
+    nativeIconSlot?.classList.remove("ghrc-flawless-native-icon-slot");
+    nativeControl = control;
+    nativeIconSlot = slot;
+    removeNativeMascot = null;
+    if (control) {
+      removeNativeMascot = installMascot(control, slot);
+      slot.classList.add("ghrc-flawless-native-icon-slot");
+    }
   }
 
   function isVisible(control) {
@@ -109,7 +121,13 @@
     if (!context.active() || !document.body) return;
     if (/^\/(?:s|share)(?:\/|$)/.test(location.pathname)) {
       clearLegacyMascot();
-      clearToolbarMascot();
+      setNativeMascot(null);
+      return;
+    }
+    const home = Array.from(document.querySelectorAll(RAIL_HOME_SELECTOR)).find(isVisible);
+    if (home) {
+      clearLegacyMascot();
+      setNativeMascot(home, home.querySelector("svg")?.parentElement || home);
       return;
     }
     // The rail also has an invisible, full-area resize button with the same
@@ -120,20 +138,11 @@
     if (!headerToggle) {
       clearLegacyMascot();
       const button = Array.from(document.querySelectorAll(TOOLBAR_NEW_CHAT_SELECTOR)).find(isVisible);
-      if (button === toolbarButton && button?.querySelector(":scope > .ghrc-flawless-mascot-image")) {
-        button.classList.add("ghrc-flawless-toolbar-new-chat");
-        return;
-      }
-      clearToolbarMascot();
-      if (button) {
-        toolbarButton = button;
-        removeToolbarMascot = installMascot(button);
-        button.classList.add("ghrc-flawless-toolbar-new-chat");
-      }
+      setNativeMascot(button || null);
       return;
     }
 
-    clearToolbarMascot();
+    setNativeMascot(null);
     if (!link?.isConnected) {
       link = document.createElement("a");
       link.id = "ghrc-flawless-corner";
@@ -173,7 +182,13 @@
   }
 
   const observer = new MutationObserver(reconcile);
-  observer.observe(document.documentElement, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ["aria-label", "hidden"] });
+  observer.observe(document.documentElement, {
+    childList: true,
+    subtree: true,
+    characterData: true,
+    attributes: true,
+    attributeFilter: ["aria-label", "hidden", "data-app-navigation-rail", "data-sidebar-destination"],
+  });
   window.navigation?.addEventListener("currententrychange", reconcile);
   window.addEventListener("resize", reconcile);
   window.addEventListener("scroll", reconcile, true);
@@ -184,6 +199,6 @@
     window.removeEventListener("resize", reconcile);
     window.removeEventListener("scroll", reconcile, true);
     clearLegacyMascot();
-    clearToolbarMascot();
+    setNativeMascot(null);
   });
 })();
