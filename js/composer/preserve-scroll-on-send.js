@@ -238,7 +238,10 @@
     container.style.setProperty("scroll-behavior", "auto", "important");
     container.style.setProperty("overflow-anchor", "none", "important");
     resizeObserver?.disconnect();
-    resizeObserver = new ResizeObserver(() => { restorePosition(); scheduleRestore(); });
+    // Restoring scroll can resize ChatGPT's virtualized response renderer.
+    // Let resize delivery finish before writing scroll offsets, otherwise
+    // its resize loop can repeatedly tear down and rebuild older replies.
+    resizeObserver = new ResizeObserver(scheduleRestore);
     resizeObserver.observe(container);
     for (const child of container.children) resizeObserver.observe(child);
   }
