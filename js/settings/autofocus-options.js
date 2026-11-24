@@ -4,7 +4,6 @@
   const FORCE_HIGH_SETTING_KEY = "forceHighThinking";
   const CLIPBOARD_SEND_SETTING_KEY = "showClipboardSendButton";
   const MESSAGE_QUEUE_BUTTON_SETTING_KEY = "showMessageQueueButton";
-  const HOVER_REVEAL_SIDEBAR_SETTING_KEY = "hoverRevealSidebar";
 
   function bindCheckbox(input, settingKey, defaultValue) {
     if (!input) return;
@@ -37,27 +36,7 @@
 
   const chatInteractionFieldset = document.getElementById("chatgpt-interaction-settings")
     || autoFocusInput?.closest("fieldset");
-  const chatDisplayFieldset = document.getElementById("chatgpt-display-settings")
-    || chatInteractionFieldset;
   const disableWorkPreference = document.getElementById("disable-work-mode")?.closest("label.preference");
-
-  let sidebarHoverInput = document.getElementById("hover-reveal-sidebar");
-  if (!sidebarHoverInput && chatDisplayFieldset) {
-    const preference = document.createElement("label");
-    preference.className = "preference";
-    preference.innerHTML = `
-      <input id="hover-reveal-sidebar" type="checkbox" />
-      <span>
-        <strong>Reveal sidebar on hover</strong>
-        <small>Hover anywhere along the left rail below Library, down to the bottom of the window, to reveal the sidebar. It stays open while you use the sidebar or its menus, then collapses when you move away.</small>
-      </span>
-    `;
-    const dictationPreference = document.getElementById("hide-dictation-button")?.closest("label.preference");
-    if (dictationPreference) dictationPreference.insertAdjacentElement("afterend", preference);
-    else chatDisplayFieldset.append(preference);
-    sidebarHoverInput = preference.querySelector("input");
-  }
-  bindCheckbox(sidebarHoverInput, HOVER_REVEAL_SIDEBAR_SETTING_KEY, false);
 
   let highInput = document.getElementById("force-high-thinking");
   if (!highInput && chatInteractionFieldset) {

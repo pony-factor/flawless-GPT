@@ -63,7 +63,6 @@
         "vendor/purify.min.js",
         "js/chat/missing-response-recovery.js",
         "js/chat/refresh-view.js",
-        "js/sidebar/sidebar-tab-state.js",
         "js/research/deep-research-usage.js",
         "js/settings/chatgpt-personalization-api.js"
       ],
@@ -103,7 +102,6 @@
         "js/settings/web-commit-guidance-sync.js",
         "js/chat/compact-header.js",
         "js/games/2048-keyboard.js",
-        "js/sidebar/collapse-sidebar.js",
         "js/sidebar/sidebar-chat-dates.js",
         "js/dashboard/dashboard-visibility.js",
         "js/chat/disable-work-mode.js",

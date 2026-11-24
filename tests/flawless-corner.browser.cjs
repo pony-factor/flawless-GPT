@@ -132,6 +132,40 @@ test('the modern toolbar keeps the native New chat action and uses its icon slot
   await page.close();
 });
 
+test('the app navigation rail uses its native Home button for the mascot', async () => {
+  const page = await fixture({
+    html: `<nav aria-label="App navigation" data-app-navigation-rail="true">
+      <button data-sidebar-destination="builtin:home" onclick="window.homeClicks=(window.homeClicks||0)+1">
+        <span><svg aria-hidden="true" width="20" height="20"></svg><span>Home</span></span>
+      </button>
+      <button data-sidebar-destination="builtin:space">Space</button>
+    </nav><header><button aria-label="New chat"><svg width="20" height="20"></svg></button></header>`,
+    route: '/c/example',
+  });
+  const home = page.getByRole('button', { name: 'Home', exact: true });
+  const newChat = page.getByRole('button', { name: 'New chat', exact: true });
+  const mascot = home.locator('.ghrc-flawless-mascot-image');
+  assert.equal(await page.locator('.ghrc-flawless-mascot-image').count(), 1);
+  assert.equal(await home.locator('svg').isVisible(), false);
+  assert.equal(await newChat.locator('svg').isVisible(), true);
+  await home.hover();
+  assert.match(await mascot.getAttribute('src'), /SB-icon\.gif$/);
+  await home.press('Enter');
+  assert.equal(await page.evaluate(() => window.homeClicks), 1);
+
+  await home.evaluate(element => { element.firstElementChild.outerHTML = element.firstElementChild.outerHTML.replace(/<img[^>]+>/, ''); });
+  await mascot.waitFor();
+  assert.equal(await home.locator('svg').isVisible(), false);
+  await page.evaluate(() => {
+    chrome.runtime = undefined;
+    __ghrcExtensionContext.active();
+  });
+  assert.equal(await mascot.count(), 0);
+  assert.equal(await home.locator('svg').isVisible(), true);
+  assert.deepEqual(page.errors, []);
+  await page.close();
+});
+
 test('shared links and pages without an eligible control have no floating mascot', async () => {
   for (const route of ['/s/example', '/share/example', '/']) {
     const html = route === '/'
