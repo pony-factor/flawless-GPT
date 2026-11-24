@@ -287,6 +287,8 @@ test('new-chat Deep Research first turn automatically queues root with an option
   await page.getByRole('button', { name: 'Save destination' }).click();
   await page.waitForFunction(() => job?.category === 'Markets');
   assert.match(await bar.innerText(), /Markets/);
+  await page.evaluate(() => { Object.assign(job, { state: 'import-error', error: 'Push was not confirmed.' }); });
+  await bar.getByText('Import failed. Push was not confirmed.').waitFor();
   assert.deepEqual(errors, []);
   await page.close();
 });
