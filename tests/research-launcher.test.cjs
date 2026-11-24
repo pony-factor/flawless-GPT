@@ -63,8 +63,8 @@ function app({ enabled = true, connected = true } = {}) {
   const load = () => {
     listeners = [];
     const context = vm.createContext({ chrome, URL, TextEncoder, Date: { now: () => now }, crypto: { randomUUID: () => 'run-' + nextId }, console });
-    for (const file of ['js/research/research-publisher-background.js', 'js/research/research-launcher-background.js'])
-      vm.runInContext(fs.readFileSync(file, 'utf8'), context);
+    for (const file of ['research-report-origin.js', 'research-publisher-background.js', 'research-launcher-background.js'])
+      vm.runInContext(fs.readFileSync('js/research/' + file, 'utf8'), context);
   };
   load();
   const source = { id: 'extension', frameId: 0, url: 'https://chatgpt.com/c/source', tab: { id: 1, url: 'https://chatgpt.com/c/source' } };
@@ -89,6 +89,19 @@ async function submitted(a) {
 function publish(job) {
   return { type: 'publish-research-report', title: 'Finished report', markdown: '# Finished report\nEvidence', automationJobId: job.id, category: 'Ignored' };
 }
+
+test('connector ID report frames can recover and finish automatic imports', async () => {
+  const a = app();
+  const job = await submitted(a);
+  const sender = {
+    ...a.report(job.tabId),
+    origin: 'https://connector-id-0123456789abcdef0123456789abcdef.web-sandbox.oaiusercontent.com',
+  };
+  const lookup = await a.send({ type: 'research-launch-job' }, sender);
+  assert.equal(lookup.job.state, 'submitted');
+  assert.equal((await a.send(publish(job), sender)).ok, true);
+  assert.equal((await a.send({ type: 'research-launch-job' }, sender)).job.state, 'complete');
+});
 
 test('launcher checks the connection before opening a small window and retains the exact prompt', async () => {
   const a = app();

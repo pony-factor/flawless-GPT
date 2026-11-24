@@ -2,6 +2,12 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const { chromium } = require('playwright');
+const connectorOrigin = 'https://connector-id-0123456789abcdef0123456789abcdef.web-sandbox.oaiusercontent.com';
+
+async function loadReportHost(page) {
+  for (const file of ['research-report-origin.js', 'research-report-host.js'])
+    await page.addScriptTag({ content: fs.readFileSync('js/research/' + file, 'utf8') });
+}
 
 test('import chooses a category, cancellation never publishes, and report links escape the sandbox', async () => {
   const browser = await chromium.launch({ executablePath: '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser', headless: true });
@@ -59,8 +65,8 @@ test('fullscreen hides both composer versions and restores them when the report 
     const page = await browser.newPage();
     await page.setContent('<form><div id="prompt-textarea">Draft</div></form><div data-composer-surface-variant="inline"><div data-composer-markdown>New draft</div></div><div style="position:fixed;inset:0"><iframe></iframe></div>');
     await page.evaluate(() => { window.chrome = { runtime: { onMessage: { addListener() {} } } }; });
-    await page.addScriptTag({ content: fs.readFileSync('js/research/research-report-host.js', 'utf8') });
-    await page.evaluate(() => window.dispatchEvent(new MessageEvent('message', { origin: 'https://mcp-app-abc123.web-sandbox.oaiusercontent.com', source: document.querySelector('iframe').contentWindow, data: { type: 'ghrc-research-report-state', report: true } })));
+    await loadReportHost(page);
+    await page.evaluate(origin => window.dispatchEvent(new MessageEvent('message', { origin, source: document.querySelector('iframe').contentWindow, data: { type: 'ghrc-research-report-state', report: true } })), connectorOrigin);
     assert.equal(await page.locator('form').evaluate(n => getComputedStyle(n).visibility), 'hidden');
     assert.equal(await page.locator('[data-composer-surface-variant]').evaluate(n => getComputedStyle(n).visibility), 'hidden');
     await page.locator('iframe').evaluate(n => n.parentElement.remove());
@@ -99,7 +105,7 @@ test('report host observes only active frames and disconnects after finalization
         }));
       };
     });
-    await page.addScriptTag({ content: fs.readFileSync('js/research/research-report-host.js', 'utf8') });
+    await loadReportHost(page);
     assert.equal(await page.evaluate(() => observerCounts.attached), 0,
       'ordinary ChatGPT tabs must not start a document-wide observer');
     await page.evaluate(() => reportMessage('ghrc-research-report-state'));
@@ -310,12 +316,13 @@ test('filename context uses the prompt preceding the report, not an earlier or l
   const browser = await chromium.launch({ executablePath: '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser', headless: true });
   try {
     const page = await browser.newPage();
-    await page.setContent('<title>New chat - ChatGPT</title><div data-message-author-role="user">Old unrelated topic</div><iframe src="about:blank" width="500"></iframe><div data-message-author-role="user">DTC Bond Purchaser Tracking</div><iframe src="about:blank" width="500"></iframe><div data-message-author-role="user">Later unrelated topic</div>');
-    await page.locator('iframe').first().evaluate(frame => { frame.setAttribute('src', 'https://mcp-app-abc123.web-sandbox.oaiusercontent.com/old-report'); });
-    await page.locator('iframe').last().evaluate(frame => { frame.setAttribute('src', 'https://mcp-app-abc123.web-sandbox.oaiusercontent.com/report'); });
+    await page.setContent('<title>New chat - ChatGPT</title><div data-content-search-unit-key="old:user">Old unrelated topic</div><iframe src="about:blank" width="500"></iframe><div data-content-search-unit-key="report:user">DTC Bond Purchaser Tracking</div><iframe src="about:blank" width="500"></iframe><div data-content-search-unit-key="later:user">Later unrelated topic</div><iframe src="about:blank" width="500"></iframe>');
+    const reportUrl = connectorOrigin + '/report';
+    const reportUrls = [connectorOrigin + '/old-report', reportUrl, connectorOrigin + '/later-report'];
+    await page.locator('iframe').evaluateAll((frames, urls) => frames.forEach((frame, i) => { frame.src = urls[i]; }), reportUrls);
     await page.evaluate(() => { window.chrome = { runtime: { onMessage: { addListener(listener) { window.contextListener = listener; } } } }; });
-    await page.addScriptTag({ content: fs.readFileSync('js/research/research-report-host.js', 'utf8') });
-    const context = await page.evaluate(() => new Promise(resolve => contextListener({ type: 'research-report-context', reportUrl: 'https://mcp-app-abc123.web-sandbox.oaiusercontent.com/report' }, {}, resolve)));
+    await loadReportHost(page);
+    const context = await page.evaluate(url => new Promise(resolve => contextListener({ type: 'research-report-context', reportUrl: url }, {}, resolve)), reportUrl);
     assert.equal(context.title, 'DTC Bond Purchaser Tracking');
     assert.equal(context.prompt, 'DTC Bond Purchaser Tracking');
   } finally { await browser.close(); }

@@ -122,6 +122,7 @@
         "js/chat/hide-upgrade-promotions.js",
         "js/chat/hide-scheduled-recommendations.js",
         "js/links/external-links.js",
+        "js/research/research-report-origin.js",
         "js/research/research-report-host.js",
         "js/research/research-import-dialog.js",
         "js/research/research-launcher.js",

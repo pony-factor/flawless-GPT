@@ -90,7 +90,7 @@
   }
   function reportSender(sender) {
     try { return sender.id === chrome.runtime.id && Number.isInteger(sender.tab?.id)
-      && /^(connector-openai-deep-research|mcp-app-[a-f0-9]+)\.web-sandbox\.oaiusercontent\.com$/.test(new URL(sender.origin || sender.url).hostname)
+      && globalThis.__ghrcIsResearchReportOrigin(sender.origin || sender.url)
       && new URL(sender.tab.url).origin === 'https://chatgpt.com'; }
     catch { return false; }
   }
