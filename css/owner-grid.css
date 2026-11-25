@@ -4,7 +4,7 @@
 
 #github-repositories-for-chatgpt .ghrc-owner-profile-link,
 #github-repositories-for-chatgpt .ghrc-owner-profile-link:hover {
-  color: var(--ghrc-link-color, inherit);
+  color: inherit;
   text-decoration: none;
 }
 
@@ -24,6 +24,10 @@
 #github-repositories-for-chatgpt .ghrc-owner-header > div {
   min-width: 0;
   text-align: center;
+}
+
+#github-repositories-for-chatgpt .ghrc-owner-name-link h3 {
+  color: var(--ghrc-link-color, var(--ghrc-fg));
 }
 
 #github-repositories-for-chatgpt .ghrc-owner-header h3 {

@@ -137,6 +137,29 @@ test("cached dashboard controls and highlights mount before the host page finish
     assert.ok(frames.some(frame => frame.top === undefined), 'sample before React adds the composer');
     assert.ok(frames.every(frame => !frame.welcomeVisible), JSON.stringify(frames));
     assert.ok(frames.filter(frame => frame.top !== undefined).every(frame => frame.top < 100), JSON.stringify(frames));
+    const linkTitles = ".ghrc-repository-name, .ghrc-owner-name-link h3, .ghrc-pinned-issue strong";
+    await worker.evaluate(() => chrome.storage.local.set({
+      pinnedIssues: [{ url: "https://github.com/octo/example/issues/1" }],
+    }));
+    await page.locator(".ghrc-pinned-issue strong").waitFor();
+    const linkColors = () => page.locator(linkTitles).evaluateAll(links =>
+      links.map(link => getComputedStyle(link).color));
+    await page.evaluate(() => document.documentElement.classList.add("light"));
+    const defaultColors = await linkColors();
+    assert.equal(defaultColors.length, 3);
+    await worker.evaluate(() => chrome.storage.local.set({
+      dashboardColors: { repositoryLight: "#2456ab", repositoryDark: "#ac65cf" },
+    }));
+    await page.waitForFunction(() =>
+      document.documentElement.style.getPropertyValue("--ghrc-dashboard-link-light") === "#2456ab");
+    assert.deepEqual(await linkColors(), Array(3).fill("rgb(36, 86, 171)"));
+    await page.evaluate(() => document.documentElement.classList.replace("light", "dark"));
+    assert.deepEqual(await linkColors(), Array(3).fill("rgb(172, 101, 207)"));
+    await page.evaluate(() => document.documentElement.classList.replace("dark", "light"));
+    await worker.evaluate(() => chrome.storage.local.remove("dashboardColors"));
+    await page.waitForFunction(() =>
+      !document.documentElement.style.getPropertyValue("--ghrc-dashboard-link-light"));
+    assert.deepEqual(await linkColors(), defaultColors);
     assert.deepEqual(errors, []);
   } finally {
     stalledResponse?.end();

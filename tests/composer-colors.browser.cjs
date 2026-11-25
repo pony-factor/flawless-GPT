@@ -63,16 +63,17 @@ test('input outline follows the rounded ChatGPT composer surface and can be rese
       root.setAttribute('data-ghrc-color-surface-outline', '');
       root.style.setProperty('--ghrc-composer-surface-outline', '#aabb22');
     });
-    const outline = selector => page.locator(selector).evaluate(el => getComputedStyle(el).outline);
+    const outline = (selector, property = 'outline') =>
+      page.locator(selector).evaluate((el, prop) => getComputedStyle(el)[prop], property);
     for (const selector of ['#home > div', '#thread > div', '#legacy']) {
       assert.equal(await outline(selector), 'rgb(170, 187, 34) solid 2px');
     }
     for (const selector of ['#home', '#thread', '#unrelated']) {
-      assert.match(await outline(selector), /none 0px$/);
+      assert.equal(await outline(selector, 'outlineStyle'), 'none');
     }
     await page.locator('#thread [contenteditable]').focus();
     assert.equal(await outline('#thread > div'), 'rgb(170, 187, 34) solid 2px');
     await page.evaluate(() => document.documentElement.removeAttribute('data-ghrc-color-surface-outline'));
-    assert.match(await outline('#thread > div'), /none 0px$/);
+    assert.equal(await outline('#thread > div', 'outlineStyle'), 'none');
   } finally { await page.close(); }
 });
