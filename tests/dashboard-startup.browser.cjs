@@ -107,7 +107,14 @@ test("cached dashboard controls and highlights mount before the host page finish
     assert.equal(await bulkMerge.locator("svg.ghrc-sort-icon path").count(), 5);
     assert.equal(await bulkMerge.innerText(), "", "button is icon-only");
     await bulkMerge.click();
-    assert.equal(await worker.evaluate(() => globalThis.openedDispatcher), true);
+    // The click dispatches an asynchronous message to the extension worker.
+    let openedDispatcher = false;
+    for (let attempt = 0; attempt < 100; attempt++) {
+      openedDispatcher = await worker.evaluate(() => globalThis.openedDispatcher === true);
+      if (openedDispatcher) break;
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+    assert.equal(openedDispatcher, true, "bulk merge requested the Chat Dispatcher");
     await worker.evaluate(() => chrome.storage.local.set({ showBulkMergeButton: false }));
     await bulkMerge.waitFor({ state: "detached" });
     assert.equal(await bulkMerge.count(), 0, "hiding the shortcut does not remove the dashboard");
