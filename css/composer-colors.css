@@ -1,7 +1,9 @@
 /* Color overrides are independent; toolbar colors also style preview controls. */
 html[data-ghrc-color-surface-outline] :is(#composer-background, [class*="ComposerSurface-"]):has(#prompt-textarea, [data-composer-markdown][contenteditable="true"]),
-html[data-ghrc-color-surface-outline] form:has(#prompt-textarea, [data-composer-markdown][contenteditable="true"]):not(:has(#composer-background, [class*="ComposerSurface-"])):not(:is(#composer-background, [class*="ComposerSurface-"]) *),
-html[data-ghrc-color-surface-outline] [data-type="unified-composer"]:has(#prompt-textarea, [data-composer-markdown][contenteditable="true"]):not(:has(form, #composer-background, [class*="ComposerSurface-"])) {
+html[data-ghrc-color-surface-outline] :is(form, [data-type="unified-composer"]:not(:has(form))):has(#prompt-textarea, [data-composer-markdown][contenteditable="true"]):not(
+  :has(#composer-background, [class*="ComposerSurface-"]),
+  :is(#composer-background, [class*="ComposerSurface-"]) *
+) {
   outline: 2px solid var(--ghrc-composer-surface-outline) !important;
   outline-offset: 0 !important;
 }
