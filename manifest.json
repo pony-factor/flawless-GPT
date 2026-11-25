@@ -207,7 +207,8 @@
         "artwork/research-telescope.png",
         "artwork/SB-icon.webp",
         "artwork/SB-icon.gif",
-        "artwork/thinking-cannon.png"
+        "artwork/thinking-cannon.png",
+        "artwork/detective-zip.png"
       ],
       "matches": [
         "https://chatgpt.com/*"

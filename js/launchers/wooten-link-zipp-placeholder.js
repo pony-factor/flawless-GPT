@@ -1,5 +1,5 @@
 (() => {
-  const ZIPP_SEARCH_IMAGE = "https://cdn.twibooru.org/img/2022/12/28/2860403/full.png";
+  const ZIPP_SEARCH_IMAGE = chrome.runtime.getURL("artwork/detective-zip.png");
   const ICON_CLASS = "ghrc-wooten-link-zipp-placeholder";
 
   function installPlaceholder() {
