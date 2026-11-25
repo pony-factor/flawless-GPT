@@ -317,7 +317,8 @@
     // Keep a stable order with the queue controls; competing "before Send"
     // observers otherwise move these buttons back and forth indefinitely.
     const hat = document.getElementById("ghrc-message-interrupt-button");
-    const anchor = hat?.parentElement === sendButton.parentElement ? hat : sendButton;
+    const extra = document.getElementById("ghrc-extra-high-send-button");
+    const anchor = hat?.parentElement === sendButton.parentElement ? hat : (extra?.parentElement === sendButton.parentElement ? extra : sendButton);
 
     let urlButton = document.getElementById(URL_BUTTON_ID);
     if (isNewChatPage()) {

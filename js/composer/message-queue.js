@@ -500,6 +500,18 @@
     return null;
   }
 
+  async function prepareNormalReasoning(composer) {
+    const policy = globalThis.__ghrcReasoningPolicy;
+    return !policy || await policy.prepareHigh(composer);
+  }
+
+  function clickNormalSend(button) {
+    const policy = globalThis.__ghrcReasoningPolicy;
+    if (policy) return policy.clickHigh(button);
+    button.click();
+    return true;
+  }
+
   function findSendButton(composer = findComposerInput()) {
     const form = findComposerForm(composer);
     if (!composer || !form) return null;
@@ -1436,6 +1448,7 @@
       document.getElementById("ghrc-clipboard-send-button"),
       document.getElementById("ghrc-clipboard-open-url-button"),
       interruptButton,
+      document.getElementById("ghrc-extra-high-send-button"),
     ].find(candidate => candidate?.parentElement === actionButton.parentElement) || actionButton;
     if (button && (button.parentElement !== actionButton.parentElement || button.nextElementSibling !== nextButton)) {
       nextButton.before(button);
@@ -1488,8 +1501,11 @@
         const sendButton = findSendButton(composer);
         if (!responseIsActive(composer) && sendButton && !sendButton.disabled
           && sendButton.getAttribute("aria-disabled") !== "true") {
+          if (!await prepareNormalReasoning(composer) || key !== activeKey || conversationKey() !== key
+            || composer !== findComposerInput() || !textMatchesComposer(composer, text)
+            || responseIsActive(composer) || sendButton !== findSendButton(composer)) return;
           const beforeUserTurns = roleTurns("user").length;
-          sendButton.click();
+          if (!clickNormalSend(sendButton)) return;
           await waitForSubmission(composer, text, beforeUserTurns);
           return;
         }
@@ -1563,7 +1579,12 @@
         if (!queueCanAdvance(lifecycleSnapshot(), COMPLETE_SETTLE_MS) || queue.length) return enqueueText(text, [], mentions);
         const sendButton = findSendButton(composer);
         if (sendButton && !sendButton.disabled && sendButton.getAttribute("aria-disabled") !== "true") {
-          sendButton.click();
+          if (!await prepareNormalReasoning(composer) || key !== activeKey || conversationKey() !== key
+            || composer !== findComposerInput() || !textMatchesComposer(composer, text)
+            || !mentionsMatch(composer, mentions) || hasComposerContext(composer)
+            || !queueCanAdvance(lifecycleSnapshot(), COMPLETE_SETTLE_MS) || queue.length
+            || sendButton !== findSendButton(composer)) return false;
+          if (!clickNormalSend(sendButton)) return false;
           return await waitForSubmission(composer, text, beforeUserTurns);
         }
         await new Promise(resolve => window.setTimeout(resolve, 80));
@@ -1898,7 +1919,9 @@
         return;
       }
 
+      if (!await prepareNormalReasoning(composer)) return;
       if (!context.active() || (queuePaused && !steer) || key !== activeKey || conversationKey() !== key
+        || sendButton !== findSendButton(composer)
         || routeSyncRunning || !queueSendCanProceed(responseIsActive(composer), true, steer)
         || !textMatchesComposer(composer, item.text)
         || !mentionsMatch(composer, item.mentions || [])
@@ -1912,7 +1935,7 @@
           || currentSnapshot.latestUser !== readySnapshot.latestUser
           || currentSnapshot.latestAssistant !== readySnapshot.latestAssistant) return;
       }
-      sendButton.click();
+      if (!clickNormalSend(sendButton)) return;
 
       if (!await waitForSubmission(composer, item.text, beforeUserTurns)) return;
 
@@ -1975,7 +1998,8 @@
   function evaluatePump() {
     if (!context.active()) return;
     pumpScheduled = false;
-    if (!stateLoaded || !queue.length || sendingItemId || queuePaused || routeSyncRunning || enqueueRunning || enterPending || interruptRunning) {
+    if (!stateLoaded || !queue.length || sendingItemId || queuePaused || routeSyncRunning || enqueueRunning || enterPending || interruptRunning
+      || globalThis.__ghrcReasoningPolicy?.isSelecting()) {
       completionCandidateSince = null;
       return;
     }
@@ -2158,6 +2182,7 @@
       && !snapshot.userTurns && !submissionPending && !queue.length && !enterPending;
     if (firstOverviewPrompt) {
       if (hasMessage) {
+        if (globalThis.__ghrcReasoningPolicy?.deferEnter(event, composer)) return;
         nativeSubmission = { composer, userTurns: snapshot.userTurns, deadline: Date.now() + SUBMIT_TIMEOUT_MS };
       }
       return;
@@ -2165,6 +2190,7 @@
     if (hasMessage && !submissionPending && stateLoaded
       && activeKey === conversationKey() && !queue.length && !enterPending && !routeSyncRunning
       && queueCanAdvance(snapshot, COMPLETE_SETTLE_MS)) {
+      if (globalThis.__ghrcReasoningPolicy?.deferEnter(event, composer)) return;
       // Mark the gap before ChatGPT paints Stop or the next user turn.
       nativeSubmission = { composer, userTurns: snapshot.userTurns, deadline: Date.now() + SUBMIT_TIMEOUT_MS };
       return;
@@ -2178,6 +2204,7 @@
   // Capture before React's document/composer handlers can turn Enter into Stop
   // or ArrowUp into editing already-sent history.
   window.addEventListener("keydown", handleComposerKeydown, true);
+  window.addEventListener("ghrc:reasoning-selection-complete", schedulePump);
 
   document.addEventListener("input", (event) => {
     if (event.target?.closest?.('#prompt-textarea, [data-composer-markdown][contenteditable="true"]')) scheduleMount();

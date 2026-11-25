@@ -11,7 +11,7 @@ const displayCss = read('css/chat-display.css');
 const compactCss = read('css/compact-header.css');
 let browser;
 before(async () => {
-  browser = await chromium.launch({ executablePath: '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser', headless: true });
+  browser = await chromium.launch({ executablePath: process.env.BROWSER_EXECUTABLE || '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser', headless: true });
 });
 after(async () => { await browser?.close(); });
 
@@ -22,7 +22,7 @@ async function fixture({ stored = {}, maximize = false, slider = false, unresolv
   await p.route('https://display.test/**', r => r.fulfill({ contentType: 'text/html', body: `
     <style>body{margin:0;background:#171717;color:#eee;font-family:sans-serif}main{margin-left:52px} .ghrc-compact-composer-stack{display:flex;flex-direction:column;align-items:stretch;min-height:100vh;justify-content:center}form{width:min(768px,calc(100% - 24px));margin-left:0;background:#292929;padding:10px;box-sizing:border-box;border-radius:20px}textarea{width:80%;background:transparent;color:inherit}section{margin:24px auto;width:min(768px,calc(100% - 24px))}[role=menu]{position:fixed;top:0;left:0;background:#333;padding:10px}</style>
     <main><div class="group/home-composer-layout ghrc-compact-composer-stack">
-    <form><textarea id="prompt-textarea">Partial draft</textarea><span style="display:contents"><button type="button" id="model" aria-label="Select ChatGPT model" aria-haspopup="menu" aria-expanded="false" aria-controls="model-menu" data-selected-reasoning-effort="standard"><span aria-hidden="true">Thinking effort</span><span id="level">Standard</span></button></span><button type="button" id="send">Send</button></form>
+    <form><textarea id="prompt-textarea">Partial draft</textarea><span style="display:contents"><button type="button" id="model" aria-label="Select ChatGPT model" aria-haspopup="menu" aria-expanded="false" aria-controls="model-menu" data-selected-reasoning-effort="standard"><span aria-hidden="true">Thinking effort</span><span id="level">6.2 Standard</span></button></span><button type="button" id="send" data-testid="send-button">Send</button></form>
     <div><section class="group/home-suggestions"><div class="group/home-suggestion-list-item"><button>Create an image or sticker</button></div><div class="group/home-suggestion-list-item"><button>Write or edit</button></div><div class="group/home-suggestion-list-item"><button>Search the web</button></div></section></div>
     <article><p>Search the web</p><button id="ordinary">Write or edit</button></article>
     <div id="conversation-turn" data-testid="conversation-turn-1"><div class="text-xs text-token-text-tertiary">15:37</div><time datetime="2026-10-05T15:37:00-04:00">05 Oct 2026</time><p>Message body keeps 15:37 as content.</p></div>
@@ -48,6 +48,19 @@ async function fixture({ stored = {}, maximize = false, slider = false, unresolv
     }, onChanged: { addListener(fn) { window.listeners.push(fn); } } } };
     const trigger = document.getElementById('model');
     window.opens = 0; window.closes = 0; window.visibleMenuFrames = 0;
+    window.selectedModel = '6.2'; window.selectedLevel = 'Standard'; window.sliderValue = 1;
+    window.sends = [];
+    const render = () => {
+      trigger.setAttribute('data-selected-reasoning-effort', window.selectedLevel.toLowerCase());
+      document.getElementById('level').textContent = window.selectedModel + ' ' + window.selectedLevel;
+    };
+    document.getElementById('send').addEventListener('click', () => {
+      window.sends.push([window.selectedModel, window.selectedLevel]);
+      const turn = document.createElement('div'); turn.setAttribute('data-message-author-role', 'user');
+      turn.textContent = document.getElementById('prompt-textarea').value;
+      document.body.append(turn);
+      document.getElementById('prompt-textarea').value = '';
+    });
     const open = () => {
       if (trigger.getAttribute('aria-expanded') === 'true') return;
       trigger.setAttribute('aria-expanded', 'true');
@@ -56,24 +69,33 @@ async function fixture({ stored = {}, maximize = false, slider = false, unresolv
         const menu = document.createElement('div');
         menu.id = 'model-menu'; menu.role = 'menu';
         if (unresolved) menu.textContent = 'Loading model options';
-        else if (slider) {
-          menu.innerHTML = '<div role="slider" tabindex="0" aria-valuenow="1" aria-valuemax="3"></div>';
-          menu.firstElementChild.addEventListener('keydown', event => {
-            if (event.key === 'ArrowRight') {
-              const value = Math.min(3, Number(menu.firstElementChild.getAttribute('aria-valuenow')) + 1);
-              menu.firstElementChild.setAttribute('aria-valuenow', value);
-              window.sliderValue = value;
-            }
-          });
-        } else {
-          for (const level of ['Standard', 'Heavy']) {
-            const option = document.createElement('div'); option.role = 'menuitem'; option.textContent = level;
-            option.addEventListener('click', () => {
-              trigger.setAttribute('data-selected-reasoning-effort', level.toLowerCase());
-              document.getElementById('level').textContent = level;
-              // Deliberately keep the menu open: the extension must dismiss it.
-            });
+        else {
+          for (const name of ['6.2', '6.10', '7']) {
+            const option = document.createElement('button'); option.type = 'button'; option.role = 'menuitemradio';
+            option.textContent = name;
+            if (name === '7') option.disabled = true;
+            option.addEventListener('click', () => { window.selectedModel = name; render(); });
             menu.append(option);
+          }
+          if (slider) {
+            const power = document.createElement('div'); power.role = 'slider'; power.tabIndex = 0;
+            power.setAttribute('aria-valuenow', window.sliderValue);
+            power.setAttribute('aria-valuemin', '1');
+            power.setAttribute('aria-valuemax', '3');
+            power.addEventListener('keydown', event => {
+              const direction = event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0;
+              window.sliderValue = Math.max(1, Math.min(3, window.sliderValue + direction));
+              power.setAttribute('aria-valuenow', window.sliderValue);
+              window.selectedLevel = ['Standard', 'High', 'Extra High'][window.sliderValue - 1];
+              render();
+            });
+            menu.append(power);
+          } else {
+            for (const level of ['Standard', 'High', 'Extra High']) {
+              const option = document.createElement('div'); option.role = 'menuitem'; option.textContent = level;
+              option.addEventListener('click', () => { window.selectedLevel = level; render(); });
+              menu.append(option);
+            }
           }
         }
         menu.addEventListener('keydown', event => { if (event.key === 'Escape') close(); });
@@ -253,28 +275,28 @@ test('explicit opt-outs show controls, suggestions, and feedback; toggles update
 });
 
 for (const delayed of [false, true]) {
-  test(`maximization stays invisible while selecting and closing a portaled menu (delayed=${delayed})`, async () => {
+  test(`reasoning policy selects newest model at High without flashing menus (delayed=${delayed})`, async () => {
     const p = await fixture({ maximize: true, delayed, stored: { forceHighThinking: true } });
-    await p.waitForFunction(() => document.getElementById('model').getAttribute('data-selected-reasoning-effort') === 'heavy');
-    await p.waitForFunction(() => !document.getElementById('model-menu') && document.getElementById('model').hasAttribute('data-ghrc-high-thinking-selector'));
+    await p.waitForFunction(() => document.getElementById('model').getAttribute('data-selected-reasoning-effort') === 'high' && window.selectedModel === '6.10');
+    await p.waitForFunction(() => !document.getElementById('model-menu'));
     assert.equal(await p.evaluate(() => visibleMenuFrames), 0);
     assert.equal(await p.locator('#prompt-textarea').inputValue(), 'Partial draft');
     assert.equal(await p.locator('#send').isVisible(), true);
-    assert.equal(await p.evaluate(() => opens), 1);
+    assert.equal(await p.evaluate(() => opens), 2);
     assert.deepEqual(p.errors, []);
     await p.close();
   });
 }
 
-test('hidden slider can be maximized without flashing its overlay', async () => {
+test('reasoning policy stops the slider at High instead of Extra High', async () => {
   const p = await fixture({ maximize: true, slider: true, stored: { forceHighThinking: true } });
-  await p.waitForFunction(() => window.sliderValue === 3 && !document.getElementById('model-menu'));
+  await p.waitForFunction(() => window.sliderValue === 2 && window.selectedModel === '6.10' && !document.getElementById('model-menu'));
   assert.equal(await p.evaluate(() => visibleMenuFrames), 0);
   assert.deepEqual(p.errors, []);
   await p.close();
 });
 
-test('unresolved selection is dismissed on disable and manual model menus remain visible', async () => {
+test('reasoning policy dismisses an unresolved selection on disable and leaves manual menus visible', async () => {
   const p = await fixture({ maximize: true, unresolved: true, stored: { forceHighThinking: true } });
   await p.locator('#model-menu').waitFor({ state: 'attached' });
   await p.evaluate(() => chrome.storage.local.set({ forceHighThinking: false, hideModelControls: false }));
@@ -282,6 +304,30 @@ test('unresolved selection is dismissed on disable and manual model menus remain
   await p.locator('#model').click();
   await p.locator('#model-menu').waitFor();
   assert.equal(await p.locator('#model-menu').evaluate(e => getComputedStyle(e).opacity), '1');
+  assert.deepEqual(p.errors, []);
+  await p.close();
+});
+
+test('reasoning policy sends Extra High only through the icon and restores High for normal sends', async () => {
+  const p = await fixture({ maximize: true, stored: { forceHighThinking: true, showExtraHighSendButton: true } });
+  const extra = p.locator('#ghrc-extra-high-send-button');
+  await p.waitForFunction(() => {
+    const button = document.getElementById('ghrc-extra-high-send-button');
+    return button && !button.disabled && window.selectedModel === '6.10' && window.selectedLevel === 'High';
+  });
+  assert.equal(await extra.textContent(), '');
+  assert.equal(await extra.getAttribute('aria-label'), 'Send once with Extra High');
+  assert.equal(await extra.evaluate(button => button.nextElementSibling.id), 'send');
+  await extra.click();
+  await p.waitForFunction(() => window.sends.length === 1 && window.selectedLevel === 'High'
+    && !document.getElementById('ghrc-extra-high-send-button').disabled);
+  assert.deepEqual(await p.evaluate(() => sends), [['6.10', 'Extra High']]);
+  await p.locator('#prompt-textarea').fill('Normal message');
+  await p.locator('#send').click();
+  await p.waitForFunction(() => window.sends.length === 2);
+  assert.deepEqual(await p.evaluate(() => sends), [['6.10', 'Extra High'], ['6.10', 'High']]);
+  await p.evaluate(() => chrome.storage.local.set({ showExtraHighSendButton: false }));
+  await extra.waitFor({ state: 'detached' });
   assert.deepEqual(p.errors, []);
   await p.close();
 });
