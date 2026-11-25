@@ -14,6 +14,7 @@
   let automaticBusy = false;
   const reportCandidates = new WeakMap();
   const RELOAD_MESSAGE = 'The extension was updated. Reload this ChatGPT page to reconnect and retry the import.';
+  const NOT_READY_MESSAGE = 'The complete report is not ready yet. Try again after it finishes.';
   // Poll only during a known import or bounded job-lookup recovery.
   function pollActiveImport(active) {
     if (!active || finalized || disposed || !enabled) {
@@ -83,7 +84,8 @@
     if (!enabled || automaticBusy || finalized || disposed) return;
     const download = doc.querySelector('button[aria-label="Export"], button[aria-label="Download"]');
     const scope = download && reportScope(download);
-    if (!scope || scope.querySelector('[aria-busy="true"], [role="progressbar"]') || download.disabled) return;
+    if (!scope || reportInProgress(scope, download)
+      || scope.querySelector(`.${BUTTON}[aria-busy="true"]`)) return;
     automaticBusy = true;
     try {
       let response;
@@ -120,7 +122,7 @@
       if (job.state === 'import-retry' && status && status.textContent !== 'Import interrupted. Retrying automatically…')
         status.textContent = 'Import interrupted. Retrying automatically…';
       if (job.retryAt && job.retryAt > Date.now()) return;
-      const report = reportPayload(scope);
+      const report = reportPayload(scope, download);
       const previous = reportCandidates.get(scope);
       if (!previous || previous.markdown !== report.markdown) {
         reportCandidates.set(scope, { markdown: report.markdown, since: Date.now() });
@@ -137,7 +139,7 @@
         finalizeReport(doc);
       }
     } catch (error) {
-      if (!error.message.startsWith('The complete report is not ready yet.')) {
+      if (error.message !== NOT_READY_MESSAGE) {
         const status = scope.querySelector('.ghrc-report-status');
         if (status && status.textContent !== error.message) status.textContent = error.message;
       }
@@ -157,10 +159,16 @@
     return null;
   }
 
-  function reportPayload(scope) {
+  function reportInProgress(scope, download) {
+    return download.disabled || scope.querySelector(`[aria-busy="true"]:not(.${BUTTON}), [role="progressbar"]`);
+  }
+
+  function reportPayload(scope, download) {
     const pages = [...scope.querySelectorAll(PAGE)];
-    const title = pages[0]?.querySelector('h1')?.textContent.trim();
-    if (!title || !pages.length) throw new Error('The complete report is not ready yet. Try again after it finishes.');
+    if (!pages.length || reportInProgress(scope, download)) throw new Error(NOT_READY_MESSAGE);
+    // A finished report can start directly with prose. The native publisher
+    // uses the conversation context to name files with this generic title.
+    const title = pages[0].querySelector('h1')?.textContent.trim() || 'Deep Research';
     const root = scope.ownerDocument.createElement('div');
     pages.forEach((page) => root.append(page.cloneNode(true)));
     root.querySelectorAll('script, style, button, [aria-hidden="true"]').forEach((node) => node.remove());
@@ -186,7 +194,9 @@
         return `<${tag}>${content}</${tag}>`;
       },
     });
-    const markdown = converter.turndown(root).trim() + '\n';
+    const content = converter.turndown(root).trim();
+    if (!content) throw new Error(NOT_READY_MESSAGE);
+    const markdown = content + '\n';
     if (new TextEncoder().encode(markdown).length > MAX_BYTES) return { title, oversized: true };
     return { title, markdown };
   }
@@ -259,7 +269,7 @@
             status.textContent = '';
             const category = await globalThis.__ghrcChooseResearchCategory(doc, connection);
             if (category === null) return;
-            const report = reportPayload(scope);
+            const report = reportPayload(scope, download);
             status.textContent = 'Adding report to repository…';
             const result = await request({ type: 'publish-research-report', ...report, category });
             if (!result?.ok) throw new Error(result?.error || 'Publishing failed. Try again.');
@@ -268,7 +278,7 @@
             globalThis.__ghrcResearchImportStatus(status, result);
             finalizeReport(doc);
           } catch (error) {
-            status.textContent = error.message || 'Connection unavailable. Reload this page and try again.';
+            status.textContent = 'Import failed. ' + (error.message || 'Connection unavailable. Reload this page and try again.');
             button.disabled = false;
           } finally { button.disabled = false; button.removeAttribute('aria-busy'); }
         });
