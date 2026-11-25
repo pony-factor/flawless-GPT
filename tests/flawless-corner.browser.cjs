@@ -42,7 +42,7 @@ test('one mascot starts native New chat without opening the sidebar', async () =
   const mascot = page.locator('#ghrc-flawless-corner');
   assert.equal(await mascot.count(), 1);
   assert.equal(await mascot.getAttribute('aria-label'), 'New chat');
-  assert.match(await mascot.locator('img').getAttribute('src'), /artwork\/SB-icon\.webp$/);
+  assert.match(await mascot.locator('img').getAttribute('src'), /artwork\/flawless-headshot\/SB-icon\.webp$/);
   const bounds = await mascot.boundingBox();
   assert.equal(bounds.width, 33);
   assert.equal(bounds.height, 33);
@@ -81,17 +81,17 @@ test('mascot animates in place on hover and returns to its still frame on exit',
   const image = mascot.locator('img');
   const initialBounds = await mascot.boundingBox();
 
-  assert.ok((await image.getAttribute('src')).endsWith('artwork/SB-icon.webp'));
+  assert.ok((await image.getAttribute('src')).endsWith('artwork/flawless-headshot/SB-icon.webp'));
   await mascot.hover();
-  assert.ok((await image.getAttribute('src')).endsWith('artwork/SB-icon.gif'));
+  assert.ok((await image.getAttribute('src')).endsWith('artwork/flawless-headshot/SB-icon.gif'));
   assert.deepEqual(await mascot.boundingBox(), initialBounds);
 
   await page.mouse.move(600, 300);
-  assert.ok((await image.getAttribute('src')).endsWith('artwork/SB-icon.webp'));
+  assert.ok((await image.getAttribute('src')).endsWith('artwork/flawless-headshot/SB-icon.webp'));
   assert.deepEqual(await mascot.boundingBox(), initialBounds);
 
   await mascot.hover();
-  assert.ok((await image.getAttribute('src')).endsWith('artwork/SB-icon.gif'));
+  assert.ok((await image.getAttribute('src')).endsWith('artwork/flawless-headshot/SB-icon.gif'));
   await mascot.click();
   assert.equal(await page.evaluate(() => window.newChats), 1);
   assert.equal(await page.evaluate(() => window.sidebarClicks || 0), 0);
@@ -102,8 +102,8 @@ test('mascot animates in place on hover and returns to its still frame on exit',
 test('animated mascot image is web-accessible to ChatGPT pages', () => {
   const manifest = JSON.parse(read('manifest.json'));
   const resources = manifest.web_accessible_resources.flatMap(group => group.resources);
-  assert.ok(resources.includes('artwork/SB-icon.webp'));
-  assert.ok(resources.includes('artwork/SB-icon.gif'));
+  assert.ok(resources.includes('artwork/flawless-headshot/SB-icon.webp'));
+  assert.ok(resources.includes('artwork/flawless-headshot/SB-icon.gif'));
 });
 
 test('the modern toolbar keeps the native New chat action and uses its icon slot', async () => {

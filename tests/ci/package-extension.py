@@ -8,7 +8,7 @@ root = Path(__file__).resolve().parents[2]
 output = root / "dist" / "flawless-extension.zip"
 output.parent.mkdir(exist_ok=True)
 
-directories = ("artwork/", "auth/", "css/", "icons/", "js/", "native/", "vendor/")
+directories = ("artwork/", "auth/", "css/", "js/", "native/", "vendor/")
 root_files = {
     "manifest.json", "LICENSE", "README.md",
     "link-preview.html", "options.html", "popup.html", "publisher-setup.html",
