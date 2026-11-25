@@ -10,7 +10,7 @@
       <details><summary>Other dispatcher sessions</summary><div id="session-list" class="session-list"></div></details>
     </section>
     <div id="notice" role="status" hidden></div>
-    <section class="toolbar" aria-label="Dispatcher controls"><label>Repository<input id="repository" value="PDF-magic/opener" autocomplete="off" spellcheck="false"></label><label class="file-button">Import task manifest<input id="manifest" type="file" accept=".json,application/json"></label><button id="start" class="primary">Start</button><button id="pause">Pause</button><button id="export">Export session</button></section>
+    <section class="toolbar" aria-label="Dispatcher controls"><label>Repository<input id="repository" placeholder="owner/repository" autocomplete="off" spellcheck="false"></label><label class="file-button">Import task manifest<input id="manifest" type="file" accept=".json,application/json"></label><button id="start" class="primary">Start</button><button id="pause">Pause</button><button id="export">Export session</button></section>
     <section class="checklist-import" aria-labelledby="checklist-heading">
       <h2 id="checklist-heading">Paste checklist items</h2>
       <p>Paste Markdown checkboxes, bullet items, or one task per line. Checked items are skipped. Each incomplete item becomes one task and its own PR, so group dependent changes before dispatching.</p>

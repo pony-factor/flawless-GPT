@@ -12,14 +12,14 @@ async function harness(t, { confirmed = false, merged = true, busy = false, afte
   let handler;
   let pausedFlag = false;
   const sessionStorage = {};
-  let state = { version: 1, paused: false, repository: 'PDF-magic/opener', events: [],
-    tasks: [{ id: 'opener-0059', prompt: 'Old task', status: 'running' }, { id: 'opener-0060', prompt: 'Next task', status: 'pending' }],
-    workers: Array.from({ length: 10 }, (_, slot) => ({ slot: slot + 1, tabId: slot + 1, url: `https://chatgpt.com/c/thread-${slot + 1}`, taskId: slot === 0 ? 'opener-0059' : `other-${slot}`, phase: slot === 0 ? phase : 'running', reminderSent: false })),
+  let state = { version: 1, paused: false, repository: 'example/project', events: [],
+    tasks: [{ id: 'task-0059', prompt: 'Old task', status: 'running' }, { id: 'task-0060', prompt: 'Next task', status: 'pending' }],
+    workers: Array.from({ length: 10 }, (_, slot) => ({ slot: slot + 1, tabId: slot + 1, url: `https://chatgpt.com/c/thread-${slot + 1}`, taskId: slot === 0 ? 'task-0059' : `other-${slot}`, phase: slot === 0 ? phase : 'running', reminderSent: false })),
   };
   const snapshots = state.workers.map((worker, index) => ({ url: worker.url, known: true, composerReady: true,
     active: index !== 0 || busy, queueLength: 0, submissionPending: false, latestUserAnswered: true,
     assistantComplete: true, signature: `turn-${index}`, stableSince: Date.now() - 2000, observedAt: Date.now(), draftPresent: false,
-    reply: confirmed ? `MERGE_CONFIRMED opener-0059 https://github.com/PDF-magic/opener/pull/27 ${sha}` : 'PR is open.' }));
+    reply: confirmed ? `MERGE_CONFIRMED task-0059 https://github.com/example/project/pull/27 ${sha}` : 'PR is open.' }));
   const event = { addListener() {} };
   sandbox.chrome = {
     storage: { local: { get: async keys => {
@@ -46,7 +46,7 @@ async function harness(t, { confirmed = false, merged = true, busy = false, afte
   };
   sandbox.TokenVault = { loadTokens: async () => [{ token: 'fixture-only' }] };
   sandbox.fetchGitHub = async () => ({ number: 27, state: 'closed', merged, merge_commit_sha: sha,
-    html_url: 'https://github.com/PDF-magic/opener/pull/27', base: { repo: { full_name: 'PDF-magic/opener' } } });
+    html_url: 'https://github.com/example/project/pull/27', base: { repo: { full_name: 'example/project' } } });
   vm.createContext(sandbox);
   for (const file of ['../js/dispatcher/core.js', '../js/dispatcher/background.js'])
     vm.runInContext(readFileSync(path.join(__dirname, file), 'utf8'), sandbox);
@@ -54,6 +54,13 @@ async function harness(t, { confirmed = false, merged = true, busy = false, afte
     sessionStorage, sandbox };
 
 }
+
+test('new dispatcher sessions have no preselected repository', async t => {
+  const h = await harness(t);
+  const { state } = await h.module.command({ type: 'state' }, '33333333-3333-4333-8333-333333333333');
+  assert.equal(state.repository, '');
+  assert.equal(state.tasks.length, 0);
+});
 
 test('active chats are observation-only', async t => {
   const h = await harness(t, { busy: true }); await h.module.tick();
@@ -65,7 +72,7 @@ test('a merge claim without GitHub merged=true cannot advance the task', async t
   const h = await harness(t, { confirmed: true, merged: false }); await h.module.tick();
   assert.equal(h.state().tasks[1].status, 'pending');
   const prepare = h.calls.find(c => c.type === 'ghrc-chat-dispatcher:prepare');
-  assert.match(prepare.prompt, /Finish your existing.*opener-0059/);
+  assert.match(prepare.prompt, /Finish your existing.*task-0059/);
   assert.equal(h.state().workers[0].reminderSent, true);
 });
 
@@ -73,7 +80,7 @@ test('only an independently verified merge releases the next task', async t => {
   const h = await harness(t, { confirmed: true }); await h.module.tick();
   assert.equal(h.state().tasks[0].status, 'merged');
   assert.equal(h.state().tasks[1].status, 'running');
-  assert.equal(h.state().workers[0].taskId, 'opener-0060');
+  assert.equal(h.state().workers[0].taskId, 'task-0060');
   assert.equal(h.calls.filter(c => c.type === 'ghrc-chat-dispatcher:commit').length, 1);
   await h.module.tick();
   assert.equal(h.calls.filter(c => c.type === 'ghrc-chat-dispatcher:commit').length, 1, 'a second cycle must not duplicate the send');
@@ -93,7 +100,7 @@ test('draft replacement is paused-only, opt-in, and passed only for text drafts'
   await h.module.tick();
   const prepare = h.calls.find(call => call.type === 'ghrc-chat-dispatcher:prepare');
   assert.equal(prepare.replaceDraft, true);
-  assert.match(prepare.prompt, /Task: opener-0060/);
+  assert.match(prepare.prompt, /Task: task-0060/);
   assert.equal(h.state().tasks[1].status, 'running');
 });
 
@@ -152,18 +159,18 @@ test('merge follow-up is sent at most once and never advances new work itself', 
 
 test('an earlier unverified task in an adopted chat also blocks advancement', async t => {
   const h = await harness(t, { confirmed: true });
-  h.state().workers[0].pendingTaskIds = ['opener-0058', 'opener-0059'];
+  h.state().workers[0].pendingTaskIds = ['task-0058', 'task-0059'];
   await h.module.tick();
   assert.equal(h.state().tasks[1].status, 'pending');
-  assert.match(h.calls.find(c => c.type === 'ghrc-chat-dispatcher:prepare').prompt, /opener-0058/);
-  assert.deepEqual(h.state().workers[0].verifiedTaskIds, ['opener-0059']);
+  assert.match(h.calls.find(c => c.type === 'ghrc-chat-dispatcher:prepare').prompt, /task-0058/);
+  assert.deepEqual(h.state().workers[0].verifiedTaskIds, ['task-0059']);
 });
 
 test('reviewing an unsent merge follow-up does not requeue its existing task', async t => {
   const h = await harness(t);
   h.state().paused = true;
   h.state().workers[0].phase = 'review';
-  h.state().workers[0].reservation = { nonce: 'review-me', taskId: 'opener-0059', kind: 'follow-up', previousPhase: 'awaiting-merge' };
+  h.state().workers[0].reservation = { nonce: 'review-me', taskId: 'task-0059', kind: 'follow-up', previousPhase: 'awaiting-merge' };
   await h.module.command({ type: 'review', slot: 1, decision: 'not-sent' });
   assert.equal(h.state().tasks[0].status, 'running');
   assert.equal(h.state().workers[0].phase, 'awaiting-merge');
@@ -248,14 +255,14 @@ test('a fresh send waits for its unique assistant receipt without replaying', as
 test('uncertain submission recovers only through exact independently verified merge proof', async t => {
   const h = await harness(t, { confirmed: true, phase: 'review' });
   const state = h.state();
-  state.workers[0].reservation = { kind: 'task', taskId: 'opener-0059', nonce: 'old-send' };
+  state.workers[0].reservation = { kind: 'task', taskId: 'task-0059', nonce: 'old-send' };
   state.workers[0].error = 'Uncertain send';
   await h.sandbox.chrome.storage.local.set({ chatDispatcherState: state });
   await h.module.tick();
   assert.equal(h.state().tasks[0].status, 'merged');
-  assert.equal(h.state().workers[0].taskId, 'opener-0060');
+  assert.equal(h.state().workers[0].taskId, 'task-0060');
   assert.equal(h.calls.filter(c => c.type === 'ghrc-chat-dispatcher:prepare').length, 1);
-  assert.match(h.calls.find(c => c.type === 'ghrc-chat-dispatcher:prepare').prompt, /Task: opener-0060/);
+  assert.match(h.calls.find(c => c.type === 'ghrc-chat-dispatcher:prepare').prompt, /Task: task-0060/);
 });
 
 test('a missing content listener reconnects without reloading or sending a prompt', async t => {
@@ -301,8 +308,8 @@ test('the third GitHub-verified job closes only the idle old chat and opens a fr
   const get = h.sandbox.chrome.tabs.get;
   h.sandbox.chrome.tabs.get = async id => id === 101 ? { id, url: 'https://chatgpt.com/' } : get(id);
   await h.module.tick();
-  assert.equal(h.state().tasks.find(task => task.id === 'opener-0059').status, 'merged');
-  assert.equal(h.state().tasks.find(task => task.id === 'opener-0060').status, 'pending');
+  assert.equal(h.state().tasks.find(task => task.id === 'task-0059').status, 'merged');
+  assert.equal(h.state().tasks.find(task => task.id === 'task-0060').status, 'pending');
   assert.equal(created.length, 1);
   assert.equal(created[0].url, 'https://chatgpt.com/');
   assert.equal(created[0].active, false);
@@ -325,7 +332,7 @@ test('fewer than three merged jobs do not rotate a chat', async t => {
   await h.module.tick();
   assert.equal(created, 0);
   assert.equal(removed, 0);
-  assert.equal(h.state().tasks.find(task => task.id === 'opener-0060').status, 'running');
+  assert.equal(h.state().tasks.find(task => task.id === 'task-0060').status, 'running');
 });
 
 test('interrupted rotation reuses the reserved new chat and never resends a job', async t => {
@@ -344,7 +351,7 @@ test('interrupted rotation reuses the reserved new chat and never resends a job'
   assert.equal(h.state().workers[0].phase, 'rotating');
   assert.equal(h.state().workers[0].tabId, 1);
   assert.equal(h.state().workers[0].rotation.newTabId, 101);
-  assert.equal(h.state().tasks.find(task => task.id === 'opener-0060').status, 'pending');
+  assert.equal(h.state().tasks.find(task => task.id === 'task-0060').status, 'pending');
   await h.module.tick();
   assert.equal(creations, 1);
   assert.equal(attempts, 2);
@@ -367,7 +374,7 @@ test('busy or drafted chats are not closed during rotation', async t => {
   await h.module.tick();
   assert.equal(created, 0);
   assert.equal(closed, 0);
-  assert.equal(h.state().tasks.find(task => task.id === 'opener-0060').status, 'pending');
+  assert.equal(h.state().tasks.find(task => task.id === 'task-0060').status, 'pending');
   h.snapshots[0].draftPresent = false;
   const get = h.sandbox.chrome.tabs.get;
   h.sandbox.chrome.tabs.get = async id => id === 101 ? { id, url: 'https://chatgpt.com/' } : get(id);
@@ -387,7 +394,7 @@ const SESSION_B = '22222222-2222-4222-8222-222222222222';
 
 test('independent dispatchers retain separate task manifests and preferences', async t => {
   const h = await harness(t);
-  await h.module.command({ type: 'import', repository: 'PDF-magic/opener',
+  await h.module.command({ type: 'import', repository: 'example/project',
     manifest: [{ id: 'one', prompt: 'First manifest' }] }, SESSION_A);
   await h.module.command({ type: 'import', repository: 'pony-factor/flawless-GPT',
     manifest: [{ id: 'two', prompt: 'Second manifest' }] }, SESSION_B);
@@ -396,13 +403,13 @@ test('independent dispatchers retain separate task manifests and preferences', a
   const b = (await h.module.command({ type: 'state' }, SESSION_B)).state;
   assert.equal(a.id, SESSION_A);
   assert.equal(b.id, SESSION_B);
-  assert.equal(a.repository, 'PDF-magic/opener');
+  assert.equal(a.repository, 'example/project');
   assert.equal(b.repository, 'pony-factor/flawless-GPT');
   assert.deepEqual(a.tasks.map(t => t.id), ['one']);
   assert.deepEqual(b.tasks.map(t => t.id), ['two']);
   assert.equal(a.preferCodexPony, true);
   assert.equal(Boolean(b.preferCodexPony), false);
-  assert.equal(h.state().tasks[0].id, 'opener-0059', 'legacy progress remains intact');
+  assert.equal(h.state().tasks[0].id, 'task-0059', 'legacy progress remains intact');
   const sessions = await h.module.listSessions();
   assert.deepEqual(Array.from(sessions, s => s.id), ['legacy', SESSION_A, SESSION_B]);
 });
@@ -410,7 +417,7 @@ test('independent dispatchers retain separate task manifests and preferences', a
 test('two dispatchers can start their own ten-chat pools without cross-session changes', async t => {
   const h = await harness(t);
   for (const [id, name] of [[SESSION_A, 'one'], [SESSION_B, 'two']]) {
-    await h.module.command({ type: 'import', repository: 'PDF-magic/opener',
+    await h.module.command({ type: 'import', repository: 'example/project',
       manifest: [{ id: name, prompt: 'Independent task' }] }, id);
   }
   let nextTab = 100;
@@ -430,7 +437,7 @@ test('two dispatchers can start their own ten-chat pools without cross-session c
 test('pausing a dashboard leaves the other dispatcher running', async t => {
   const h = await harness(t);
   for (const id of [SESSION_A, SESSION_B]) {
-    await h.module.command({ type: 'import', repository: 'PDF-magic/opener',
+    await h.module.command({ type: 'import', repository: 'example/project',
       manifest: [{ id: 'job', prompt: 'Run me' }] }, id);
   }
   h.sessionStorage['chatDispatcherState:' + SESSION_A].paused = false;
@@ -476,12 +483,12 @@ test('integrated GitHub connection reads only scoped merge metadata', async t =>
   h.sandbox.fetchGitHub = async (url, token) => {
     reads.push({ url, token });
     return { number: 27, state: 'closed', merged: true, merge_commit_sha: sha,
-      html_url: 'https://github.com/PDF-magic/opener/pull/27',
-      base: { repo: { full_name: 'PDF-magic/opener' } } };
+      html_url: 'https://github.com/example/project/pull/27',
+      base: { repo: { full_name: 'example/project' } } };
   };
   await h.module.tick();
   assert.deepEqual(reads, [{
-    url: 'https://api.github.com/repos/PDF-magic/opener/pulls/27',
+    url: 'https://api.github.com/repos/example/project/pulls/27',
     token: 'fixture-only',
   }], 'merge verification should only read the selected PR through Flawless GitHub access');
   assert.equal(h.state().tasks[0].status, 'merged');
@@ -512,9 +519,9 @@ test('unpaired pages and invalid GitHub inputs cannot control dispatch', async t
   // Validate repository inputs in a separate, paused session with no assigned workers.
   // An active pool rejects all imports before reaching repository validation.
   await assert.rejects(h.module.command({ type: 'import',
-    repository: 'PDF-magic/opener; echo unsafe', manifest: [{ id: 'new', prompt: 'No' }] }, SESSION_A),
+    repository: 'example/project; echo unsafe', manifest: [{ id: 'new', prompt: 'No' }] }, SESSION_A),
   /Enter owner\/repository/);
-  const forged = 'MERGE_CONFIRMED opener-0059 https://github.com/PDF-magic/opener/pull/27;echo ' + sha;
+  const forged = 'MERGE_CONFIRMED task-0059 https://github.com/example/project/pull/27;echo ' + sha;
   assert.equal(h.sandbox.__ghrcDispatcherCore.parseConfirmations(
-    forged, 'PDF-magic/opener', 'opener-0059').length, 0);
+    forged, 'example/project', 'task-0059').length, 0);
 });

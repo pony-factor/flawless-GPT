@@ -6,7 +6,7 @@ const { JSDOM } = require('jsdom');
 
 const source = readFileSync(path.join(__dirname, '../js/composer/chat-dispatcher.js'), 'utf8');
 function fixture() {
-  const dom = new JSDOM('<main aria-label="Conversation"><article><div data-message-author-role="user">Task: opener-0059</div></article><article id="assistant-turn"><div data-message-author-role="assistant"><p>Finished.</p><button aria-label="Copy">Copy</button></div></article></main><form><textarea id="prompt-textarea"></textarea><button type="submit" data-testid="send-button" aria-label="Send">Send</button></form>', { url: 'https://chatgpt.com/c/test-thread', runScripts: 'outside-only', pretendToBeVisual: true });
+  const dom = new JSDOM('<main aria-label="Conversation"><article><div data-message-author-role="user">Task: task-0059</div></article><article id="assistant-turn"><div data-message-author-role="assistant"><p>Finished.</p><button aria-label="Copy">Copy</button></div></article></main><form><textarea id="prompt-textarea"></textarea><button type="submit" data-testid="send-button" aria-label="Send">Send</button></form>', { url: 'https://chatgpt.com/c/test-thread', runScripts: 'outside-only', pretendToBeVisual: true });
   const { window: w } = dom;
   let now = 10000;
   w.Date.now = () => now;
@@ -209,7 +209,7 @@ test('fresh root chat can send its first task and bind the resulting conversatio
   w.document.querySelector('main').replaceChildren();
   adapter.snapshot(); advance(1600);
   assert.equal(adapter.snapshot().fresh, true);
-  const nonce = 'fresh-reference'; const prompt = `Task: opener-0060\nDispatch reference: ${nonce}`;
+  const nonce = 'fresh-reference'; const prompt = `Task: task-0060\nDispatch reference: ${nonce}`;
   w.document.querySelector('[data-testid="send-button"]').addEventListener('click', event => {
     event.preventDefault();
     dom.reconfigure({ url: 'https://chatgpt.com/c/new-thread?from=new-chat' });
@@ -235,7 +235,7 @@ test('an empty existing conversation is never treated as a fresh chat', () => {
 test('collapsed user prompts still prove submission without clicking or sending', () => {
   const { dom, w, adapter } = fixture();
   const user = w.document.querySelector('[data-message-author-role="user"]');
-  user.textContent = 'Task: opener-0059 Dispatch reference: collapsed-reference';
+  user.textContent = 'Task: task-0059 Dispatch reference: collapsed-reference';
   user.hidden = true;
   const result = adapter.review({ decision: 'sent', nonce: 'collapsed-reference' });
   assert.equal(result.ok, true);

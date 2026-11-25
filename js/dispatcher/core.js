@@ -28,7 +28,7 @@ function validSnapshot(s, now = Date.now(), allowFresh = false) {
 function parseConfirmations(reply, repository, taskId) {
   if (!REPOSITORY.test(repository)) return [];
   const confirmations = [];
-  const pattern = /(?:^|\n)\s*MERGE_CONFIRMED\s+(opener-\d+|[A-Za-z0-9_-]+)\s+https:\/\/github\.com\/([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)\/pull\/([1-9]\d*)\s+([a-f0-9]{40})\b/g;
+  const pattern = /(?:^|\n)\s*MERGE_CONFIRMED\s+([A-Za-z0-9_-]+)\s+https:\/\/github\.com\/([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)\/pull\/([1-9]\d*)\s+([a-f0-9]{40})\b/g;
   for (const match of String(reply || '').matchAll(pattern)) {
     if (match[1] === taskId && match[2].toLowerCase() === repository.toLowerCase()) {
       confirmations.push({ taskId, repository, number: Number(match[3]), sha: match[4] });

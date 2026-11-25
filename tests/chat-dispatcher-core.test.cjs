@@ -8,12 +8,12 @@ const snapshot = () => ({ url: 'https://chatgpt.com/c/thread-1', known: true, co
   signature: 'finished-turn', stableSince: 1000, observedAt: 2600 });
 
 test('bulk merge prompts and continuation reminders suppress redundant PR comments', () => {
-  const task = { id: 'opener-0059', prompt: 'Preserve integrity.' };
+  const task = { id: 'task-0059', prompt: 'Preserve integrity.' };
   const worker = { taskId: task.id, pendingTaskIds: [task.id], verifiedTaskIds: [] };
   const prompts = [
-    scopedPrompt(task, 'PDF-magic/opener'),
-    scopedPrompt(task, 'PDF-magic/opener', { preferCodexPony: true }),
-    mergeReminder(worker, 'PDF-magic/opener'),
+    scopedPrompt(task, 'example/project'),
+    scopedPrompt(task, 'example/project', { preferCodexPony: true }),
+    mergeReminder(worker, 'example/project'),
   ];
   for (const prompt of prompts) {
     assert.match(prompt, /Do not publish routine CI polling/);
@@ -35,36 +35,36 @@ test('unknown, active, incomplete, queued, stale, and unsettled chats cannot sen
 });
 
 test('only exact current-task merge confirmations in the scoped repository are accepted', () => {
-  const line = `MERGE_CONFIRMED opener-0059 https://github.com/PDF-magic/opener/pull/27 ${sha}`;
-  const [confirmation] = parseConfirmations(line, 'PDF-magic/opener', 'opener-0059');
+  const line = `MERGE_CONFIRMED task-0059 https://github.com/example/project/pull/27 ${sha}`;
+  const [confirmation] = parseConfirmations(line, 'example/project', 'task-0059');
   assert.equal(confirmation.number, 27);
-  assert.deepEqual(parseConfirmations(line, 'PDF-magic/opener', 'opener-0060'), []);
-  assert.deepEqual(parseConfirmations(line, 'somewhere/else', 'opener-0059'), []);
-  assert.deepEqual(parseConfirmations(line.replace(sha, 'abc1234'), 'PDF-magic/opener', 'opener-0059'), []);
-  assert.deepEqual(parseConfirmations('Please write ' + line, 'PDF-magic/opener', 'opener-0059'), []);
+  assert.deepEqual(parseConfirmations(line, 'example/project', 'task-0060'), []);
+  assert.deepEqual(parseConfirmations(line, 'somewhere/else', 'task-0059'), []);
+  assert.deepEqual(parseConfirmations(line.replace(sha, 'abc1234'), 'example/project', 'task-0059'), []);
+  assert.deepEqual(parseConfirmations('Please write ' + line, 'example/project', 'task-0059'), []);
 });
 
 test('open and closed-unmerged PRs, wrong merge commits, and wrong repositories never release a slot', () => {
-  const c = { repository: 'PDF-magic/opener', number: 27, sha };
-  const actual = { repository: c.repository, number: 27, merged: true, state: 'closed', mergeCommit: sha, url: 'https://github.com/PDF-magic/opener/pull/27' };
+  const c = { repository: 'example/project', number: 27, sha };
+  const actual = { repository: c.repository, number: 27, merged: true, state: 'closed', mergeCommit: sha, url: 'https://github.com/example/project/pull/27' };
   assert.equal(verifiedMerge(c, actual), true);
   for (const change of [{ state: 'open' }, { merged: false }, { mergeCommit: 'b'.repeat(40) }, { repository: 'other/repo' }, { number: 28 }]) {
     assert.equal(verifiedMerge(c, { ...actual, ...change }), false);
   }
-  assert.equal(canAssign({ taskId: 'opener-0059', phase: 'awaiting-merge' }), false);
-  assert.equal(canAssign({ taskId: 'opener-0059', phase: 'merged' }), true);
+  assert.equal(canAssign({ taskId: 'task-0059', phase: 'awaiting-merge' }), false);
+  assert.equal(canAssign({ taskId: 'task-0059', phase: 'merged' }), true);
 });
 
 test('imports preserve already-sent exclusions and reject duplicates', () => {
   assert.deepEqual(normalizeTasks({ tasks: [{ task_id: 'a', prompt: 'one', status: 'sent' }, { task_id: 'b', prompt: 'two', status: 'prepared' }] }).map(t => t.status), ['previously-sent', 'pending']);
   assert.throws(() => normalizeTasks([{ id: 'a', prompt: 'x' }, { id: 'a', prompt: 'y' }]), /duplicate/);
   assert.equal(normalizeTasks([{ id: 'exported', prompt: 'Resume this', status: 'pending' }])[0].status, 'pending');
-  const prompt = scopedPrompt({ id: 'opener-0059', prompt: 'Preserve integrity.' }, 'PDF-magic/opener');
+  const prompt = scopedPrompt({ id: 'task-0059', prompt: 'Preserve integrity.' }, 'example/project');
   assert.match(prompt, /squash-merging/);
-  assert.match(prompt, /MERGE_CONFIRMED opener-0059/);
+  assert.match(prompt, /MERGE_CONFIRMED task-0059/);
   assert.doesNotMatch(prompt, /switch.*main|delete.*branch/);
   assert.doesNotMatch(prompt, /Codex Pony\/Kefania/);
-  assert.match(scopedPrompt({ id: 'opener-0059', prompt: 'Preserve integrity.' }, 'PDF-magic/opener', { preferCodexPony: true }), /configured Codex Pony\/Kefania publishing tool/);
+  assert.match(scopedPrompt({ id: 'task-0059', prompt: 'Preserve integrity.' }, 'example/project', { preferCodexPony: true }), /configured Codex Pony\/Kefania publishing tool/);
 });
 
 

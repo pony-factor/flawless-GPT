@@ -10,6 +10,7 @@ if (suppliedId !== sessionId) {
 }
 let state = { paused: true, tasks: [], workers: [], events: [] };
 let sessions = [];
+let renderedRepository;
 const el = (tag, text, className) => { const node = document.createElement(tag); if (text !== undefined) node.textContent = text; if (className) node.className = className; return node; };
 const notice = text => { $('notice').textContent = text; $('notice').hidden = !text; };
 async function request(message) {
@@ -51,7 +52,11 @@ function render() {
   if (!sessions.some(session => session.id !== sessionId)) $('session-list').append(el('span', 'No other dispatcher sessions yet.'));
   $('run-status').textContent = state.paused ? 'Paused' : 'Running';
   $('run-status').classList.toggle('live', !state.paused);
-  $('repository').value = state.repository || 'PDF-magic/opener';
+  const repository = state.repository || '';
+  if (renderedRepository !== repository) {
+    $('repository').value = repository;
+    renderedRepository = repository;
+  }
   $('repository').disabled = !state.paused;
   $('prefer-codex-pony').checked = Boolean(state.preferCodexPony);
   $('prefer-codex-pony').disabled = !state.paused || !connected;

@@ -68,6 +68,7 @@ test('unconnected dashboard preview cannot dispatch tasks', () => {
     dom.window.eval(script);
     const notice = dom.window.document.getElementById('notice');
     assert.match(notice.textContent, /Open the dispatcher from Flawless/);
+    assert.equal(dom.window.document.getElementById('repository').value, '');
     assert.equal(dom.window.document.getElementById('start').disabled, true);
     assert.equal(dom.window.document.getElementById('pause').disabled, true);
     assert.equal(dom.window.document.getElementById('active-count').textContent, '0 / 10');

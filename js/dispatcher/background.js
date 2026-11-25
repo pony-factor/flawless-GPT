@@ -7,7 +7,7 @@ const REGISTRY_KEY = 'chatDispatcherSessionIds';
 const SESSION_ID = /^(?:legacy|[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})$/i;
 const stateKey = id => id === 'legacy' ? 'chatDispatcherState' : `chatDispatcherState:${id}`;
 const pausedKey = id => id === 'legacy' ? 'chatDispatcherPaused' : `chatDispatcherPaused:${id}`;
-const blank = id => ({ id, version: 2, paused: true, repository: 'PDF-magic/opener', replaceExistingDrafts: false, tasks: [], workers: [], events: [] });
+const blank = id => ({ id, version: 2, paused: true, repository: '', replaceExistingDrafts: false, tasks: [], workers: [], events: [] });
 const serials = new Map();
 const pauseRequested = new Set();
 const pauseEpoch = new Map();
