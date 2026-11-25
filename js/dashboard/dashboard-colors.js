@@ -5,8 +5,8 @@
   const SPECS = [
     ["accentLight", "Dashboard accent (light mode)", "#0969da", "--ghrc-dashboard-accent-light"],
     ["accentDark", "Dashboard accent (dark mode)", "#4493f8", "--ghrc-dashboard-accent-dark"],
-    ["repositoryLight", "Repository links (light mode)", "#0969da", "--ghrc-dashboard-link-light"],
-    ["repositoryDark", "Repository links (dark mode)", "#4493f8", "--ghrc-dashboard-link-dark"],
+    ["repositoryLight", "Dashboard links (light mode)", "#0969da", "--ghrc-dashboard-link-light"],
+    ["repositoryDark", "Dashboard links (dark mode)", "#4493f8", "--ghrc-dashboard-link-dark"],
   ];
   const HEX = /^#[0-9a-f]{6}$/i;
   const normalizeHex = input => {
@@ -30,7 +30,7 @@
     let pending = Promise.resolve();
 
     function displayColor(key, preview) {
-      // Repository names inherit the dashboard accent until customized.
+      // Repository names use the dashboard accent until a link color is set.
       const accentKey = key === "repositoryLight" ? "accentLight"
         : key === "repositoryDark" ? "accentDark" : null;
       return colors[key] || (accentKey && colors[accentKey]) || preview;

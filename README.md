@@ -167,7 +167,7 @@ Under **ChatGPT → Chat bar colors**, choose independent opt-in colors for the 
 
 ### Dashboard accent and repository link colors
 
-Under **Dashboard → Dashboard colors** in both the extension popup and full settings, set independent light- and dark-mode colors for dashboard accents and repository names. Each swatch has a **custom HEX field** accepting six digits with or without the `#` prefix. Changes are stored locally under `dashboardColors` and update open dashboards immediately. Repository names follow the accent unless customized; **Default** restores an individual color and **Restore dashboard colors** clears all four overrides. Existing **Chat bar colors** continue to support HEX entry independently.
+Under **Dashboard → Dashboard colors** in both the extension popup and full settings, set independent light- and dark-mode colors for dashboard accents and links to repositories, owners and pinned issues. Each swatch has a **custom HEX field** accepting six digits with or without the `#` prefix. Changes are stored locally under `dashboardColors` and update open dashboards immediately. Repository names follow the accent unless customized; **Default** restores an individual color and **Restore dashboard colors** clears all four overrides. Under **Personalization → Chat bar colors**, use **Chat input outline** to set an outline color for the composer in new and existing chats.
 
 ### Token storage
 
