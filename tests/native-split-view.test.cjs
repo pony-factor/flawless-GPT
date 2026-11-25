@@ -152,3 +152,40 @@ test('the Satoshi code sidebar opens its blocked Bitcointalk source instead of r
   assert.equal(result.ok, true);
   assert.equal(f.calls.find(call => call[0] === 'create')[1].url, destination);
 });
+
+
+test('research shortcut stages Spellcheck before navigation and acknowledges it from the destination', async () => {
+  const f = fixture();
+  const sender = id => ({ id: 'extension', url: 'https://chatgpt.com/', tab: { id }, frameId: 0 });
+  const send = (type, id, extra = {}) => new Promise((resolve, reject) => {
+    const handled = f.listener({ type, ...extra }, sender(id), resolve);
+    if (!handled) reject(new Error('Expected an asynchronous response for ' + type));
+  });
+  const result = await send('open-research-spellcheck-split', 10, { onLeft: true });
+  assert.equal(result.ok, true);
+  assert.equal(result.split, true);
+  assert.deepEqual(f.calls.find(call => call[0] === 'split'), ['split', [20, 10]]);
+  assert.equal(f.calls.at(-1)[2].url, 'https://chatgpt.com/');
+  assert.equal(f.session['researchSpellcheckSplit:20'].sourceTabId, 10);
+  assert.equal((await send('research-spellcheck-pending', 10)).pending, false);
+  assert.equal((await send('research-spellcheck-pending', 20)).pending, true);
+  assert.equal((await send('research-spellcheck-ready', 20)).ok, true);
+  assert.equal((await send('research-spellcheck-pending', 20)).pending, false);
+});
+
+test('research shortcut falls back to a regular tab without replacing an unrelated split', async () => {
+  for (const f of [
+    fixture({ supported: false }),
+    fixture({ fail: true }),
+    fixture({ source: { splitViewId: 8 }, partner: { id: 30, splitViewId: 8 } }),
+  ]) {
+    const result = await new Promise(resolve => f.listener(
+      { type: 'open-research-spellcheck-split' },
+      { id: 'extension', url: 'https://chatgpt.com/', tab: { id: 10 }, frameId: 0 }, resolve));
+    assert.equal(result.ok, true);
+    assert.equal(result.split, false);
+    assert.equal(f.calls.filter(call => call[0] === 'create').length, 1);
+    assert.equal(f.calls.at(-1)[1], 20);
+    assert.equal(f.session['researchSpellcheckSplit:20'].sourceTabId, 10);
+  }
+});

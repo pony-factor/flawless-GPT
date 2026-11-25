@@ -127,7 +127,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         if (pending) await chrome.storage.session.remove(key);
         return { ok: true };
       }
-      return { ok: true, pending: Boolean(pending && Date.now() - pending.createdAt < 60_000) };
+      const valid = Boolean(pending && Date.now() - pending.createdAt < 60_000);
+      if (pending && !valid) await chrome.storage.session.remove(key);
+      return { ok: true, pending: valid };
     })().then(sendResponse).catch(() => sendResponse({ ok: false }));
     return true;
   }
@@ -141,6 +143,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     nativeSplitRequests.set(tabId, request);
     request.then(sendResponse, error => sendResponse({ ok: false, error: error.message }))
       .finally(() => { if (nativeSplitRequests.get(tabId) === request) nativeSplitRequests.delete(tabId); });
+    return true;
+  }
   if (message.type === "open-blocked-link-preview") {
     (async () => {
       const key = `linkPreviewWatch:${tabId}`;

@@ -78,7 +78,6 @@ const show2048LauncherInput = document.getElementById("show-2048-launcher");
 const deepResearchSpellcheckEnabledInput = document.getElementById("deep-research-spellcheck-enabled");
 const showDeepResearchTrackerInput = document.getElementById("show-deep-research-tracker");
 const showResearchHomepageLauncherInput = document.getElementById("show-research-homepage-launcher");
-const showResearchWritingBlockLauncherInput = document.getElementById("show-research-writing-block-launcher");
 const showDeepResearchHomepageInput = document.getElementById("show-deep-research-homepage");
 const showDeepResearchComposerInput = document.getElementById("show-deep-research-composer");
 const showDeepResearchHomepageCountInput = document.getElementById("show-deep-research-homepage-count");
@@ -459,7 +458,6 @@ async function loadSettings() {
     showSpellcheckGptLauncher: false,
     show2048Launcher: false,
     showResearchHomepageLauncher: true,
-    showResearchWritingBlockLauncher: true,
     deepResearchSpellcheckEnabled: true,
     showDeepResearchTracker: true,
     showDeepResearchHomepage: true,
@@ -536,7 +534,6 @@ async function loadSettings() {
   showSpellcheckGptLauncherInput.checked = Boolean(settings.showSpellcheckGptLauncher);
   show2048LauncherInput.checked = Boolean(settings.show2048Launcher);
   showResearchHomepageLauncherInput.checked = settings.showResearchHomepageLauncher !== false;
-  showResearchWritingBlockLauncherInput.checked = settings.showResearchWritingBlockLauncher !== false;
   deepResearchSpellcheckEnabledInput.checked = settings.deepResearchSpellcheckEnabled !== false;
   showDeepResearchTrackerInput.checked = settings.showDeepResearchTracker !== false;
   showDeepResearchHomepageInput.checked = settings.showDeepResearchHomepage !== false;
@@ -664,7 +661,6 @@ async function saveSettings() {
       showSpellcheckGptLauncher: showSpellcheckGptLauncherInput.checked,
       show2048Launcher: show2048LauncherInput.checked,
       showResearchHomepageLauncher: showResearchHomepageLauncherInput.checked,
-      showResearchWritingBlockLauncher: showResearchWritingBlockLauncherInput.checked,
       deepResearchSpellcheckEnabled: deepResearchSpellcheckEnabledInput.checked,
       showDeepResearchTracker: showDeepResearchTrackerInput.checked,
       showDeepResearchHomepage: showDeepResearchHomepageInput.checked,

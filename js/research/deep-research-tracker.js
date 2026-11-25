@@ -75,7 +75,6 @@
   const DASHBOARD_ID = 'ghrc-deep-research-dashboard';
   const COMPOSER_ID = `${ID}-composer`;
   const HOME_LAUNCHER_ID = 'ghrc-research-home-launcher';
-  const RESEARCH_MENTION = '[app-mention-path="app://connector_openai_deep_research"], [app-mention-path="app://connector_openai_deep_research_work"]';
   const USAGE_ATTRIBUTE = 'data-ghrc-deep-research-usage';
   const DAY_MS = 24 * 60 * 60_000;
   const CACHE_MS = 8 * 60 * 60_000;
@@ -319,7 +318,9 @@
       status.setAttribute('aria-live', 'polite');
       wrapper.append(button, status);
     }
-    if (wrapper.nextElementSibling !== composer) composer.before(wrapper);
+    const tracker = document.getElementById(COMPOSER_ID);
+    const anchor = tracker?.nextElementSibling === composer ? tracker : composer;
+    if (wrapper.nextElementSibling !== anchor) anchor.before(wrapper);
   }
 
   function renderWidget(id) {
@@ -341,11 +342,7 @@
       const label = document.createElement('span');
       label.className = 'ghrc-research-allowance';
       widget.append(icon, pie, label);
-      widget.addEventListener('click', () => {
-        if (id === ID && location.pathname === '/' && preferences.showResearchHomepageLauncher !== false) {
-          void context.run(launchResearchWithSpellcheck);
-        } else checkAllowance();
-      });
+      widget.addEventListener('click', checkAllowance);
     }
     // An old observation is not a live balance; require another native check.
     const fresh = Date.now() - observedAt < 5 * 60_000;
@@ -411,12 +408,10 @@
     if (widget.getAttribute('aria-label') !== text) widget.setAttribute('aria-label', text);
     const combined = preferences.deepResearchAllowanceMode === 'all';
     const autoEstimate = showPie && preferredTotal == null && reportedTotal == null;
-    widget.title = homepage && location.pathname === '/' && preferences.showResearchHomepageLauncher !== false
-      ? 'Prepare Deep Research and open Spellcheck Only in split view'
-      : showPie
-        ? `Deep Research: ${pieRemaining} of ${total} ${combined ? 'full + lightweight' : 'full'} reports remaining${autoEstimate ? ' (estimated allowance)' : ''}. Click to refresh.`
-        : combined ? 'Combined full + lightweight allowance; requires both quotas from ChatGPT. Click to refresh.'
-          : 'Full Deep Research only; lightweight requests excluded. Click to refresh.';
+    widget.title = showPie
+      ? `Deep Research: ${pieRemaining} of ${total} ${combined ? 'full + lightweight' : 'full'} reports remaining${autoEstimate ? ' (estimated allowance)' : ''}. Click to refresh.`
+      : combined ? 'Combined full + lightweight allowance; requires both quotas from ChatGPT. Click to refresh.'
+        : 'Full Deep Research only; lightweight requests excluded. Click to refresh.';
     return widget;
   }
 
@@ -508,7 +503,8 @@
       && (node.matches(WATCHED_MOUNTS) || Boolean(node.querySelector(WATCHED_MOUNTS)));
   }
   function onMutations(mutations) {
-    if (!context.active() || (!enabled && !researchAttempt)) return;
+    if (!context.active() || (!enabled && !researchAttempt
+      && preferences.showResearchHomepageLauncher === false)) return;
     for (const mutation of mutations) {
       if (mutation.type === 'attributes') {
         if (mutation.target === document.documentElement || mutation.target.closest?.(TRACKER_HOST)) {
