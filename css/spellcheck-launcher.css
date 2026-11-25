@@ -16,7 +16,7 @@
   overflow: hidden;
   padding: 0;
   position: absolute;
-  left: -40px;
+  left: -44px;
   bottom: 10px;
   width: 32px;
   z-index: 4;
@@ -47,7 +47,7 @@
 
 @media (max-width: 700px) {
   #ghrc-spellcheck-gpt-launcher {
-    bottom: calc(100% + 8px);
+    bottom: calc(100% + 12px);
     left: 4px;
   }
 }
@@ -58,5 +58,11 @@
     position: static;
     flex: 0 0 32px;
     z-index: auto;
+  }
+
+  [data-composer-footer-responsive][data-composer-rows="stacked"]:has(
+    #ghrc-spellcheck-gpt-launcher[data-ghrc-inline-before-plus]:not([hidden])
+  ) {
+    row-gap: 4px;
   }
 }

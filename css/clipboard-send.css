@@ -45,7 +45,7 @@
 
 #ghrc-clipboard-open-url-button[data-ghrc-beside-spellcheck] {
   position: absolute;
-  left: -80px;
+  left: -84px;
   bottom: 10px;
   margin: 0;
   z-index: 4;
@@ -53,7 +53,7 @@
 
 @media (max-width: 700px) {
   #ghrc-clipboard-open-url-button[data-ghrc-beside-spellcheck] {
-    bottom: calc(100% + 8px);
+    bottom: calc(100% + 12px);
     left: 4px;
   }
 
