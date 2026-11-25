@@ -60,7 +60,7 @@ async function fixture(settings = {}, githubResponse = null, nativeSplitSupporte
       },
     };
   }, { settings, githubResponse, nativeSplitSupported });
-  await page.addStyleTag({ content: read('css/external-links.css') });
+  await page.addStyleTag({ content: read('css/links/external-links.css') });
   await page.addScriptTag({ content: read('js/links/citation-links-main.js') });
   await page.addScriptTag({ content: read('js/links/external-links.js') });
   return page;

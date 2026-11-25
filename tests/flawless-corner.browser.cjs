@@ -31,7 +31,7 @@ async function fixture({ html, route = '/' } = {}) {
       storage: { local: {} },
     };
   });
-  await page.addStyleTag({ content: read('css/flawless-corner.css') });
+  await page.addStyleTag({ content: read('css/chat/flawless-corner.css') });
   await page.addScriptTag({ content: read('js/core/extension-context.js') });
   await page.addScriptTag({ content: read('js/chat/flawless-corner.js') });
   return page;

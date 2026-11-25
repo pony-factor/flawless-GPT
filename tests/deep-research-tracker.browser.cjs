@@ -21,7 +21,7 @@ test('expired or missing quota never triggers background server refreshes', asyn
           return { ok: true, refresh: true, quota: { remaining: 3, observedAt: Date.now() - 9 * 3600_000, resetAt: null } };
         } } };
       }, bridge);
-      await page.addScriptTag({ content: fs.readFileSync(path.join(__dirname, '../js/research/deep-research-tracker.js'), 'utf8') });
+      await page.addScriptTag({ content: fs.readFileSync(path.join(__dirname, '../js/research/tracker.js'), 'utf8') });
       await page.clock.runFor(120_000);
       assert.equal(await page.evaluate(() => window.refreshRequests), 0);
       assert.equal(await page.evaluate(() => window.claims), 0);
@@ -50,8 +50,8 @@ test('mounts, reads native usage, excludes messages, and cleans up on extension 
         document.body.append(menu);
       };
     });
-    await page.addStyleTag({ content: fs.readFileSync(path.join(__dirname, '../css/deep-research-tracker.css'), 'utf8') });
-    await page.addScriptTag({ content: fs.readFileSync(path.join(__dirname, '../js/research/deep-research-tracker.js'), 'utf8') });
+    await page.addStyleTag({ content: fs.readFileSync(path.join(__dirname, '../css/research/tracker.css'), 'utf8') });
+    await page.addScriptTag({ content: fs.readFileSync(path.join(__dirname, '../js/research/tracker.js'), 'utf8') });
     const widget = page.locator('#ghrc-deep-research-tracker-composer');
     await widget.waitFor();
     assert.match(await widget.innerText(), /Check allowance/);
@@ -89,10 +89,10 @@ test('dashboard counter sits left of the game launcher; plugin selection and set
       };
       document.documentElement.setAttribute('data-ghrc-deep-research-usage', JSON.stringify({ remaining: 13, resetAt: Date.now() + 40 * 3600_000, observedAt: Date.now() }));
     });
-    for (const file of ['styles.css', '2048.css', 'highlighted-pages.css', 'deep-research-tracker.css']) {
+    for (const file of ['dashboard/styles.css', 'games/2048.css', 'dashboard/highlighted-pages.css', 'research/tracker.css']) {
       await page.addStyleTag({ content: fs.readFileSync(path.join(__dirname, '../css', file), 'utf8') });
     }
-    for (const file of ['games/2048.js', 'research/deep-research-tracker.js', 'dashboard/highlighted-pages.js']) {
+    for (const file of ['games/2048.js', 'research/tracker.js', 'dashboard/highlighted-pages.js']) {
       await page.addScriptTag({ content: fs.readFileSync(path.join(__dirname, '../js', file), 'utf8') });
     }
     await page.locator('#ghrc-highlighted-pages').waitFor();
@@ -156,7 +156,7 @@ test('homepage only shows the Deep Research embed in the final five days', async
       const now = Date.now();
       document.documentElement.setAttribute('data-ghrc-deep-research-usage', JSON.stringify({ remaining: 13, resetAt: now + 6 * 24 * 60 * 60_000, observedAt: now }));
     });
-    await page.addScriptTag({ content: fs.readFileSync(path.join(__dirname, '../js/research/deep-research-tracker.js'), 'utf8') });
+    await page.addScriptTag({ content: fs.readFileSync(path.join(__dirname, '../js/research/tracker.js'), 'utf8') });
     const dashboard = page.locator('#ghrc-deep-research-tracker');
     const composer = page.locator('#ghrc-deep-research-tracker-composer');
     await composer.waitFor();
@@ -190,7 +190,7 @@ test('native initialization fills the tracker automatically and clicking refresh
     });
     await page.goto('https://research.test/c/test');
     await page.evaluate(() => { window.__ghrcExtensionContext = { active: () => true, onStop() {} }; });
-    for (const file of ['research/deep-research-usage.js', 'research/deep-research-tracker.js']) {
+    for (const file of ['research/usage.js', 'research/tracker.js']) {
       await page.addScriptTag({ content: fs.readFileSync(path.join(__dirname, '../js', file), 'utf8') });
     }
     const response = await page.evaluate(async () => (await fetch('/backend-api/conversation/init', { method: 'POST', body: '{}' })).json());
@@ -238,8 +238,8 @@ test('homepage and active research composer render independently and keep their 
         remaining: 13, resetAt: Date.now() + 10 * 24 * 3600_000, observedAt: Date.now(),
       }));
     });
-    await page.addStyleTag({ content: fs.readFileSync(path.join(__dirname, '../css/deep-research-tracker.css'), 'utf8') });
-    await page.addScriptTag({ content: fs.readFileSync(path.join(__dirname, '../js/research/deep-research-tracker.js'), 'utf8') });
+    await page.addStyleTag({ content: fs.readFileSync(path.join(__dirname, '../css/research/tracker.css'), 'utf8') });
+    await page.addScriptTag({ content: fs.readFileSync(path.join(__dirname, '../js/research/tracker.js'), 'utf8') });
     const homepage = page.locator('#ghrc-deep-research-tracker');
     const composer = page.locator('#ghrc-deep-research-tracker-composer');
     await homepage.waitFor();
@@ -439,7 +439,7 @@ test('composer allowance returns when the homepage dashboard is hidden or remove
       } }, onChanged: { addListener() {}, removeListener() {} } } };
     });
     await page.addStyleTag({ content: '[data-ghrc-hide-repository-dashboard] #github-repositories-for-chatgpt { display: none !important; }' });
-    await page.addScriptTag({ content: fs.readFileSync(path.join(__dirname, '../js/research/deep-research-tracker.js'), 'utf8') });
+    await page.addScriptTag({ content: fs.readFileSync(path.join(__dirname, '../js/research/tracker.js'), 'utf8') });
     const composer = page.locator('#ghrc-deep-research-tracker-composer');
     const homepage = page.locator('#ghrc-deep-research-tracker');
     await homepage.waitFor();
@@ -480,7 +480,7 @@ test('unrelated response streaming does not schedule Deep Research tracker scans
         return realFrame(callback);
       };
     });
-    await page.addScriptTag({ content: fs.readFileSync(path.join(__dirname, '../js/research/deep-research-tracker.js'), 'utf8') });
+    await page.addScriptTag({ content: fs.readFileSync(path.join(__dirname, '../js/research/tracker.js'), 'utf8') });
     await page.locator('#ghrc-deep-research-tracker').waitFor();
     await page.waitForTimeout(100);
     await page.evaluate(() => {
@@ -515,7 +515,7 @@ test('eight-hour quota cache does not poll after five minutes and sends are coun
           return { ok: true, quota: null, refresh: false };
         } } };
     });
-    await page.addScriptTag({ content: fs.readFileSync(path.join(__dirname, '../js/research/deep-research-tracker.js'), 'utf8') });
+    await page.addScriptTag({ content: fs.readFileSync(path.join(__dirname, '../js/research/tracker.js'), 'utf8') });
     await page.waitForFunction(() => document.getElementById('ghrc-deep-research-tracker-composer')?.textContent.includes('4 left'));
     // A native Send click alone is not a successful research run.
     await page.locator('[data-testid="send-button"]').click();
@@ -544,7 +544,7 @@ test('expected reset countdown stays visible until native quota confirms renewal
         remaining: 0, observedAt: Date.now() - 6 * 60_000, resetAt: Date.now() - 30_000,
       }));
     });
-    await page.addScriptTag({ content: fs.readFileSync(path.join(__dirname, '../js/research/deep-research-tracker.js'), 'utf8') });
+    await page.addScriptTag({ content: fs.readFileSync(path.join(__dirname, '../js/research/tracker.js'), 'utf8') });
     // An overdue reset estimate keeps the homepage tracker visible; it must
     // not imply that the server has actually replenished the allowance.
     const widget = page.locator('#ghrc-deep-research-tracker');
@@ -599,8 +599,8 @@ test('homepage footer telescope launches research and refreshes allowance withou
           onChanged: { addListener(listener) { window.listeners.push(listener); }, removeListener() {} } },
       };
     });
-    await page.addStyleTag({ content: fs.readFileSync(path.join(__dirname, '../css/deep-research-tracker.css'), 'utf8') });
-    await page.addScriptTag({ content: fs.readFileSync(path.join(__dirname, '../js/research/deep-research-tracker.js'), 'utf8') });
+    await page.addStyleTag({ content: fs.readFileSync(path.join(__dirname, '../css/research/tracker.css'), 'utf8') });
+    await page.addScriptTag({ content: fs.readFileSync(path.join(__dirname, '../js/research/tracker.js'), 'utf8') });
     const footer = page.locator('#ghrc-deep-research-dashboard');
     const telescope = footer.locator('#ghrc-deep-research-tracker');
     await telescope.waitFor();

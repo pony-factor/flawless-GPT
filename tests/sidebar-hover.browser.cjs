@@ -377,7 +377,7 @@ test('mouse hover reveals without pointer events or an activation click', async 
 test('the full rail below Library opens the sidebar with one mascot', async () => {
   const page = await fixture();
   await page.evaluate(() => { chrome.runtime.getURL = file => 'chrome-extension://fixture/' + file; });
-  await page.addStyleTag({ content: read('css/flawless-corner.css') });
+  await page.addStyleTag({ content: read('css/chat/flawless-corner.css') });
   await page.addScriptTag({ content: read('js/chat/flawless-corner.js') });
   await page.mouse.move(500, 20);
   await page.locator('#ghrc-flawless-corner').hover();

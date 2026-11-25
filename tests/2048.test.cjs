@@ -82,7 +82,7 @@ test('2048 keeps its board geometry stable while rendering moves', () => {
   const fs = require('node:fs');
   const path = require('node:path');
   const source = fs.readFileSync(path.join(__dirname, '..', 'js', 'games/2048.js'), 'utf8');
-  const styles = fs.readFileSync(path.join(__dirname, '..', 'css', '2048.css'), 'utf8');
+  const styles = fs.readFileSync(path.join(__dirname, '..', 'css', 'games/2048.css'), 'utf8');
 
   assert.doesNotMatch(source, /boardElement\.replaceChildren\(\)/);
   assert.match(source, /const tiles = Array\.from\(\{ length: SIZE \* SIZE \}/);
@@ -103,7 +103,7 @@ test('2048 launcher keeps Button Mash icon and uses Windsor Flight palette', () 
   const fs = require('node:fs');
   const path = require('node:path');
   const source = fs.readFileSync(path.join(__dirname, '..', 'js', 'games/2048.js'), 'utf8');
-  const styles = fs.readFileSync(path.join(__dirname, '..', 'css', '2048.css'), 'utf8');
+  const styles = fs.readFileSync(path.join(__dirname, '..', 'css', 'games/2048.css'), 'utf8');
 
   assert.match(source, /ghrc-2048-button-mash-mark/);
   assert.match(source, /M8 2\.5h8V8h5\.5v8H16v5\.5H8V16H2\.5V8H8z/);
@@ -116,7 +116,7 @@ test('2048 launcher keeps Button Mash icon and uses Windsor Flight palette', () 
 test('all 23 Windsor Flight colors are used for empty and numbered tiles', () => {
   const fs = require('node:fs');
   const path = require('node:path');
-  const styles = fs.readFileSync(path.join(__dirname, '..', 'css', '2048.css'), 'utf8');
+  const styles = fs.readFileSync(path.join(__dirname, '..', 'css', 'games/2048.css'), 'utf8');
   const colors = [
     ["empty", "#C9CBCF"],
     ["2", "#F6E0EA"],

@@ -4,7 +4,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const { chromium } = require("playwright");
-const css = fs.readFileSync(path.join(__dirname, "../css/worked-duration.css"), "utf8");
+const css = fs.readFileSync(path.join(__dirname, "../css/chat/worked-duration.css"), "utf8");
 const source = fs.readFileSync(path.join(__dirname, "../js/chat/worked-duration.js"), "utf8");
 
 test("clicking the cannon toggles native details without an extra chevron", async () => {
