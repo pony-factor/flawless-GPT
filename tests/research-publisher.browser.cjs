@@ -9,7 +9,7 @@ async function loadReportHost(page) {
     await page.addScriptTag({ content: fs.readFileSync('js/research/' + file, 'utf8') });
 }
 
-test('import chooses a category, cancellation never publishes, and report links escape the sandbox', async () => {
+test('manual import accepts a titleless report, preserves links, and rejects empty content', async () => {
   const browser = await chromium.launch({ executablePath: '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser', headless: true });
   try {
     const page = await browser.newPage();
@@ -17,7 +17,7 @@ test('import chooses a category, cancellation never publishes, and report links 
     page.on('pageerror', e => errors.push(e.message));
     await page.route('https://example.com/', route => route.fulfill({ body: '<html></html>', contentType: 'text/html' }));
     await page.goto('https://example.com');
-    await page.setContent('<section><div><button aria-label="Export">Export</button><button aria-label="Expand">Expand</button></div><article class="_reportPage_fixture"><h1>Report</h1><p>Full report <a href="https://example.org/source" target="_blank">Source</a>.</p><p>Footnotes <sup><a href="https://example.org/source">1</a></sup> and <sup><a href="https://example.org/source">2</a></sup>, with H<sub>2</sub>O.</p></article></section>');
+    await page.setContent('<section><div><button aria-label="Export">Export</button><button aria-label="Expand">Expand</button></div><article class="_reportPage_fixture"></article></section>');
     await page.evaluate(() => {
       window.calls = [];
       window.chrome = { storage: { local: { get: async d => ({ ...d, researchPublisherEnabled: true }) }, onChanged: { addListener() {} } }, runtime: { sendMessage: async m => {
@@ -40,12 +40,19 @@ test('import chooses a category, cancellation never publishes, and report links 
     await page.getByRole('button', { name: 'Cancel', exact: true }).click();
     assert.equal(await page.evaluate(() => calls.filter(x => x.type === 'publish-research-report').length), 0);
     await button.click();
+    await page.getByRole('button', { name: 'Import report', exact: true }).click();
+    await page.getByText('Import failed. The complete report is not ready yet.', { exact: false }).waitFor();
+    assert.equal(await page.evaluate(() => calls.filter(x => x.type === 'publish-research-report').length), 0);
+    await page.locator('article').evaluate(page => {
+      page.innerHTML = '<p>Full report <a href="https://example.org/source" target="_blank">Source</a>.</p><p>Footnotes <sup><a href="https://example.org/source">1</a></sup> and <sup><a href="https://example.org/source">2</a></sup>, with H<sub>2</sub>O.</p>';
+    });
+    await button.click();
     await page.getByRole('textbox', { name: 'Category' }).fill('Markets');
     await page.getByRole('button', { name: 'Import report', exact: true }).click();
     await page.waitForFunction(() => calls.some(x => x.type === 'publish-research-report'));
     const report = await page.evaluate(() => calls.find(x => x.type === 'publish-research-report'));
     assert.equal(report.category, 'Markets');
-    assert.match(report.markdown, /# Report/);
+    assert.equal(report.title, 'Deep Research');
     assert.match(report.markdown, /Full report/);
     assert.equal((report.markdown.match(/https:\/\/example\.org\/source/g) || []).length, 3,
       'repeated footnote destinations must all remain linked');
@@ -232,11 +239,11 @@ test('disabled publishing does not start a one-second background scanner', async
   } finally { await browser.close(); }
 });
 
-test('automatic report publishing stops its recovery timer and DOM observers after Git success', async () => {
+test('automatic publishing imports a titleless report and stops monitoring after Git success', async () => {
   const browser = await chromium.launch({ executablePath: '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser', headless: true });
   try {
     const page = await browser.newPage();
-    await page.setContent('<section><div><button aria-label="Export">Export</button></div><article class="_reportPage_fixture"><h1>Finished report</h1><p>Evidence and references.</p></article></section>');
+    await page.setContent('<section><div><button aria-label="Export">Export</button></div><article class="_reportPage_fixture"><p>Evidence and references.</p></article></section>');
     await page.evaluate(() => {
       window.observerStats = { started: 0, stopped: 0 };
       const NativeObserver = MutationObserver;
@@ -266,6 +273,7 @@ test('automatic report publishing stops its recovery timer and DOM observers aft
           if (message.type === 'research-launch-job') return { ok: true, job };
           if (message.type === 'publish-research-report') {
             imports++;
+            window.importedReport = message;
             job.state = 'complete';
             return { ok: true, repository: 'Research', branch: 'main', path: 'report.md' };
           }
@@ -277,6 +285,9 @@ test('automatic report publishing stops its recovery timer and DOM observers aft
       await page.addScriptTag({ content: fs.readFileSync(file, 'utf8') });
     }
     await page.waitForFunction(() => imports === 1, null, { timeout: 15000 });
+    const report = await page.evaluate(() => window.importedReport);
+    assert.equal(report.title, 'Deep Research');
+    assert.equal(report.markdown, 'Evidence and references.\n');
     await page.waitForFunction(() => observerStats.stopped > 0 && startedIntervals.length > 0
       && startedIntervals.every(id => stoppedIntervals.includes(id)));
     await page.evaluate(() => document.querySelector('article').append(document.createElement('p')));
