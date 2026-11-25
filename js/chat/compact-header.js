@@ -114,13 +114,6 @@
     activeWelcomeRegion?.classList.add(WELCOME_REGION_CLASS);
   }
 
-  function updateReadyState() {
-    document.documentElement.toggleAttribute(
-      COMPACT_LAYOUT_READY_ATTR,
-      Boolean(activeStack?.isConnected && activeWelcomeRegion?.isConnected),
-    );
-  }
-
   function applyCompactLayout() {
     if (!context.active()) return;
     if (!compactModeEnabled()) {
@@ -146,20 +139,14 @@
     }
 
     const welcomeHeading = findWelcomeHeading(composer);
-    if (!welcomeHeading) {
-      setActiveWelcomeRegion(null);
-      updateReadyState();
-      return;
-    }
-
-    const welcomeStillValid = activeWelcomeRegion?.isConnected
+    const welcomeStillValid = welcomeHeading && activeWelcomeRegion?.isConnected
       && activeWelcomeRegion.contains(welcomeHeading)
       && !activeWelcomeRegion.contains(composer);
     if (!welcomeStillValid) {
-      setActiveWelcomeRegion(welcomeRegionFor(welcomeHeading, activeStack, composer));
+      setActiveWelcomeRegion(welcomeHeading ? welcomeRegionFor(welcomeHeading, activeStack, composer) : null);
     }
 
-    updateReadyState();
+    document.documentElement.toggleAttribute(COMPACT_LAYOUT_READY_ATTR, Boolean(activeStack?.isConnected));
   }
 
   const pageObserver = new MutationObserver(() => {

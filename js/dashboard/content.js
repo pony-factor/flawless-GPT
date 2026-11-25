@@ -2,6 +2,7 @@
   const context = globalThis.__ghrcExtensionContext;
   if (!context?.active()) return;
   const WIDGET_ID = "github-repositories-for-chatgpt";
+  const REPOSITORIES_READY_ATTR = "data-ghrc-repositories-ready";
   const NEW_CHAT_ATTR = "data-ghrc-new-chat";
   const HIDE_DICTATION_ATTR = "data-ghrc-hide-dictation";
   const COMPACT_HEADER_ATTR = "data-ghrc-compact-header";
@@ -177,7 +178,7 @@
   async function loadDisplayPreferences() {
     const preferences = await chrome.storage.local.get({
       hideDictationButton: false,
-      compactNewChatHeader: false,
+      compactNewChatHeader: true,
     });
     if (!context.active()) return;
     document.documentElement.toggleAttribute(
@@ -1282,6 +1283,7 @@
           repositorySearchShortcut,
           Boolean(stored[ENABLE_CUSTOM_REPOSITORIES_KEY]),
         );
+        widget.setAttribute(REPOSITORIES_READY_ATTR, "true");
       }
     } catch (error) {
       if (/extension context invalidated/i.test(error?.message || "") || !context.active()) {
@@ -1291,6 +1293,7 @@
       repositoryRequest = null;
       if (widget.isConnected) {
         renderError(widget, error.message);
+        widget.setAttribute(REPOSITORIES_READY_ATTR, "true");
       }
     }
   }

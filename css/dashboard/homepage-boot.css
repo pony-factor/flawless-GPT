@@ -1,3 +1,4 @@
-html[data-ghrc-homepage-booting] main {
+html[data-ghrc-homepage-booting] body {
+  opacity: 0 !important;
   visibility: hidden !important;
 }
