@@ -893,8 +893,6 @@
     form.className = "ghrc-wooten-link-search";
 
     // Submit with the calligraphy mark as well as the existing search button.
-    // Keep the button outside the label so clicking it submits instead of
-    // merely focusing the text field.
     const markSubmit = document.createElement("button");
     markSubmit.type = "submit";
     markSubmit.className = "ghrc-wooten-link-mark-submit";
@@ -906,7 +904,8 @@
     mark.alt = "";
     markSubmit.append(mark);
 
-    const label = document.createElement("label");
+    const field = document.createElement("div");
+    field.className = "ghrc-wooten-link-field";
     const input = document.createElement("input");
     input.type = "search";
     input.name = "q";
@@ -917,7 +916,6 @@
     input.setAttribute("aria-expanded", "false");
     input.setAttribute("role", "combobox");
     input.autocomplete = "off";
-    label.append(input);
 
     const submit = document.createElement("button");
     submit.type = "submit";
@@ -1047,7 +1045,8 @@
       });
     });
 
-    form.append(markSubmit, label, submit, results);
+    field.append(input, submit);
+    form.append(markSubmit, field, results);
     void loadWootenLinkEntries();
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
