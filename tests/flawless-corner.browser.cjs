@@ -87,7 +87,7 @@ test('compact homepage removes the floating mascot and restores the native contr
     await mascot.waitFor({ state: 'detached' });
     assert.equal(await toggle.locator('svg').isVisible(), true);
     assert.equal(await newChat.isVisible(), true);
-    await newChat.click();
+    await newChat.press('Enter');
     assert.equal(await page.evaluate(() => window.newChats), 1);
     await page.evaluate(() => document.documentElement.removeAttribute('data-ghrc-compact-header'));
     await mascot.waitFor();
