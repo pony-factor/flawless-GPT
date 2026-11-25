@@ -6,6 +6,7 @@
   const NEW_CHAT_SELECTOR = 'button[aria-label="New chat"], a[aria-label="New chat"], [data-testid="create-new-chat-button"]';
   const TOOLBAR_NEW_CHAT_SELECTOR = 'header button[aria-label="New chat"]';
   const RAIL_HOME_SELECTOR = '[data-app-navigation-rail] button[data-sidebar-destination="builtin:home"]';
+  const COMPACT_HEADER_ATTR = "data-ghrc-compact-header";
   const toggles = new Set();
   const newChats = new Set();
   const wordmarks = new Set();
@@ -62,8 +63,8 @@
     image.className = "ghrc-flawless-mascot-image";
     image.alt = "";
     image.draggable = false;
-    const stillSource = chrome.runtime.getURL("artwork/SB-full.webp");
-    const animatedSource = chrome.runtime.getURL("artwork/SB-full.gif");
+    const stillSource = chrome.runtime.getURL("artwork/flawless-headshot/SB-full.webp");
+    const animatedSource = chrome.runtime.getURL("artwork/flawless-headshot/SB-full.gif");
     image.src = stillSource;
     // Warm the GIF cache so the first hover does not flash an empty image.
     const animatedPreload = new Image();
@@ -143,6 +144,10 @@
     }
 
     setNativeMascot(null);
+    if (location.pathname === "/" && document.documentElement.hasAttribute(COMPACT_HEADER_ATTR)) {
+      clearLegacyMascot();
+      return;
+    }
     if (!link?.isConnected) {
       link = document.createElement("a");
       link.id = "ghrc-flawless-corner";
@@ -187,7 +192,7 @@
     subtree: true,
     characterData: true,
     attributes: true,
-    attributeFilter: ["aria-label", "hidden", "data-app-navigation-rail", "data-sidebar-destination"],
+    attributeFilter: ["aria-label", "hidden", "data-app-navigation-rail", "data-sidebar-destination", COMPACT_HEADER_ATTR],
   });
   window.navigation?.addEventListener("currententrychange", reconcile);
   window.addEventListener("resize", reconcile);

@@ -4,10 +4,10 @@
   "version": "1.7.5",
   "description": "Adds a personalized GitHub repository dashboard and optional ChatGPT interface tweaks.",
   "icons": {
-    "16": "icons/icon-16.png",
-    "32": "icons/icon-32.png",
-    "48": "icons/icon-48.png",
-    "128": "icons/icon-128.png"
+    "16": "artwork/flawless-headshot/icon-16.png",
+    "32": "artwork/flawless-headshot/icon-32.png",
+    "48": "artwork/flawless-headshot/icon-48.png",
+    "128": "artwork/flawless-headshot/icon-128.png"
   },
   "permissions": [
     "storage",
@@ -37,8 +37,8 @@
     "default_title": "Flawless ChatGPT",
     "default_popup": "popup.html",
     "default_icon": {
-      "16": "icons/icon-16.png",
-      "32": "icons/icon-32.png"
+      "16": "artwork/flawless-headshot/icon-16.png",
+      "32": "artwork/flawless-headshot/icon-32.png"
     }
   },
   "options_page": "options.html",
@@ -147,7 +147,7 @@
       "css": [
         "css/games/2048.css",
         "css/launchers/youtube-search.css",
-        "css/launchers/wooten-link-zipp-placeholder.css",
+        "css/launchers/wooten-link-zipp.css",
         "css/launchers/spellcheck-launcher.css",
         "css/composer/clipboard-send.css",
         "css/composer/temporary-chat-inline.css",
@@ -159,7 +159,7 @@
       ],
       "js": [
         "js/launchers/youtube-search.js",
-        "js/launchers/wooten-link-zipp-placeholder.js",
+        "js/launchers/wooten-link-zipp.js",
         "js/launchers/spellcheck-launcher.js",
         "js/research/spellcheck.js",
         "js/games/2048.js",
@@ -207,8 +207,8 @@
         "artwork/spellcheck-only.jpg",
         "artwork/calligraphy-initials.png",
         "artwork/research-telescope.png",
-        "artwork/SB-full.webp",
-        "artwork/SB-full.gif",
+        "artwork/flawless-headshot/SB-full.webp",
+        "artwork/flawless-headshot/SB-full.gif",
         "artwork/thinking-cannon.png",
         "artwork/detective-zip.png"
       ],

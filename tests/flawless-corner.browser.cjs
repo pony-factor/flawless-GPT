@@ -42,7 +42,7 @@ test('one mascot starts native New chat without opening the sidebar', async () =
   const mascot = page.locator('#ghrc-flawless-corner');
   assert.equal(await mascot.count(), 1);
   assert.equal(await mascot.getAttribute('aria-label'), 'New chat');
-  assert.match(await mascot.locator('img').getAttribute('src'), /artwork\/SB-full\.webp$/);
+  assert.match(await mascot.locator('img').getAttribute('src'), /artwork\/flawless-headshot\/SB-full\.webp$/);
   const bounds = await mascot.boundingBox();
   assert.equal(bounds.width, 33);
   assert.equal(bounds.height, 33);
@@ -75,23 +75,46 @@ test('one mascot starts native New chat without opening the sidebar', async () =
 });
 
 
+test('compact homepage removes the floating mascot and restores the native controls', async () => {
+  const page = await fixture();
+  try {
+    await page.setViewportSize({ width: 562, height: 800 });
+    const mascot = page.locator('#ghrc-flawless-corner');
+    const toggle = page.getByRole('button', { name: 'Show sidebar' });
+    const newChat = page.getByRole('button', { name: 'New chat', exact: true });
+    await mascot.waitFor();
+    await page.evaluate(() => document.documentElement.setAttribute('data-ghrc-compact-header', 'true'));
+    await mascot.waitFor({ state: 'detached' });
+    assert.equal(await toggle.locator('svg').isVisible(), true);
+    assert.equal(await newChat.isVisible(), true);
+    await newChat.press('Enter');
+    assert.equal(await page.evaluate(() => window.newChats), 1);
+    await page.evaluate(() => document.documentElement.removeAttribute('data-ghrc-compact-header'));
+    await mascot.waitFor();
+    assert.equal(await toggle.locator('svg').isVisible(), false);
+    assert.deepEqual(page.errors, []);
+  } finally {
+    await page.close();
+  }
+});
+
 test('mascot animates in place on hover and returns to its still frame on exit', async () => {
   const page = await fixture();
   const mascot = page.locator('#ghrc-flawless-corner');
   const image = mascot.locator('img');
   const initialBounds = await mascot.boundingBox();
 
-  assert.ok((await image.getAttribute('src')).endsWith('artwork/SB-full.webp'));
+  assert.ok((await image.getAttribute('src')).endsWith('artwork/flawless-headshot/SB-full.webp'));
   await mascot.hover();
-  assert.ok((await image.getAttribute('src')).endsWith('artwork/SB-full.gif'));
+  assert.ok((await image.getAttribute('src')).endsWith('artwork/flawless-headshot/SB-full.gif'));
   assert.deepEqual(await mascot.boundingBox(), initialBounds);
 
   await page.mouse.move(600, 300);
-  assert.ok((await image.getAttribute('src')).endsWith('artwork/SB-full.webp'));
+  assert.ok((await image.getAttribute('src')).endsWith('artwork/flawless-headshot/SB-full.webp'));
   assert.deepEqual(await mascot.boundingBox(), initialBounds);
 
   await mascot.hover();
-  assert.ok((await image.getAttribute('src')).endsWith('artwork/SB-full.gif'));
+  assert.ok((await image.getAttribute('src')).endsWith('artwork/flawless-headshot/SB-full.gif'));
   await mascot.click();
   assert.equal(await page.evaluate(() => window.newChats), 1);
   assert.equal(await page.evaluate(() => window.sidebarClicks || 0), 0);
@@ -102,8 +125,8 @@ test('mascot animates in place on hover and returns to its still frame on exit',
 test('animated mascot image is web-accessible to ChatGPT pages', () => {
   const manifest = JSON.parse(read('manifest.json'));
   const resources = manifest.web_accessible_resources.flatMap(group => group.resources);
-  assert.ok(resources.includes('artwork/SB-full.webp'));
-  assert.ok(resources.includes('artwork/SB-full.gif'));
+  assert.ok(resources.includes('artwork/flawless-headshot/SB-full.webp'));
+  assert.ok(resources.includes('artwork/flawless-headshot/SB-full.gif'));
 });
 
 test('the modern toolbar keeps the native New chat action and uses its icon slot', async () => {

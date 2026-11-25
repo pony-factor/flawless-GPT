@@ -55,13 +55,13 @@
   width: 100%;
 }
 
-#github-repositories-for-chatgpt .ghrc-footer-searches > .ghrc-wooten-link-search label {
+#github-repositories-for-chatgpt .ghrc-footer-searches .ghrc-wooten-link-field {
   flex: 1;
 }
 
-#github-repositories-for-chatgpt .ghrc-footer-searches > .ghrc-wooten-link-search input {
-  flex: 1;
-  width: 100%;
+#github-repositories-for-chatgpt .ghrc-footer-searches:has(> .ghrc-youtube-search) .ghrc-wooten-link-field {
+  /* Match the YouTube field width within the equal-width footer forms. */
+  margin-inline-end: 33px;
 }
 
 #github-repositories-for-chatgpt .ghrc-youtube-search input::placeholder {

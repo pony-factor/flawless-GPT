@@ -26,6 +26,10 @@
   text-align: center;
 }
 
+#github-repositories-for-chatgpt .ghrc-owner-name-link h3 {
+  color: var(--ghrc-link-color, var(--ghrc-fg));
+}
+
 #github-repositories-for-chatgpt .ghrc-owner-header h3 {
   max-width: 100%;
 }

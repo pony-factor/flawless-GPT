@@ -58,7 +58,8 @@ test("WootenLink logo is a native submit button separate from the search input l
   assert.match(form, /markSubmit\.setAttribute\("aria-label", "Search WootenLink"\)/);
   assert.match(form, /markSubmit\.append\(mark\)/);
   assert.match(form, /mark\.alt = ""/);
-  assert.match(form, /form\.append\(markSubmit, label, submit, results\)/);
+  assert.match(form, /field\.append\(input, submit\)/);
+  assert.match(form, /form\.append\(markSubmit, field, results\)/);
   assert.match(form, /form\.addEventListener\("submit", async \(event\) =>/);
   assert.match(stylesheet, /\.ghrc-wooten-link-mark-submit:focus-visible\s*\{/);
 });

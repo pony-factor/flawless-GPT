@@ -22,7 +22,7 @@
 #ghrc-pinned-issues .ghrc-pinned-issue:focus-visible {outline:2px solid #a97dee;outline-offset:2px}
 #ghrc-pinned-issues .ghrc-pinned-issue strong,
 #ghrc-pinned-issues .ghrc-pinned-issue small {overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-#ghrc-pinned-issues .ghrc-pinned-issue strong {font-size:13px}
+#ghrc-pinned-issues .ghrc-pinned-issue strong {color:var(--ghrc-link-color, inherit);font-size:13px}
 #ghrc-pinned-issues .ghrc-pinned-issue small {color:light-dark(#656d76,#9198a1);font-size:11px}
 [data-ghrc-hide-repository-dashboard] #ghrc-pinned-issues {display:none!important}
 @media(max-width:920px){#ghrc-pinned-issues.ghrc-pinned-issues{width:680px}}

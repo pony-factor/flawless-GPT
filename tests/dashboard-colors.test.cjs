@@ -124,7 +124,7 @@ test("both settings surfaces expose HEX color controls and default theme colors"
   assert.ok(manifest.content_scripts.some(entry => entry.js?.includes("js/dashboard/colors.js")));
   assert.match(styles, /--ghrc-dashboard-accent-light, #0969da/);
   assert.match(styles, /--ghrc-dashboard-accent-dark, #4493f8/);
-  assert.match(styles, /--ghrc-dashboard-link-light, var\(--ghrc-accent\)/);
-  assert.match(styles, /--ghrc-dashboard-link-dark, var\(--ghrc-accent\)/);
-  assert.match(styles, /\.ghrc-repository-name\s*\{\s*color: var\(--ghrc-repository-name-color\)/);
+  assert.match(styles, /--ghrc-link-color: var\(--ghrc-dashboard-link-light\)/);
+  assert.match(styles, /--ghrc-link-color: var\(--ghrc-dashboard-link-dark\)/);
+  assert.match(styles, /\.ghrc-repository-name\s*\{\s*color: var\(--ghrc-link-color, var\(--ghrc-accent\)\)/);
 });

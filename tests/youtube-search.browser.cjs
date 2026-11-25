@@ -7,7 +7,7 @@ const { chromium } = require('playwright');
 
 const source = fs.readFileSync(path.join(__dirname, '../js/launchers/youtube-search.js'), 'utf8');
 const baseStyles = fs.readFileSync(path.join(__dirname, '../css/dashboard/styles.css'), 'utf8');
-const wootenStyles = fs.readFileSync(path.join(__dirname, '../css/launchers/wooten-link-zipp-placeholder.css'), 'utf8');
+const wootenStyles = fs.readFileSync(path.join(__dirname, '../css/launchers/wooten-link-zipp.css'), 'utf8');
 const searchStyles = fs.readFileSync(path.join(__dirname, '../css/launchers/youtube-search.css'), 'utf8');
 let browser;
 
@@ -27,7 +27,7 @@ async function fixture(stored = {}) {
 
   await page.route('https://youtube-search.test/**', route => route.fulfill({
     contentType: 'text/html',
-    body: '<main id="github-repositories-for-chatgpt"><footer class="ghrc-dashboard-footer"><form class="ghrc-wooten-link-search"><label><img class="ghrc-wooten-link-mark" alt=""><input type="search" placeholder="hrefs"></label><button class="ghrc-wooten-link-submit" type="submit"></button></form><nav class="ghrc-pagination"></nav></footer></main>',
+    body: '<main id="github-repositories-for-chatgpt"><footer class="ghrc-dashboard-footer"><form class="ghrc-wooten-link-search"><button class="ghrc-wooten-link-mark-submit" type="submit"><img class="ghrc-wooten-link-mark" alt=""></button><div class="ghrc-wooten-link-field"><input type="search" placeholder="hrefs"><button class="ghrc-wooten-link-submit" type="submit"></button></div></form><nav class="ghrc-pagination"></nav></footer></main>',
   }));
   await page.goto('https://youtube-search.test/');
   await page.evaluate((initial) => {

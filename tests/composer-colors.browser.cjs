@@ -43,3 +43,37 @@ for (const identity of ['aria-label="Add files and more"', 'id="composer-plus-bt
     } finally { await page.close(); }
   });
 }
+
+test('input outline follows the rounded ChatGPT composer surface and can be reset', async () => {
+  const page = await browser.newPage();
+  try {
+    await page.setContent(`
+      <form id="home"><div class="ComposerLayoutBody-a ComposerSurface-b">
+        <div data-composer-markdown contenteditable="true"></div>
+      </div></form>
+      <form id="thread"><div class="ComposerLayoutRoot-a ComposerSurface-b">
+        <div data-composer-markdown contenteditable="true"></div>
+      </div></form>
+      <form id="legacy"><textarea id="prompt-textarea"></textarea></form>
+      <form id="unrelated"><textarea></textarea></form>
+    `);
+    await page.addStyleTag({ path: path.join(__dirname, '../css/composer/colors.css') });
+    await page.evaluate(() => {
+      const root = document.documentElement;
+      root.setAttribute('data-ghrc-color-surface-outline', '');
+      root.style.setProperty('--ghrc-composer-surface-outline', '#aabb22');
+    });
+    const outline = (selector, property = 'outline') =>
+      page.locator(selector).evaluate((el, prop) => getComputedStyle(el)[prop], property);
+    for (const selector of ['#home > div', '#thread > div', '#legacy']) {
+      assert.equal(await outline(selector), 'rgb(170, 187, 34) solid 2px');
+    }
+    for (const selector of ['#home', '#thread', '#unrelated']) {
+      assert.equal(await outline(selector, 'outlineStyle'), 'none');
+    }
+    await page.locator('#thread [contenteditable]').focus();
+    assert.equal(await outline('#thread > div'), 'rgb(170, 187, 34) solid 2px');
+    await page.evaluate(() => document.documentElement.removeAttribute('data-ghrc-color-surface-outline'));
+    assert.equal(await outline('#thread > div', 'outlineStyle'), 'none');
+  } finally { await page.close(); }
+});

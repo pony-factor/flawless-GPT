@@ -14,7 +14,7 @@ The dashboard appears on the ChatGPT new-chat page. Configure public GitHub acco
 | Repository pins | Use Pin on a repository, then reorder or remove pins in settings. |
 | Pinned issues | Add a GitHub issue URL under Dashboard → Pinned issues, optionally give it a label, and reorder it. Up to 24 unique issues are supported. Pull request URLs are not issue URLs for this control. These are local shortcuts, not changes to GitHub issues. |
 | Highlights | Add an HTTP(S) webpage under Dashboard → Highlights. Edit its display title, refresh its preview, reorder it, or remove it. Preview cards use fetched metadata and available artwork, falling back when a site cannot supply a preview. |
-| Dashboard colors | Independently customize light/dark accents and repository names; restore defaults individually or together. |
+| Dashboard colors | Independently customize light/dark accents and links to repositories, owners, pinned issues and search overrides; restore defaults individually or together. |
 | YouTube / Wooten link search | The Dashboard settings expose separate launcher switches. These are distinct from repository search. |
 
 Highlights fetch remote content to construct previews. HTTPS is included in the extension's host permissions; HTTP may need an additional site permission. A missing preview does not imply that a website is unavailable in a normal browser tab. Private repository visibility depends on the configured GitHub credentials.
@@ -25,7 +25,7 @@ Implementation: [dashboard scripts](../js/dashboard/), [dashboard styles](../css
 
 - **Auto-focus composer:** focuses the input when the supported chat layout is ready. Turn it off if it conflicts with your navigation habits.
 - **Preserve scroll position on send:** opt in to keeping your reading position when submitting rather than automatically following the new turn.
-- **Composer placeholder and colors:** customize the empty input text and individual color roles in ChatGPT settings. Unset color overrides follow the native theme.
+- **Composer placeholder and colors:** customize the empty input text and individual color roles, including a separate input outline, in ChatGPT settings. Unset color overrides follow the native theme.
 - **Clipboard send:** where enabled, the clipboard prompt action sends or queues clipboard text, rather than opening it as a URL. The separate clipboard URL action opens recognized URLs or runs a browser search. Inspect clipboard contents before invoking either action.
 - **File drop:** dropping files on the supported chat interface passes them to ChatGPT's own upload input. Check that attachment chips appear before sending; Flawless reports an unconfirmed attachment instead of assuming upload succeeded.
 - **Queue:** queue text during an active response; edit, reorder, or remove pending messages and set the maximum queue height. Queue entries persist per conversation. The visibility setting for the queue button is separate from the queue's lifecycle. A queued send waits for stable completion rather than merely detecting a quiet page.
