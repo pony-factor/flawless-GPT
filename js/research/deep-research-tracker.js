@@ -74,7 +74,6 @@
   const ID = 'ghrc-deep-research-tracker';
   const DASHBOARD_ID = 'ghrc-deep-research-dashboard';
   const COMPOSER_ID = `${ID}-composer`;
-  const HOME_LAUNCHER_ID = 'ghrc-research-home-launcher';
   const USAGE_ATTRIBUTE = 'data-ghrc-deep-research-usage';
   const DAY_MS = 24 * 60 * 60_000;
   const CACHE_MS = 8 * 60 * 60_000;
@@ -276,8 +275,7 @@
   async function launchResearchWithSpellcheck() {
     if (launchingResearch || location.pathname !== '/') return;
     launchingResearch = true;
-    const homeLauncher = document.getElementById(HOME_LAUNCHER_ID);
-    const status = homeLauncher?.querySelector('.ghrc-research-home-status');
+    const status = document.getElementById(DASHBOARD_ID)?.querySelector('.ghrc-research-home-status');
     if (status) status.textContent = 'Preparing Deep Research…';
     try {
       await prefillResearchMention();
@@ -297,33 +295,7 @@
     }
   }
 
-  function renderHomepageLauncher(composer) {
-    let wrapper = document.getElementById(HOME_LAUNCHER_ID);
-    if (!wrapper) {
-      wrapper = document.createElement('div');
-      wrapper.id = HOME_LAUNCHER_ID;
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.title = 'Prepare Deep Research and open Spellcheck Only in split view';
-      button.setAttribute('aria-label', 'Prepare Deep Research with Spellcheck Only');
-      const icon = document.createElement('img');
-      icon.src = chrome.runtime.getURL('artwork/research-telescope.png');
-      icon.alt = '';
-      icon.setAttribute('aria-hidden', 'true');
-      button.append(icon);
-      button.addEventListener('click', () => { void context.run(launchResearchWithSpellcheck); });
-      const status = document.createElement('span');
-      status.className = 'ghrc-research-home-status';
-      status.setAttribute('role', 'status');
-      status.setAttribute('aria-live', 'polite');
-      wrapper.append(button, status);
-    }
-    const tracker = document.getElementById(COMPOSER_ID);
-    const anchor = tracker?.nextElementSibling === composer ? tracker : composer;
-    if (wrapper.nextElementSibling !== anchor) anchor.before(wrapper);
-  }
-
-  function renderWidget(id) {
+  function renderWidget(id, { launch = false, showAllowance = true, refresh = true } = {}) {
     let widget = document.getElementById(id);
     if (!widget) {
       widget = document.createElement('button');
@@ -342,8 +314,13 @@
       const label = document.createElement('span');
       label.className = 'ghrc-research-allowance';
       widget.append(icon, pie, label);
-      widget.addEventListener('click', checkAllowance);
+      widget.addEventListener('click', () => {
+        if (widget.dataset.refreshAllowance === 'true') checkAllowance();
+        if (widget.dataset.launchResearch === 'true') void context.run(launchResearchWithSpellcheck);
+      });
     }
+    widget.dataset.launchResearch = String(launch);
+    widget.dataset.refreshAllowance = String(refresh);
     // An old observation is not a live balance; require another native check.
     const fresh = Date.now() - observedAt < 5 * 60_000;
     // Native unlabeled counts may combine pools. Do not present them as full.
@@ -352,14 +329,14 @@
       ? `${allowance.remaining} left` : 'Check allowance';
     const reset = fresh && allowance.reset ? allowance.reset : 'Reset unknown';
     const homepage = id === ID;
-    const nearReset = homepage && withinResetWindow();
+    const nearReset = homepage && showAllowance && withinResetWindow();
     if (widget.classList.contains('ghrc-research-near-reset') !== nearReset) {
       widget.classList.toggle('ghrc-research-near-reset', nearReset);
     }
-    const includeCount = homepage ? preferences.showDeepResearchHomepageCount !== false
-      : preferences.showDeepResearchComposerCount !== false;
-    const includeReset = homepage ? preferences.showDeepResearchHomepageReset !== false
-      : preferences.showDeepResearchComposerReset !== false;
+    const includeCount = showAllowance && (homepage ? preferences.showDeepResearchHomepageCount !== false
+      : preferences.showDeepResearchComposerCount !== false);
+    const includeReset = showAllowance && (homepage ? preferences.showDeepResearchHomepageReset !== false
+      : preferences.showDeepResearchComposerReset !== false);
     const pieChoice = homepage ? preferences.showDeepResearchHomepagePie
       : preferences.showDeepResearchComposerPie;
     const showPiePreference = pieChoice == null
@@ -405,13 +382,16 @@
     const visibleText = visibleParts.join(' · ');
     const label = widget.querySelector('.ghrc-research-allowance');
     if (label.textContent !== visibleText) label.textContent = visibleText;
-    if (widget.getAttribute('aria-label') !== text) widget.setAttribute('aria-label', text);
+    const launchText = 'Prepare Deep Research with Spellcheck Only';
+    const accessibleLabel = launch ? (showAllowance ? `${launchText} · ${text}` : launchText) : text;
+    if (widget.getAttribute('aria-label') !== accessibleLabel) widget.setAttribute('aria-label', accessibleLabel);
     const combined = preferences.deepResearchAllowanceMode === 'all';
     const autoEstimate = showPie && preferredTotal == null && reportedTotal == null;
     widget.title = showPie
       ? `Deep Research: ${pieRemaining} of ${total} ${combined ? 'full + lightweight' : 'full'} reports remaining${autoEstimate ? ' (estimated allowance)' : ''}. Click to refresh.`
       : combined ? 'Combined full + lightweight allowance; requires both quotas from ChatGPT. Click to refresh.'
         : 'Full Deep Research only; lightweight requests excluded. Click to refresh.';
+    if (launch) widget.title = `${launchText}${refresh ? ' and refresh allowance' : ''}.${showAllowance ? ` ${widget.title.replace(' Click to refresh.', '')}` : ''}`;
     return widget;
   }
 
@@ -452,21 +432,24 @@
     readAllowance();
     const homeComposer = [...document.querySelectorAll('#prompt-textarea, [data-composer-markdown][contenteditable="true"]')]
       .find(visible)?.closest('form, [data-type="unified-composer"]');
-    if (preferences.showResearchHomepageLauncher !== false && location.pathname === '/' && homeComposer?.parentElement) {
-      renderHomepageLauncher(homeComposer);
-    } else document.getElementById(HOME_LAUNCHER_ID)?.remove();
-
     const repositories = document.getElementById('github-repositories-for-chatgpt');
     const footer = repositories?.querySelector('.ghrc-dashboard-footer');
-    const homepageRowVisible = enabled && preferences.showDeepResearchHomepage !== false
-      && footer && visible(repositories) && dashboardVisible();
-    if (homepageRowVisible) {
+    const footerVisible = Boolean(footer && visible(repositories));
+    const launch = Boolean(footerVisible && preferences.showResearchHomepageLauncher !== false
+      && location.pathname === '/' && homeComposer?.parentElement);
+    const refresh = enabled && preferences.showDeepResearchHomepage !== false;
+    const showAllowance = refresh && dashboardVisible();
+    if (footerVisible && (launch || showAllowance)) {
       let row = document.getElementById(DASHBOARD_ID);
       if (!row) {
         row = document.createElement('div');
         row.id = DASHBOARD_ID;
-        row.append(renderWidget(ID));
-      } else renderWidget(ID);
+        const status = document.createElement('span');
+        status.className = 'ghrc-research-home-status';
+        status.setAttribute('role', 'status');
+        status.setAttribute('aria-live', 'polite');
+        row.append(renderWidget(ID, { launch, showAllowance, refresh }), status);
+      } else renderWidget(ID, { launch, showAllowance, refresh });
       let actions = footer.querySelector('.ghrc-2048-footer-left');
       if (!actions) {
         actions = document.createElement('div');
@@ -481,8 +464,9 @@
     const researchPrompt = prompts.find(prompt => prompt.querySelector(RESEARCH_MENTION)
       || prompt.querySelector('[data-prompt-link-label="$deep-research"]'));
     const composer = researchPrompt?.closest('form, [data-type="unified-composer"]');
-    // The in-chat tracker is independent of the homepage; both can display.
-    if (enabled && preferences.showDeepResearchComposer !== false && composer?.parentElement) {
+    // A homepage footer launcher already provides the research control. Keep the
+    // separate composer tracker in conversations or when that launcher is off.
+    if (!launch && enabled && preferences.showDeepResearchComposer !== false && composer?.parentElement) {
       const widget = renderWidget(COMPOSER_ID);
       if (widget.nextElementSibling !== composer) composer.before(widget);
     } else document.getElementById(COMPOSER_ID)?.remove();
@@ -594,7 +578,6 @@
     globalThis.chrome?.storage?.onChanged?.removeListener(settingsChanged);
     document.getElementById(DASHBOARD_ID)?.remove();
     document.getElementById(COMPOSER_ID)?.remove();
-    document.getElementById(HOME_LAUNCHER_ID)?.remove();
   });
   schedule();
 })();

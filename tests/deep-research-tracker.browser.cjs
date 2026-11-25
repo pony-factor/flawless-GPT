@@ -188,7 +188,7 @@ test('native initialization fills the tracker automatically and clicking refresh
       }
       return route.fulfill({ contentType: 'text/html', body: '<section><form><div id="prompt-textarea" contenteditable="true">My draft<span contenteditable="false" data-prompt-link-href="app://connector_openai_deep_research"></span></div></form><section id="github-repositories-for-chatgpt">Repositories<footer class="ghrc-dashboard-footer"><nav class="ghrc-pagination"><button>←</button><button>→</button></nav></footer></section></section>' });
     });
-    await page.goto('https://research.test/');
+    await page.goto('https://research.test/c/test');
     await page.evaluate(() => { window.__ghrcExtensionContext = { active: () => true, onStop() {} }; });
     for (const file of ['research/deep-research-usage.js', 'research/deep-research-tracker.js']) {
       await page.addScriptTag({ content: fs.readFileSync(path.join(__dirname, '../js', file), 'utf8') });
@@ -553,5 +553,82 @@ test('expected reset countdown stays visible until native quota confirms renewal
     assert.match(await widget.innerText(), /reset expected · awaiting confirmation/);
     const marker = await widget.getAttribute('aria-label');
     assert.doesNotMatch(marker, /resets 1d|reset completed/i);
+  } finally { await browser.close(); }
+});
+
+test('homepage footer telescope launches research and refreshes allowance without a duplicate icon', async () => {
+  const browser = await chromium.launch({ executablePath: '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser', headless: true });
+  try {
+    const page = await browser.newPage();
+    await page.route('https://research.test/**', route => route.fulfill({
+      contentType: 'text/html',
+      body: '<form><div id="prompt-textarea" contenteditable="true">Keep my draft</div></form><section id="github-repositories-for-chatgpt">Repositories<footer class="ghrc-dashboard-footer"></footer></section>',
+    }));
+    await page.goto('https://research.test/');
+    await page.evaluate(() => {
+      window.__ghrcExtensionContext = { active: () => true, run: fn => fn(), onStop() {} };
+      window.refreshes = 0;
+      window.splits = [];
+      window.submits = 0;
+      window.addEventListener('ghrc-refresh-deep-research-usage', () => window.refreshes++);
+      document.querySelector('form').addEventListener('submit', event => { event.preventDefault(); window.submits++; });
+      document.getElementById('prompt-textarea').addEventListener('paste', event => {
+        const mention = document.createElement('span');
+        mention.dataset.promptLinkHref = 'app://connector_openai_deep_research';
+        mention.contentEditable = 'false';
+        document.getElementById('prompt-textarea').prepend(mention);
+        event.preventDefault();
+      });
+      const quota = { remaining: 13, total: 20, resetAt: Date.now() + 6 * 86400000, observedAt: Date.now() };
+      window.settings = { showResearchHomepageLauncher: true, showDeepResearchHomepage: true, showDeepResearchTracker: true,
+        deepResearchHomepageVisibility: 'always', showDeepResearchHomepagePie: true };
+      window.listeners = [];
+      window.changeResearchSetting = (key, value) => {
+        window.settings[key] = value;
+        window.listeners.forEach(listener => listener({ [key]: { newValue: value } }, 'local'));
+      };
+      window.chrome = {
+        runtime: { getURL: path => path, async sendMessage(message) {
+          if (message.type === 'open-research-spellcheck-split') {
+            window.splits.push(message);
+            return { ok: true, split: true };
+          }
+          return { ok: true, quota };
+        } },
+        storage: { local: { async get(defaults) { return { ...defaults, ...window.settings }; } },
+          onChanged: { addListener(listener) { window.listeners.push(listener); }, removeListener() {} } },
+      };
+    });
+    await page.addStyleTag({ content: fs.readFileSync(path.join(__dirname, '../css/deep-research-tracker.css'), 'utf8') });
+    await page.addScriptTag({ content: fs.readFileSync(path.join(__dirname, '../js/research/deep-research-tracker.js'), 'utf8') });
+    const footer = page.locator('#ghrc-deep-research-dashboard');
+    const telescope = footer.locator('#ghrc-deep-research-tracker');
+    await telescope.waitFor();
+    await page.waitForFunction(() => !document.querySelector('#ghrc-deep-research-tracker .ghrc-research-usage-pie').hidden);
+    assert.equal(await page.locator('#ghrc-research-home-launcher').count(), 0);
+    await telescope.click();
+    await page.waitForFunction(() => window.splits.length === 1);
+    assert.equal(await page.evaluate(() => window.refreshes), 1);
+    assert.equal(await page.evaluate(() => window.submits), 0);
+    assert.equal(await page.locator('#prompt-textarea').innerText(), 'Keep my draft');
+    assert.equal(await page.locator('#prompt-textarea [data-prompt-link-href]').count(), 1);
+    assert.equal(await page.locator('.ghrc-research-telescope').count(), 1);
+    await page.evaluate(() => window.changeResearchSetting('deepResearchHomepageVisibility', 'near-reset'));
+    await page.waitForFunction(() => document.querySelector('#ghrc-deep-research-tracker .ghrc-research-usage-pie').hidden);
+    assert.equal(await telescope.count(), 1, 'Launcher remains available outside quota visibility window');
+    await page.evaluate(() => window.changeResearchSetting('deepResearchHomepageVisibility', 'always'));
+    await page.evaluate(() => window.changeResearchSetting('showResearchHomepageLauncher', false));
+    await page.waitForFunction(() => document.getElementById('ghrc-deep-research-tracker')?.dataset.launchResearch === 'false');
+    await telescope.click();
+    assert.equal(await page.evaluate(() => window.refreshes), 2);
+    assert.equal(await page.evaluate(() => window.splits.length), 1);
+    await page.evaluate(() => {
+      window.changeResearchSetting('showResearchHomepageLauncher', true);
+      window.changeResearchSetting('showDeepResearchTracker', false);
+    });
+    await page.waitForFunction(() => document.getElementById('ghrc-deep-research-tracker')?.dataset.refreshAllowance === 'false');
+    await telescope.click();
+    await page.waitForFunction(() => window.splits.length === 2);
+    assert.equal(await page.evaluate(() => window.refreshes), 2);
   } finally { await browser.close(); }
 });
