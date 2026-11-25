@@ -7,7 +7,7 @@ const { chromium } = require('playwright');
 
 const source = fs.readFileSync(path.join(__dirname, '../js/launchers/youtube-search.js'), 'utf8');
 const baseStyles = fs.readFileSync(path.join(__dirname, '../css/styles.css'), 'utf8');
-const wootenStyles = fs.readFileSync(path.join(__dirname, '../css/wooten-link-zipp-placeholder.css'), 'utf8');
+const wootenStyles = fs.readFileSync(path.join(__dirname, '../css/wooten-link-zipp.css'), 'utf8');
 const searchStyles = fs.readFileSync(path.join(__dirname, '../css/youtube-search.css'), 'utf8');
 let browser;
 
