@@ -545,9 +545,9 @@ html.dark #github-repositories-for-chatgpt {
 
 #github-repositories-for-chatgpt .ghrc-wooten-link-mark {
   filter: var(--ghrc-mark-filter);
-  height: 30px;
+  height: 26px;
   object-fit: contain;
-  width: 30px;
+  width: 26px;
 }
 
 #github-repositories-for-chatgpt .ghrc-wooten-link-search input {
