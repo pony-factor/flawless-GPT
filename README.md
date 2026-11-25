@@ -35,6 +35,12 @@ The dashboard:
 - combines recent repository activity with locally tracked opening frequency to
   personalize the order.
 
+## Documentation
+
+- [Feature guide](docs/features.md) — dashboard, composer, links, research and troubleshooting.
+- [Development and architecture](docs/development.md) — runtime entry points, source layout, security boundaries and tests.
+- [Chat dispatcher](docs/chat-dispatcher.md) — task import, Start/Pause, completion checks and migration.
+
 ## Artwork ✨
 
 Extension icon and settings artwork by [Squeaky_Belle](https://disqus.com/by/Squeaky_Belle),
@@ -163,11 +169,11 @@ are labeled as last checked rather than being presented as fresh balances.
 
 ### Chat bar colors
 
-Under **ChatGPT → Chat bar colors**, choose independent opt-in colors for the composer background, border, focus ring, typed text, caret, placeholder, selection, toolbar, send/stop buttons, and attachments. Unchecked swatches use ChatGPT's own theme, including dark-mode changes. Colors are stored locally under `composerColors`, update live in open chats, and can all be reset with **Restore ChatGPT colors**.
+Under **ChatGPT → Chat bar colors**, choose independent opt-in colors for the composer background, border, input outline, focus ring, typed text, caret, placeholder, selection, toolbar, send/stop buttons, and attachments. Unchecked swatches use ChatGPT's own theme, including dark-mode changes. Colors are stored locally under `composerColors`, update live in open chats, and can all be reset with **Restore ChatGPT colors**.
 
-### Dashboard accent and repository link colors
+### Dashboard accent and link colors
 
-Under **Dashboard → Dashboard colors** in both the extension popup and full settings, set independent light- and dark-mode colors for dashboard accents and links to repositories, owners and pinned issues. Each swatch has a **custom HEX field** accepting six digits with or without the `#` prefix. Changes are stored locally under `dashboardColors` and update open dashboards immediately. Repository names follow the accent unless customized; **Default** restores an individual color and **Restore dashboard colors** clears all four overrides. Under **Personalization → Chat bar colors**, use **Chat input outline** to set an outline color for the composer in new and existing chats.
+Under **Dashboard → Dashboard colors** in both the extension popup and full settings, set independent light- and dark-mode colors for dashboard accents and links to repositories, owners, pinned issues and search overrides. Each swatch has a **custom HEX field** accepting six digits with or without the `#` prefix. Changes are stored locally under `dashboardColors` and update open dashboards immediately. Repository and search-override links follow the accent unless customized; owner names and pinned issue titles retain their default colors until a link override is set; **Default** restores an individual color and **Restore dashboard colors** clears all four overrides. Existing **Chat bar colors** continue to support HEX entry independently.
 
 ### Token storage
 
@@ -371,24 +377,15 @@ field is active. Browser-reserved keyboard combinations may be unavailable.
 
 ## Automated tests
 
-Pull requests and pushes to `main` require all Node.js unit tests and focused
-user-message / sidebar-icon browser regressions. The full external-link browser
-suite also runs as an advisory check while unrelated existing browser failures
-are addressed. On Linux browser checks use Playwright's Chromium; macOS uses
-Brave by default or `BRAVE_PATH` when set.
+The quality-gate and regression workflows run JavaScript syntax and manifest
+checks, Node.js unit tests, Python native-host tests, and focused Chromium
+regressions. Some broader browser suites are advisory. See the
+[development guide](docs/development.md#testing-locally) for dependency
+installation, executable selection, local commands and the CI breakdown.
 
-```sh
-node --test tests/*.test.cjs
-npm install --no-save --package-lock=false playwright@1.56.1
-npx playwright install chromium
-node --test tests/external-links.browser.cjs
-```
+## Source organization
 
-Other browser suites are not yet enforced by CI.
-
-## JavaScript organization
-
-Scripts live in feature folders under `js/`. The manifest and extension HTML
+Scripts and styles live in feature folders under `js/` and `css/`. The manifest and extension HTML
 pages declare their loading order; the background entry point is
 `js/core/background.js`. Keep that order when adding or moving scripts.
 
