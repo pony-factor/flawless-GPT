@@ -114,7 +114,10 @@ test("adding and refreshing a PDF caches the complete first page, preserves link
   assert.equal(pixels.height, 560);
   assert.equal(pixels.width, 280);
   assert.ok(pixels.color[0] > 240 && pixels.color[2] < 20, "first page is red; second page is blue");
-  await page.locator(".ghrc-highlighted-page-pdf img").waitFor();
+  const card = page.locator(".ghrc-highlighted-page-pdf");
+  await card.locator("img").waitFor();
+  assert.deepEqual(await card.locator(".ghrc-highlighted-page-meta > *").allTextContents(), ["127.0.0.1", "PDF"]);
+  assert.equal(await card.locator(".ghrc-highlighted-page-description").count(), 0);
   const layout = await page.evaluate(() => {
     const widget = document.getElementById("github-repositories-for-chatgpt");
     const highlights = document.getElementById("ghrc-highlighted-pages");

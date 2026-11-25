@@ -88,6 +88,7 @@
 }
 
 #ghrc-highlighted-pages .ghrc-highlighted-page-copy {
+  align-content: start;
   display: grid;
   gap: 3px;
   min-width: 0;
@@ -109,6 +110,25 @@
 #ghrc-highlighted-pages .ghrc-highlighted-page-copy small {
   color: light-dark(#666666, #a6a6a6);
   font-size: 11px;
+}
+
+#ghrc-highlighted-pages .ghrc-highlighted-page-meta {
+  align-items: center;
+  display: flex;
+  gap: 5px;
+  justify-content: center;
+  min-width: 0;
+}
+
+#ghrc-highlighted-pages .ghrc-highlighted-page-pdf-tag {
+  background: light-dark(#ececec, #303030);
+  border-radius: 4px;
+  color: light-dark(#555555, #cccccc);
+  flex: none;
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1.4;
+  padding: 0 4px;
 }
 
 #ghrc-highlighted-pages .ghrc-highlighted-page-description {
