@@ -9,6 +9,8 @@ test("newest enabled numbered GPT version is ordered by components, not decimals
   assert.equal(newest(choices).name, "GPT-6.10");
   assert.equal(matches(version("GPT-6.10 High"), version("6.10")), true);
   assert.equal(matches(version("6.1"), version("6.10")), false);
+  assert.equal(matches(version("6.10 Standard"), version("6.10")), true);
+  assert.equal(matches(version("GPT-6.2 Light"), version("6.2")), true);
   assert.equal(version("GPT-5.6 Sol"), null);
 });
 test("High is exact and never falls through to Extra High", () => {

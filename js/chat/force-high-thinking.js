@@ -9,7 +9,7 @@
     return match ? (match[1].toLowerCase() === "xhigh" ? EXTRA : match[1].toLowerCase()) : "";
   };
   const version = value => {
-    const match = /^(?:GPT[- ]?)?(\d+)(?:\.(\d+))?(?:\s*(?:instant|thinking|low|medium|high|extra high|xhigh))?$/i.exec(normalize(value));
+    const match = /^(?:GPT[- ]?)?(\d+)(?:\.(\d+))?(?:\s*(?:instant|thinking|light|low|standard|medium|high|extra high|xhigh))?$/i.exec(normalize(value));
     return match ? [Number(match[1]), Number(match[2] || 0)] : null;
   };
   const compare = (a, b) => a[0] - b[0] || a[1] - b[1];
