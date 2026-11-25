@@ -42,7 +42,7 @@ test('one mascot starts native New chat without opening the sidebar', async () =
   const mascot = page.locator('#ghrc-flawless-corner');
   assert.equal(await mascot.count(), 1);
   assert.equal(await mascot.getAttribute('aria-label'), 'New chat');
-  assert.match(await mascot.locator('img').getAttribute('src'), /artwork\/SB-icon\.webp$/);
+  assert.match(await mascot.locator('img').getAttribute('src'), /artwork\/SB-full\.webp$/);
   const bounds = await mascot.boundingBox();
   assert.equal(bounds.width, 33);
   assert.equal(bounds.height, 33);
@@ -81,17 +81,17 @@ test('mascot animates in place on hover and returns to its still frame on exit',
   const image = mascot.locator('img');
   const initialBounds = await mascot.boundingBox();
 
-  assert.ok((await image.getAttribute('src')).endsWith('artwork/SB-icon.webp'));
+  assert.ok((await image.getAttribute('src')).endsWith('artwork/SB-full.webp'));
   await mascot.hover();
-  assert.ok((await image.getAttribute('src')).endsWith('artwork/SB-icon.gif'));
+  assert.ok((await image.getAttribute('src')).endsWith('artwork/SB-full.gif'));
   assert.deepEqual(await mascot.boundingBox(), initialBounds);
 
   await page.mouse.move(600, 300);
-  assert.ok((await image.getAttribute('src')).endsWith('artwork/SB-icon.webp'));
+  assert.ok((await image.getAttribute('src')).endsWith('artwork/SB-full.webp'));
   assert.deepEqual(await mascot.boundingBox(), initialBounds);
 
   await mascot.hover();
-  assert.ok((await image.getAttribute('src')).endsWith('artwork/SB-icon.gif'));
+  assert.ok((await image.getAttribute('src')).endsWith('artwork/SB-full.gif'));
   await mascot.click();
   assert.equal(await page.evaluate(() => window.newChats), 1);
   assert.equal(await page.evaluate(() => window.sidebarClicks || 0), 0);
@@ -102,8 +102,8 @@ test('mascot animates in place on hover and returns to its still frame on exit',
 test('animated mascot image is web-accessible to ChatGPT pages', () => {
   const manifest = JSON.parse(read('manifest.json'));
   const resources = manifest.web_accessible_resources.flatMap(group => group.resources);
-  assert.ok(resources.includes('artwork/SB-icon.webp'));
-  assert.ok(resources.includes('artwork/SB-icon.gif'));
+  assert.ok(resources.includes('artwork/SB-full.webp'));
+  assert.ok(resources.includes('artwork/SB-full.gif'));
 });
 
 test('the modern toolbar keeps the native New chat action and uses its icon slot', async () => {
@@ -118,7 +118,7 @@ test('the modern toolbar keeps the native New chat action and uses its icon slot
   assert.equal(await button.locator('svg').isVisible(), false);
   await page.mouse.move(600, 300);
   await button.hover();
-  assert.match(await image.getAttribute('src'), /SB-icon\.gif$/);
+  assert.match(await image.getAttribute('src'), /SB-full\.gif$/);
   await button.click();
   assert.equal(await page.evaluate(() => window.newChats), 1);
   await button.evaluate(element => { element.innerHTML = '<svg width="20" height="20"></svg>'; });
@@ -149,7 +149,7 @@ test('the app navigation rail uses its native Home button for the mascot', async
   assert.equal(await home.locator('svg').isVisible(), false);
   assert.equal(await newChat.locator('svg').isVisible(), true);
   await home.hover();
-  assert.match(await mascot.getAttribute('src'), /SB-icon\.gif$/);
+  assert.match(await mascot.getAttribute('src'), /SB-full\.gif$/);
   await home.press('Enter');
   assert.equal(await page.evaluate(() => window.homeClicks), 1);
 

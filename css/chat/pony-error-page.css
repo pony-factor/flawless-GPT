@@ -7,7 +7,7 @@
   border: 1px solid #bba4e6 !important;
   border-radius: 24px !important;
   background-color: #f8f3ff !important;
-  background-image: url("../../artwork/squeaky-belle-full.webp"), radial-gradient(ellipse at top, #e9dcff, transparent 75%) !important;
+  background-image: url("../../artwork/SB-full.webp"), radial-gradient(ellipse at top, #e9dcff, transparent 75%) !important;
   background-repeat: no-repeat !important;
   background-position: center 24px, center !important;
   background-size: 136px auto, cover !important;
@@ -35,7 +35,7 @@
 }
 html.dark [data-ghrc-pony-error] {
   background-color: #241d32 !important;
-  background-image: url("../../artwork/squeaky-belle-full.webp"), radial-gradient(ellipse at top, #49345f, transparent 75%) !important;
+  background-image: url("../../artwork/SB-full.webp"), radial-gradient(ellipse at top, #49345f, transparent 75%) !important;
   border-color: #81619f !important;
   color: #eee2ff !important;
 }
