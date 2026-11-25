@@ -224,7 +224,7 @@ test('selected app chip outside the editor keeps the plugin and sends pasted tex
 });
 
 test('spellcheck launcher shows artwork without a CSS border or shadow ring', () => {
-  const css = fs.readFileSync(path.join(__dirname, '../css/spellcheck-launcher.css'), 'utf8');
+  const css = fs.readFileSync(path.join(__dirname, '../css/launchers/spellcheck-launcher.css'), 'utf8');
   assert.match(css, /#ghrc-spellcheck-gpt-launcher\s*\{[^}]*border:\s*0;/s);
   assert.match(css, /#ghrc-spellcheck-gpt-launcher\s*\{[^}]*box-shadow:\s*none;/s);
 });

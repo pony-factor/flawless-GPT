@@ -63,7 +63,7 @@ for (const [shell, frame, centeredGrid] of [
     } else {
       assert.ok(before.top < before.boundaryTop, 'native centering reproduces the clipped composer');
     }
-    await page.addStyleTag({ path: path.join(__dirname, '../css/compact-header.css') });
+    await page.addStyleTag({ path: path.join(__dirname, '../css/chat/compact-header.css') });
     for (const width of [1280, 390]) {
       await page.setViewportSize({ width, height: 800 });
       const after = await geometry();
@@ -104,7 +104,7 @@ for (const [route, width, legacy, enabled] of [
     const entry = manifest.content_scripts.find(e => e.js?.includes('js/chat/compact-header.js'));
     assert.equal(entry.run_at, 'document_start');
     assert.ok(entry.js.indexOf('js/chat/compact-header.js') > entry.js.indexOf('js/core/extension-context.js'));
-    for (const file of ['js/core/extension-context.js', 'js/chat/compact-header.js', 'css/compact-header.css']) {
+    for (const file of ['js/core/extension-context.js', 'js/chat/compact-header.js', 'css/chat/compact-header.css']) {
       fs.mkdirSync(path.dirname(path.join(extension, file)), { recursive: true });
       fs.copyFileSync(path.join(root, file), path.join(extension, file));
     }
@@ -136,7 +136,7 @@ for (const [route, width, legacy, enabled] of [
       manifest_version: 3, name: 'Compact first paint fixture', version: '1.0', permissions: ['storage'],
       background: {service_worker: 'background.js'},
       content_scripts: [{matches:['http://127.0.0.1/*'], run_at:'document_start',
-        css:['css/compact-header.css'], js:['js/core/extension-context.js','delay-settings.js','js/chat/compact-header.js']}],
+        css:['css/chat/compact-header.css'], js:['js/core/extension-context.js','delay-settings.js','js/chat/compact-header.js']}],
     }));
     const timers = new Set();
     const server = http.createServer((request, response) => {

@@ -39,7 +39,7 @@ async function fixture(native = true) {
       findActionButton: () => document.getElementById("send"),
     };
   });
-  await page.addStyleTag({ content: read("css/temporary-chat-inline.css") });
+  await page.addStyleTag({ content: read("css/composer/temporary-chat-inline.css") });
   await page.addScriptTag({ content: read("js/composer/temporary-chat-inline.js") });
   return { page, errors };
 }

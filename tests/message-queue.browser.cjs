@@ -7,8 +7,8 @@ const path = require('node:path');
 const { chromium } = require('playwright');
 const source = fs.readFileSync(path.join(__dirname, '../js/composer/message-queue.js'), 'utf8');
 const clipboardSource = fs.readFileSync(path.join(__dirname, '../js/composer/clipboard-send.js'), 'utf8');
-const queueCss = fs.readFileSync(path.join(__dirname, '../css/message-queue.css'), 'utf8');
-const hatCss = fs.readFileSync(path.join(__dirname, '../css/top-hat-send-button.css'), 'utf8');
+const queueCss = fs.readFileSync(path.join(__dirname, '../css/composer/message-queue.css'), 'utf8');
+const hatCss = fs.readFileSync(path.join(__dirname, '../css/composer/top-hat-send-button.css'), 'utf8');
 let browser;
 before(async () => {
   browser = await chromium.launch({
@@ -1053,7 +1053,7 @@ test('native Send overrides a stale Stop instead of showing two hats', async () 
 
 test('aria-label-only Voice to Send transitions remove the stale empty hat', async () => {
   const p = await fixture({ voice: true, liveMarkup: true, queueButton: false });
-  await p.addStyleTag({ content: fs.readFileSync(path.join(__dirname, '../css/hide-dictation.css'), 'utf8') });
+  await p.addStyleTag({ content: fs.readFileSync(path.join(__dirname, '../css/composer/hide-dictation.css'), 'utf8') });
   await p.evaluate(() => document.documentElement.setAttribute('data-ghrc-hide-dictation', ''));
   await p.getByRole('button', { name: 'Send message', exact: true }).waitFor();
   // Selection-only sends can update the native action without an input event.
@@ -1073,7 +1073,7 @@ test('aria-label-only Voice to Send transitions remove the stale empty hat', asy
 
 test('an empty disabled hat remains visible with voice hidden and yields to native Send', async () => {
   const p = await fixture({ voice: true, liveMarkup: true, queueButton: false });
-  await p.addStyleTag({ content: fs.readFileSync(path.join(__dirname, '../css/hide-dictation.css'), 'utf8') });
+  await p.addStyleTag({ content: fs.readFileSync(path.join(__dirname, '../css/composer/hide-dictation.css'), 'utf8') });
   await p.evaluate(() => document.documentElement.setAttribute('data-ghrc-hide-dictation', ''));
   const hat = p.getByRole('button', { name: 'Send message', exact: true });
   await hat.waitFor();
@@ -1096,7 +1096,7 @@ test('an empty disabled hat remains visible with voice hidden and yields to nati
 
 test('extension invalidation removes its empty hat before native Send appears', async () => {
   const p = await fixture({ voice: true, liveMarkup: true, queueButton: false });
-  await p.addStyleTag({ content: fs.readFileSync(path.join(__dirname, '../css/hide-dictation.css'), 'utf8') });
+  await p.addStyleTag({ content: fs.readFileSync(path.join(__dirname, '../css/composer/hide-dictation.css'), 'utf8') });
   await p.evaluate(() => document.documentElement.setAttribute('data-ghrc-hide-dictation', ''));
   await p.getByRole('button', { name: 'Send message', exact: true }).waitFor();
   // Reloading an unpacked extension invalidates scripts in already-open tabs.
@@ -1341,7 +1341,7 @@ test('disclaimer is hidden by default, toggles live, and leaves message content 
   await p.evaluate(() => {
     document.body.insertAdjacentHTML('beforeend', '<div id="notice">ChatGPT can make mistakes. Check important info.</div><article><p id="message">ChatGPT can make mistakes. This is message content.</p></article>');
   });
-  await p.addScriptTag({ content: fs.readFileSync(path.join(__dirname, '../js/chat/chatgpt-disclaimer.js'), 'utf8') });
+  await p.addScriptTag({ content: fs.readFileSync(path.join(__dirname, '../js/chat/disclaimer.js'), 'utf8') });
   await p.waitForFunction(() => getComputedStyle(document.getElementById('notice')).display === 'none');
   assert.equal(await p.locator('#message').isVisible(), true);
   await p.evaluate(() => chrome.storage.local.set({ showChatgptDisclaimer: true }));

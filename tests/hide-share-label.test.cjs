@@ -5,7 +5,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 
 const source = fs.readFileSync(path.join(__dirname, '../js/chat/hide-share-label.js'), 'utf8');
-const css = fs.readFileSync(path.join(__dirname, '../css/chat-display.css'), 'utf8');
+const css = fs.readFileSync(path.join(__dirname, '../css/chat/display.css'), 'utf8');
 
 function fixture(stored = true) {
   const textNode = { textContent: 'Share' };

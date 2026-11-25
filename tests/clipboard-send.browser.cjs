@@ -51,7 +51,7 @@ test('Paste Link and Spellcheck join the composer before + in narrow viewports',
       };
     });
 
-    for (const css of ['clipboard-send.css', 'spellcheck-launcher.css']) {
+    for (const css of ['composer/clipboard-send.css', 'launchers/spellcheck-launcher.css']) {
       await page.addStyleTag({ content: fs.readFileSync(path.join(__dirname, '../css', css), 'utf8') });
     }
     await page.addScriptTag({ content: fs.readFileSync(path.join(__dirname, '../js/composer/clipboard-send.js'), 'utf8') });

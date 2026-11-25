@@ -5,10 +5,10 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { chromium } = require('playwright');
 const read = name => fs.readFileSync(path.join(__dirname, '..', name), 'utf8');
-const displaySource = read('js/chat/chat-display.js');
+const displaySource = read('js/chat/display.js');
 const thinkingSource = read('js/chat/force-high-thinking.js');
-const displayCss = read('css/chat-display.css');
-const compactCss = read('css/compact-header.css');
+const displayCss = read('css/chat/display.css');
+const compactCss = read('css/chat/compact-header.css');
 let browser;
 before(async () => {
   browser = await chromium.launch({ executablePath: process.env.BROWSER_EXECUTABLE || '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser', headless: true });

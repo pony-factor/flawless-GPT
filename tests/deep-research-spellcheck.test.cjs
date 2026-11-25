@@ -4,8 +4,8 @@ const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
 
-const worker = fs.readFileSync(path.join(__dirname, "../js/research/deep-research-spellcheck-background.js"), "utf8");
-const content = fs.readFileSync(path.join(__dirname, "../js/research/deep-research-spellcheck.js"), "utf8");
+const worker = fs.readFileSync(path.join(__dirname, "../js/research/spellcheck-background.js"), "utf8");
+const content = fs.readFileSync(path.join(__dirname, "../js/research/spellcheck.js"), "utf8");
 
 function fixture({ supported = true, existingSplit = false, applyResult = { ok: true },
   sourcePath = "/" } = {}) {

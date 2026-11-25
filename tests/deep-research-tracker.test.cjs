@@ -1,7 +1,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { parseAllowance, selectedResearchQuota, selectedResearchPieTotal, usagePieTotal, usagePiePercent } = require('../js/research/deep-research-tracker.js');
-const { quotaFromResponse } = require('../js/research/deep-research-usage.js');
+const { parseAllowance, selectedResearchQuota, selectedResearchPieTotal, usagePieTotal, usagePiePercent } = require('../js/research/tracker.js');
+const { quotaFromResponse } = require('../js/research/usage.js');
 
 test('usage pie accepts reported or custom totals and estimates common tiers', () => {
   assert.equal(usagePieTotal(25), 25);
@@ -49,7 +49,7 @@ test('both settings views keep the same quota pool but independent presentation'
     'showDeepResearchHomepagePie', 'showDeepResearchComposerPie']) {
     assert.match(settings, new RegExp(key));
   }
-  const tracker = fs.readFileSync(path.join(__dirname, '../js/research/deep-research-tracker.js'), 'utf8');
+  const tracker = fs.readFileSync(path.join(__dirname, '../js/research/tracker.js'), 'utf8');
   assert.doesNotMatch(tracker, /homepageShowsAllowance/);
   assert.match(tracker, /function onMutations/);
   assert.doesNotMatch(tracker, /characterData: true/);
@@ -154,7 +154,7 @@ test('handles tooltip text laid out on a single line', () => {
   });
 });
 
-const { TTL_MS, fresh, observed, spent, claimRefresh } = require('../js/research/deep-research-cache-background.js');
+const { TTL_MS, fresh, observed, spent, claimRefresh } = require('../js/research/cache-background.js');
 const quotaState = (remaining = 13) => ({ quota: { remaining, observedAt: 1000, resetAt: 1000 + 30 * 24 * 60 * 60_000 }, spent: [], lastRefreshAttempt: 0 });
 
 test('eight-hour cache ignores repeated native initialization while keeping local spends', () => {
@@ -190,7 +190,7 @@ test('unknown quotas are never invented or decremented', () => {
   assert.equal(observed(empty, { remaining: -1, observedAt: 1100, resetAt: null }, true, 1200), empty);
 });
 
-const { NEAR_RESET_MS, LIVE_REFRESH_MS, nearReset, refreshInterval } = require('../js/research/deep-research-cache-background.js');
+const { NEAR_RESET_MS, LIVE_REFRESH_MS, nearReset, refreshInterval } = require('../js/research/cache-background.js');
 
 test('eight-hour caching stops exactly 24 hours before the expected reset', () => {
   const now = 60 * 24 * 60 * 60_000;

@@ -62,7 +62,7 @@
   }
 
   const authScript = document.createElement("script");
-  authScript.src = chrome.runtime.getURL("js/github/github-app-auth.js");
+  authScript.src = chrome.runtime.getURL("js/github/app-auth.js");
   authScript.addEventListener("load", async () => {
     if (globalThis.__ghrcSettingsContext?.active() === false) return;
     try {

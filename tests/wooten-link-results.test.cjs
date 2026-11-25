@@ -3,8 +3,8 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 
 const source = fs.readFileSync(require.resolve("../js/dashboard/content.js"), "utf8");
-const stylesheet = fs.readFileSync(require.resolve("../css/styles.css"), "utf8");
-const highlightsStylesheet = fs.readFileSync(require.resolve("../css/highlighted-pages.css"), "utf8");
+const stylesheet = fs.readFileSync(require.resolve("../css/dashboard/styles.css"), "utf8");
+const highlightsStylesheet = fs.readFileSync(require.resolve("../css/dashboard/highlighted-pages.css"), "utf8");
 const helper = source.match(/  function chooseWootenLinkPlacement\([\s\S]*?\n  }\n/)?.[0];
 assert.ok(helper, "WootenLink placement helper is present");
 const choosePlacement = new Function(`${helper}\nreturn chooseWootenLinkPlacement;`)();

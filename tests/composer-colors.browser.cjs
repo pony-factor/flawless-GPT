@@ -16,7 +16,7 @@ for (const identity of ['aria-label="Add files and more"', 'id="composer-plus-bt
         .text-default { color: rgb(240, 240, 240); }
         button:hover, button[data-state="open"] { background-color: rgb(60, 60, 60); }
       </style><button ${identity}><span><svg class="text-default"><use fill="currentColor"></use></svg></span></button>`);
-      await page.addStyleTag({ content: fs.readFileSync(path.join(__dirname, '../css/composer-colors.css'), 'utf8') });
+      await page.addStyleTag({ content: fs.readFileSync(path.join(__dirname, '../css/composer/colors.css'), 'utf8') });
       const colors = { 'plus-background': '#112233', 'plus-icon': '#43af49', 'plus-hover': '#ac11ff' };
       await page.evaluate(colors => {
         for (const [key, value] of Object.entries(colors)) {

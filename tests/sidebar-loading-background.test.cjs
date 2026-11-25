@@ -5,7 +5,7 @@ const path = require("node:path");
 const vm = require("node:vm");
 
 const root = path.resolve(__dirname, "..");
-const source = fs.readFileSync(path.join(root, "js/sidebar/sidebar-loading-background.js"), "utf8");
+const source = fs.readFileSync(path.join(root, "js/sidebar/loading-background.js"), "utf8");
 
 function start(readyState = "loading") {
   const attributes = new Set();
@@ -51,11 +51,11 @@ test("already loaded pages do not apply the temporary color", () => {
 
 test("loading styles and script run at document_start", () => {
   const manifest = JSON.parse(fs.readFileSync(path.join(root, "manifest.json"), "utf8"));
-  const script = manifest.content_scripts.find(entry => entry.js?.includes("js/sidebar/sidebar-loading-background.js"));
-  const style = manifest.content_scripts.find(entry => entry.css?.includes("css/sidebar-loading-background.css"));
+  const script = manifest.content_scripts.find(entry => entry.js?.includes("js/sidebar/loading-background.js"));
+  const style = manifest.content_scripts.find(entry => entry.css?.includes("css/sidebar/loading-background.css"));
   assert.equal(script?.run_at, "document_start");
   assert.equal(style?.run_at, "document_start");
-  const css = fs.readFileSync(path.join(root, "css/sidebar-loading-background.css"), "utf8");
+  const css = fs.readFileSync(path.join(root, "css/sidebar/loading-background.css"), "utf8");
   assert.match(css, /html\[data-ghrc-sidebar-loading\]/);
   assert.match(css, /background-color: #000 !important/);
 });
