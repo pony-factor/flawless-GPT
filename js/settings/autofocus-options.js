@@ -45,8 +45,8 @@
     preference.innerHTML = `
       <input id="force-high-thinking" type="checkbox" />
       <span>
-        <strong>Maximize thinking</strong>
-        <small>Sets thinking effort and thinking time to their highest available levels, then hides their selectors.</small>
+        <strong>Always use latest GPT at High</strong>
+        <small>Checks the newest available numbered GPT model and High reasoning before ordinary sends.</small>
       </span>
     `;
     if (disableWorkPreference) disableWorkPreference.insertAdjacentElement("afterend", preference);
@@ -54,6 +54,21 @@
     highInput = preference.querySelector("input");
   }
   bindCheckbox(highInput, FORCE_HIGH_SETTING_KEY, false);
+
+  if (chatInteractionFieldset && !document.getElementById("show-extra-high-send-button")) {
+    const preference = document.createElement("label");
+    preference.className = "preference";
+    preference.innerHTML = `
+      <input id="show-extra-high-send-button" type="checkbox" />
+      <span>
+        <strong>Show Extra High Send button</strong>
+        <small>Send a single message with Extra High using an icon beside Send. Ordinary sends use latest GPT at High while this is enabled.</small>
+      </span>
+    `;
+    if (highInput) highInput.closest("label.preference").after(preference);
+    else chatInteractionFieldset.append(preference);
+    bindCheckbox(preference.querySelector("input"), "showExtraHighSendButton", false);
+  }
 
   let clipboardSendInput = document.getElementById("show-clipboard-send-button");
   if (!clipboardSendInput && chatInteractionFieldset) {

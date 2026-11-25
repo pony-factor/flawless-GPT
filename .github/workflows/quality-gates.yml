@@ -89,6 +89,8 @@ jobs:
           echo "BROWSER_EXECUTABLE=$(node -p 'require("playwright").chromium.executablePath()')" >> "$GITHUB_ENV"
       - name: Run startup browser regressions
         run: node --test tests/compact-startup.browser.cjs tests/dashboard-startup.browser.cjs tests/refresh-view.browser.cjs
+      - name: Latest GPT and one-shot Extra High reasoning regressions
+        run: node --test --test-name-pattern="reasoning policy" tests/chat-display.browser.cjs
 
   browser-queue:
     name: Chromium queue regressions (advisory)

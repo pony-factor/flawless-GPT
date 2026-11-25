@@ -122,9 +122,12 @@
     }
     const send = nativeSend(held.input);
     if (!send) return { ok: false, reason: 'No genuine native Send control; refusing interrupt/steer controls.' };
+    const policy = globalThis.__ghrcReasoningPolicy;
+    if (policy && !await policy.prepareHigh(held.input)) return { ok: false, reason: "High reasoning could not be confirmed; nothing sent." };
     // No await between the final lifecycle check and clicking this exact Send node.
     const final = snapshot();
-    if (!idle(final) || final.signature !== held.signature || !send.isConnected
+    if (!idle(final) || final.signature !== held.signature || final.url !== held.url
+      || composer() !== held.input || normalize(read(held.input)) !== normalize(held.prompt) || final.hasContext || !send.isConnected
       || send !== nativeSend(held.input) || send.disabled || /stop|interrupt|steer/i.test(`${send.getAttribute('aria-label')} ${send.getAttribute('data-testid')}`)) {
       return { ok: false, reason: 'Send changed into an unsafe action; nothing sent.' };
     }
@@ -132,7 +135,11 @@
     submissionPending = true;
     pendingNonce = held.nonce;
     const previousUser = role('user');
-    send.click();
+    if (policy ? !policy.clickHigh(send) : (send.click(), false)) {
+      submissionPending = false;
+      pendingNonce = null;
+      return { ok: false, reason: "High reasoning changed; nothing sent." };
+    }
     if (held.fresh || now.workOnly) return { ok: true, pendingIdentity: true };
     const deadline = Date.now() + 10000;
     while (Date.now() < deadline) {

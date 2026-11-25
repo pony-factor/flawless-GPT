@@ -273,7 +273,7 @@
     return [...(form?.querySelectorAll('button[type="submit"]') || [])].find(isNativeSend) || null;
   }
 
-  function submitWhenReady(composer, text, deadline, shortcutAttempted = false) {
+  async function submitWhenReady(composer, text, deadline, shortcutAttempted = false) {
     const currentComposer = findComposerInput();
     if (
       Date.now() >= deadline
@@ -284,7 +284,13 @@
 
     const sendButton = findSendButton(currentComposer);
     if (sendButton && !sendButton.disabled && sendButton.getAttribute("aria-disabled") !== "true") {
-      sendButton.click();
+      const policy = globalThis.__ghrcReasoningPolicy;
+      if (policy) {
+        if (!await policy.prepareHigh(currentComposer) || !isHomePage()
+          || currentComposer !== findComposerInput() || !spellcheckDraftMatches(currentComposer, text)
+          || sendButton !== findSendButton(currentComposer)) return;
+        policy.clickHigh(sendButton);
+      } else sendButton.click();
       return;
     }
     if (!sendButton && !shortcutAttempted) {

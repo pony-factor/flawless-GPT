@@ -76,12 +76,18 @@
       go.textContent = "Go";
       go.setAttribute("aria-label", "Send reviewed Deep Research prompt");
       go.style.cssText = "padding:5px 12px;border-radius:7px;border:1px solid currentColor;cursor:pointer;";
-      go.addEventListener("click", () => {
+      go.addEventListener("click", async () => {
         const input = editor();
         if (!chatIsSupported() || location.pathname !== approvedPath
           || !input || draft(input) !== approvedText) return;
         const send = sendButton(input);
-        if (send) send.click();
+        if (!send) return;
+        const policy = globalThis.__ghrcReasoningPolicy;
+        if (policy) {
+          if (!await policy.prepareHigh(input) || !chatIsSupported() || location.pathname !== approvedPath
+            || editor() !== input || draft(input) !== approvedText || send !== sendButton(input)) return;
+          policy.clickHigh(send);
+        } else send.click();
       });
       banner.append(go);
     }
