@@ -40,8 +40,8 @@
         <img
           id="standalone-artwork"
           class="standalone-artwork"
-          src="artwork/squeaky-belle-full.webp"
-          data-animated-src="artwork/squeaky-belle-full.gif"
+          src="artwork/SB-icon.webp"
+          data-animated-src="artwork/SB-icon.gif"
           alt="Wizard character artwork by Squeaky_Belle"
         />
         <div>
@@ -118,6 +118,13 @@
             </span>
           </label>
           <label class="preference">
+            <input id="show-bulk-merge-button" type="checkbox" checked />
+            <span>
+              <strong>Show Bulk merge button</strong>
+              <small>Shows the sorting-icon shortcut to Chat Dispatcher in the repository dashboard header.</small>
+            </span>
+          </label>
+          <label class="preference">
             <input id="show-wooten-link-search" type="checkbox" />
             <span>
               <strong>Show wooten.link search</strong>
@@ -156,6 +163,14 @@
         </fieldset>
 
         <hr class="section-divider" />
+        <fieldset id="dashboard-color-settings" aria-label="Dashboard color settings">
+          <legend>Dashboard colors</legend>
+          <p class="help">Set dashboard accents and repository link colors separately for light and dark modes. Choose a swatch or enter any six-digit HEX value (with or without #). Repository links inherit the accent unless customized separately. Default restores inherited colors; changes apply to open dashboards.</p>
+          <div id="dashboard-color-grid" class="composer-color-grid"></div>
+          <button id="dashboard-color-reset" type="button" class="secondary">Restore dashboard colors</button>
+        </fieldset>
+
+        <hr class="section-divider" />
         <fieldset>
           <legend>Pinned repositories</legend>
           <p class="help">
@@ -191,7 +206,7 @@
         <section id="settings-panel-personalization" class="standalone-settings-panel" role="tabpanel" aria-labelledby="settings-tab-personalization" hidden>
         <fieldset class="standalone-first-fieldset" aria-label="Web commit personalization settings">
           <label for="web-commit-guidance">Web commit guidance</label>
-          <p class="help">Edit the same Custom Instructions ChatGPT uses under Settings → Personalization. Flawless keeps a local <code>webCommitGuidance</code> mirror and syncs changes in either direction while ChatGPT is open.</p>
+          <p class="help">Edit the same Custom Instructions ChatGPT uses under Settings → Personalization (5,000-character limit). Flawless keeps a local <code>webCommitGuidance</code> mirror and syncs changes in either direction while ChatGPT is open.</p>
           <textarea
             id="web-commit-guidance"
             rows="12"
@@ -204,7 +219,7 @@
         <hr class="section-divider" />
         <fieldset id="composer-color-settings" aria-label="Composer color settings">
           <legend>Chat bar colors</legend>
-          <p class="help">Customize the chat bar background, borders, focus, text, send, stop, + menu button, clipboard paste button and attachment chips independently. Edit a picker or six-digit HEX value to customize that color immediately; untouched colors inherit ChatGPT's light or dark theme. Use Default beside an edited color to restore inheritance. Changes apply to open chats.</p>
+          <p class="help">Customize the chat bar background, borders, focus, text, send, stop, + menu button, clipboard paste button and attachment chips independently. The inline message editor has separate Cancel and Send background, text and hover overrides. Edit a picker or six-digit HEX value to customize that color immediately; untouched colors inherit ChatGPT's light or dark theme. Use Default beside an edited color to restore inheritance. Changes apply to open chats.</p>
           <p class="help">* Inherited preview: ChatGPT theme color when readable, or for the clipboard paste button, your toolbar color choices. Inherited colors are not additional overrides. Clipboard paste colors follow toolbar overrides until customized separately.</p>
            <div id="composer-color-grid" class="composer-color-grid"></div>
           <button id="composer-color-reset" type="button" class="secondary">Restore ChatGPT colors</button>
@@ -213,18 +228,15 @@
 
         <section id="settings-panel-deep-research" class="standalone-settings-panel" role="tabpanel" aria-labelledby="settings-tab-deep-research" hidden>
         <fieldset id="deep-research-settings" class="standalone-first-fieldset" aria-label="Research settings">
+            <label class="preference">
+              <input id="show-research-homepage-launcher" type="checkbox" checked />
+              <span><strong>Show homepage research telescope</strong><small>Adds a shortcut above the new-chat composer. Clicking it selects Deep Research and opens Spellcheck Only beside the chat.</small></span>
+            </label>
           <label class="preference">
               <input id="show-deep-research-tracker" type="checkbox" checked />
               <span>
                 <strong>Enable Deep Research allowance trackers</strong>
                 <small>Master switch for the homepage and active research composer trackers.</small>
-              </span>
-            </label>
-            <label class="preference">
-              <input id="show-deep-research-usage-pie" type="checkbox" />
-              <span>
-                <strong>Show remaining reports as a usage pie</strong>
-                <small>Use a Sweetiebot-style pie scaled to your Deep Research allowance. The exact remaining count remains accessible.</small>
               </span>
             </label>
             <label for="deep-research-allowance-mode">Counter allowance</label>
@@ -233,9 +245,9 @@
               <option value="all">Full + lightweight</option>
             </select>
             <p class="help">Default: full research only. Combined mode appears only when ChatGPT provides both counts; missing lightweight counts are never guessed.</p>
-            <label for="deep-research-usage-pie-total">Pie allowance total (optional)</label>
+            <label for="deep-research-usage-pie-total">Pie total for selected allowance (optional)</label>
             <input id="deep-research-usage-pie-total" type="number" min="1" max="10000" step="1" placeholder="Auto" />
-            <p class="help">Auto uses the server-reported maximum when available; otherwise the pie uses an estimated scale of 25 or 250, labeled in its tooltip. Enter your actual allowance for an accurate percentage. The count always follows the selected allowance mode. Current limits vary by plan.</p>
+            <p class="help">Full-only and combined modes remember separate custom totals. Auto uses the server-reported maximum when available; otherwise the pie uses an estimated scale of 25 or 250, labeled in its tooltip. Enter your actual allowance for the selected mode for an accurate percentage. The count always follows the selected allowance mode. Current limits vary by plan.</p>
             <h3>Homepage</h3>
             <label class="preference">
               <input id="show-deep-research-homepage" type="checkbox" checked />
@@ -243,11 +255,15 @@
             </label>
             <label class="preference">
               <input id="show-deep-research-homepage-count" type="checkbox" checked />
-              <span><strong>Show reports remaining</strong><small>Displays the allowance count, such as “13 left.”</small></span>
+              <span><strong>Show reports remaining</strong><small>Display the count on the homepage only.</small></span>
             </label>
             <label class="preference">
               <input id="show-deep-research-homepage-reset" type="checkbox" checked />
-              <span><strong>Show reset countdown</strong><small>Displays time until reset, such as “resets 5d.” Disable this to show only reports remaining.</small></span>
+              <span><strong>Show reset countdown</strong><small>Display the reset time on the homepage only.</small></span>
+            </label>
+            <label class="preference">
+              <input id="show-deep-research-homepage-pie" type="checkbox" />
+              <span><strong>Show usage pie on homepage</strong><small>Only affects the homepage tracker.</small></span>
             </label>
             <label for="deep-research-homepage-visibility">Homepage visibility</label>
             <select id="deep-research-homepage-visibility">
@@ -259,16 +275,28 @@
             <h3>Research composer</h3>
             <label class="preference">
               <input id="show-deep-research-composer" type="checkbox" checked />
-              <span><strong>Show tracker in research composer</strong><small>Only appears while Deep Research is selected.</small></span>
+              <span><strong>Show tracker in research composer</strong><small>Appears while Deep Research is selected, independently of the homepage.</small></span>
             </label>
             <label class="preference">
               <input id="show-deep-research-composer-count" type="checkbox" checked />
-              <span><strong>Show reports remaining</strong></span>
+              <span><strong>Show reports remaining</strong><small>Display the count in the active composer only.</small></span>
             </label>
             <label class="preference">
               <input id="show-deep-research-composer-reset" type="checkbox" checked />
-              <span><strong>Show reset countdown</strong></span>
+              <span><strong>Show reset countdown</strong><small>Display the reset time in the active composer only.</small></span>
             </label>
+            <label class="preference">
+              <input id="show-deep-research-composer-pie" type="checkbox" />
+              <span><strong>Show usage pie in composer</strong><small>Only affects the active composer tracker.</small></span>
+            </label>
+          <h3>Prompt review</h3>
+          <label class="preference">
+            <input id="deep-research-spellcheck-enabled" type="checkbox" checked />
+            <span>
+              <strong>Spellcheck Deep Research prompts before submission</strong>
+              <small>Review Deep Research prompts with Spellcheck Only in split view before sending, in new or existing chats. Disable to send normally.</small>
+            </span>
+          </label>
           <label class="preference">
             <input id="show-writing-research-button" type="checkbox" checked />
             <span>
@@ -292,6 +320,8 @@
         </section>
 
         <section id="settings-panel-chatgpt" class="standalone-settings-panel" role="tabpanel" aria-labelledby="settings-tab-chatgpt" hidden>
+
+          <p class="help"><a id="open-chat-dispatcher" href="chat-dispatcher.html" target="_blank" rel="noopener noreferrer">Open chat dispatcher</a> — reuse ten chats and advance only after verified squash merges.</p>
         <fieldset id="chatgpt-interaction-settings" class="standalone-first-fieldset" aria-label="Chat interaction settings">
           <legend>Interaction</legend>
           <label for="composer-placeholder">Composer placeholder</label>
@@ -311,6 +341,9 @@
               <small>Prevents ChatGPT from jumping to the bottom after you send a message, keeping your current reading position.</small>
             </span>
           </label>
+          <label for="message-queue-max-height-percent">Maximum queue height (% of viewport)</label>
+          <input id="message-queue-max-height-percent" type="number" min="20" max="90" step="1" value="60" aria-describedby="message-queue-max-height-help" />
+          <p id="message-queue-max-height-help" class="help">Caps the entire queue panel at this share of the browser window's height. Longer queues scroll inside the panel. Default: 60%.</p>
           <label class="preference">
             <input id="hide-message-queue-button" type="checkbox" checked />
             <span>
@@ -345,6 +378,13 @@
             </span>
           </label>
           <label class="preference">
+            <input id="show-refresh-view" type="checkbox" checked />
+            <span>
+              <strong>Show Refresh view button</strong>
+              <small>Display the in-place Refresh view button at the bottom left of conversations. Enabled by default.</small>
+            </span>
+          </label>
+          <label class="preference">
             <input id="block-voice-prompts" type="checkbox" />
             <span>
               <strong>Block voice popups</strong>
@@ -356,6 +396,13 @@
             <span>
               <strong>Hide microphone and voice buttons</strong>
               <small>Hides the dictation microphone and ChatGPT's Start Voice / voice-mode button.</small>
+            </span>
+          </label>
+          <label class="preference">
+            <input id="hide-new-chat-composer" type="checkbox" />
+            <span>
+              <strong>Hide new-chat composer bar</strong>
+              <small>Hides the entire top input bar on the dashboard. Keeps your draft and existing conversation composers.</small>
             </span>
           </label>
           <label class="preference">
@@ -376,9 +423,19 @@
             <input id="show-spellcheck-gpt-launcher" type="checkbox" />
             <span>
               <strong>Show Spellcheck Only launcher</strong>
-              <small>Adds a circular shortcut beside the new-chat composer using the bundled artwork.</small>
+              <small>Adds a circular shortcut beside the new-chat composer with customizable artwork.</small>
             </span>
           </label>
+          <div class="spellcheck-launcher-artwork">
+            <img id="spellcheck-launcher-image-preview" src="artwork/spellcheck-only.jpg" alt="Spellcheck Only launcher preview" width="48" height="48" />
+            <div class="spellcheck-launcher-artwork-controls">
+              <label for="spellcheck-launcher-image-file">Custom launcher image</label>
+              <input id="spellcheck-launcher-image-file" type="file" accept="image/png,image/jpeg,image/webp,image/gif" />
+              <small>PNG, JPEG, WebP or GIF; up to 1 MB. Stored only in this browser.</small>
+              <button id="reset-spellcheck-launcher-image" type="button" class="secondary">Restore default image</button>
+            </div>
+            <small id="spellcheck-launcher-image-status" role="status" aria-live="polite"></small>
+          </div>
           <label class="preference">
             <input id="show-2048-launcher" type="checkbox" />
             <span>
@@ -492,6 +549,13 @@
               <small>Hides ChatGPT subscription upsell cards, including the Astra “Upgrade to Pro” banner, without hiding chat messages or plan controls. ON by default.</small>
             </span>
           </label>
+            <label class="preference">
+              <input id="hide-scheduled-recommendations" type="checkbox" checked />
+              <span>
+                <strong>Hide scheduled-task recommendations</strong>
+                <small>Hides the Recommended suggestion cards on ChatGPT’s Scheduled page, without hiding your actual tasks. Enabled by default.</small>
+              </span>
+            </label>
           <label class="preference">
             <input id="hide-home-suggestions" type="checkbox" />
             <span>
@@ -503,7 +567,7 @@
             <input id="hide-model-controls" type="checkbox" />
             <span>
               <strong>Hide model and thinking controls</strong>
-              <small>Hides model selection and reasoning controls. Enabled by default; Maximize thinking still works.</small>
+              <small>Hides model selection and reasoning controls. Enabled by default; Automatic High selection still works.</small>
             </span>
           </label>
           <label class="preference">
@@ -621,9 +685,11 @@
         </div>
       </div>
     </template>
+    <script src="js/settings/settings-context.js"></script>
     <script src="js/github/token-vault.js"></script>
     <script src="js/dashboard/repository-search-shortcut.js"></script>
     <script src="js/settings/options.js"></script>
+    <script src="js/settings/spellcheck-launcher-image.js"></script>
     <script src="js/dashboard/pinned-issues-model.js"></script>
     <script src="js/settings/pinned-issues-options.js"></script>
     <script src="js/settings/highlighted-pages-options.js"></script>
@@ -632,6 +698,7 @@
     <script src="js/settings/owner-grid-options.js"></script>
     <script src="js/settings/options-page.js"></script>
     <script src="js/composer/composer-colors.js"></script>
+    <script src="js/dashboard/dashboard-colors.js"></script>
     <script src="js/settings/autofocus-options.js"></script>
   </body>
 </html>
