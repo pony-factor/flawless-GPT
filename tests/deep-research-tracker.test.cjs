@@ -1,6 +1,6 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { parseAllowance, selectedResearchQuota, usagePieTotal, usagePiePercent } = require('../js/research/deep-research-tracker.js');
+const { parseAllowance, selectedResearchQuota, selectedResearchPieTotal, usagePieTotal, usagePiePercent } = require('../js/research/deep-research-tracker.js');
 const { quotaFromResponse } = require('../js/research/deep-research-usage.js');
 
 test('usage pie accepts reported or custom totals and estimates common tiers', () => {
@@ -26,7 +26,7 @@ test('usage pie accepts reported or custom totals and estimates common tiers', (
   assert.equal(usagePiePercent(201, 200), null);
 });
 
-test('both settings views default to full-only counter and share the same preference', () => {
+test('both settings views keep the same quota pool but independent presentation', () => {
   const fs = require('node:fs');
   const path = require('node:path');
   for (const file of ['options.html', 'popup.html']) {
@@ -34,10 +34,43 @@ test('both settings views default to full-only counter and share the same prefer
     assert.match(html, /id="deep-research-allowance-mode"/);
     assert.match(html, /<option value="full" selected>Full research only<\/option>/);
     assert.match(html, /<option value="all">Full \+ lightweight<\/option>/);
+    for (const location of ['homepage', 'composer']) {
+      for (const detail of ['count', 'reset', 'pie']) {
+        assert.match(html, new RegExp('id="show-deep-research-' + location + '-' + detail + '"'));
+      }
+    }
+    assert.match(html, /independently of the homepage/);
+    assert.doesNotMatch(html, /id="show-deep-research-usage-pie"/);
   }
   const settings = fs.readFileSync(path.join(__dirname, '../js/settings/options.js'), 'utf8');
   assert.match(settings, /deepResearchAllowanceMode: "full"/);
   assert.match(settings, /deepResearchAllowanceMode: deepResearchAllowanceModeInput\.value/);
+  for (const key of ['showDeepResearchComposerCount', 'showDeepResearchComposerReset',
+    'showDeepResearchHomepagePie', 'showDeepResearchComposerPie']) {
+    assert.match(settings, new RegExp(key));
+  }
+  const tracker = fs.readFileSync(path.join(__dirname, '../js/research/deep-research-tracker.js'), 'utf8');
+  assert.doesNotMatch(tracker, /homepageShowsAllowance/);
+  assert.match(tracker, /function onMutations/);
+  assert.doesNotMatch(tracker, /characterData: true/);
+  assert.match(settings, /deepResearchUsagePieTotals: \{ \.\.\.researchPieTotals \}/);
+  assert.match(settings, /renderSelectedResearchPieTotal\(\)/);
+});
+
+test('custom pie totals stay mode-specific and old totals migrate to their prior mode', () => {
+  const settings = { deepResearchAllowanceMode: 'full', deepResearchUsagePieTotal: 250,
+    deepResearchUsagePieTotals: { full: 20, all: 200 } };
+  assert.equal(selectedResearchPieTotal(settings, 'full'), 20);
+  assert.equal(selectedResearchPieTotal(settings, 'all'), 200);
+  assert.equal(usagePiePercent(13, usagePieTotal(13, null, selectedResearchPieTotal(settings, 'full'))), 65);
+  assert.equal(usagePiePercent(100, usagePieTotal(100, null, selectedResearchPieTotal(settings, 'all'))), 50);
+  assert.equal(selectedResearchPieTotal({ ...settings, deepResearchUsagePieTotals: { full: null, all: 200 } }, 'full'), null);
+  assert.equal(selectedResearchPieTotal({ deepResearchAllowanceMode: 'full', deepResearchUsagePieTotal: 20 }, 'full'), 20);
+  assert.equal(selectedResearchPieTotal({ deepResearchAllowanceMode: 'full', deepResearchUsagePieTotal: 20 }, 'all'), null);
+  assert.equal(selectedResearchPieTotal({ deepResearchAllowanceMode: 'all', deepResearchUsagePieTotal: 200 }, 'all'), 200);
+  assert.equal(selectedResearchPieTotal({ deepResearchAllowanceMode: 'all', deepResearchUsagePieTotal: 200 }, 'full'), null);
+  assert.equal(selectedResearchPieTotal({ deepResearchUsagePieTotals: { full: 10001, all: -1 } }, 'full'), null);
+  assert.equal(selectedResearchPieTotal({ deepResearchUsagePieTotals: { full: 10001, all: -1 } }, 'all'), null);
 });
 
 test('full-only default and combined selection keep research pools distinct', () => {
@@ -66,18 +99,18 @@ test('reads separate full and lightweight quota fields without combining them', 
   ] }).miniRemaining, undefined);
 });
 
-test('reads the server report bucket and timestamp while excluding lightweight reports', () => {
+test('reads the server full bucket and timestamp without mixing lightweight quotas', () => {
   assert.deepEqual(quotaFromResponse({ limits_progress: [
     { feature_name: 'deep_research_mini', remaining: 99, reset_after: '2026-11-01T00:00:00Z' },
     { feature_name: 'deep_research', remaining: 13, reset_after: '2026-10-21T17:43:43.591330+00:00' },
-  ] }, 1000), { remaining: 13, resetAt: Date.parse('2026-10-21T17:43:43.591Z'), observedAt: 1000 });
+  ] }, 1000), { remaining: 13, resetAt: Date.parse('2026-10-21T17:43:43.591Z'), observedAt: 1000, miniRemaining: 99 });
 });
 
 test('uses the full-research quota total if the server reports one', () => {
   assert.deepEqual(quotaFromResponse({ limits_progress: [
     { feature_name: 'deep_research_mini', remaining: 17, total: 1000 },
     { feature_name: 'deep_research', remaining: 200, total: 250 },
-  ] }, 1000), { remaining: 200, resetAt: null, observedAt: 1000, total: 250 });
+  ] }, 1000), { remaining: 200, resetAt: null, observedAt: 1000, total: 250, miniRemaining: 17, miniTotal: 1000 });
   assert.equal(quotaFromResponse({ limits_progress: [
     { feature_name: 'deep_research', remaining: 20, limit: 200 },
   ] }).total, 200);

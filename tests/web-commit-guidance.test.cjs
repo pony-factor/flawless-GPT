@@ -97,3 +97,25 @@ test("migrates old guidance and folds in the co-author preference", async () => 
   assert.equal(state.storage.codexCustomInstructions, undefined);
   assert.equal(state.storage.codexWebCoauthor, undefined);
 });
+
+
+test("preserves oversized saved guidance and explains the sync limit on load and edit", async () => {
+  const guidance = "x".repeat(7492);
+  const state = await fixture({ webCommitGuidance: guidance,
+    webCommitGuidanceSyncStatus: { message: "Update failed (422).", state: "error" } });
+  assert.equal(state.textarea.value, guidance);
+  assert.match(state.status.textContent, /7,492.*2,492/);
+  state.textarea.value = "y".repeat(5001);
+  state.textarea.dispatch("change");
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(state.storage.webCommitGuidance.length, 5001);
+  assert.match(state.status.textContent, /5,001.*1 characters/);
+  state.storageListeners[0]({ webCommitGuidanceSyncStatus: {
+    newValue: { message: "Update failed (422).", state: "error" },
+  } }, "local");
+  assert.match(state.status.textContent, /5,001/);
+  state.textarea.value = "Valid guidance";
+  state.textarea.dispatch("change");
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.match(state.status.textContent, /syncing with ChatGPT/);
+});

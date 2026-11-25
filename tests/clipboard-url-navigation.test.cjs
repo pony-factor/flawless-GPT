@@ -25,9 +25,13 @@ function clipboard(url, response = { ok: true }) {
   return { run: () => scope.openForTest(button), navigations, messages, button };
 }
 
-function worker(allowed = true, fail = false) {
-  const navigations = []; let listener;
+function worker(allowed = true, fail = false, searchFail = false) {
+  const navigations = [], searches = []; let listener;
   vm.runInNewContext(read("links/clipboard-url-navigation.js"), { URL, chrome: {
+    search: { query: async query => {
+      if (searchFail) throw Error("Browser search unavailable");
+      searches.push(JSON.parse(JSON.stringify(query)));
+    } },
     extension: { isAllowedFileSchemeAccess: async () => allowed },
     tabs: { update: async (id, { url }) => {
       if (fail) throw Error("browser blocked local URL");
@@ -36,8 +40,10 @@ function worker(allowed = true, fail = false) {
     runtime: { onMessage: { addListener: callback => { listener = callback; } } },
   } });
   const sender = { url: "https://chatgpt.com/", frameId: 0, tab: { id: 4 } };
-  return { navigations, send: (url, from = sender) => new Promise(resolve => {
+  return { navigations, searches, send: (url, from = sender) => new Promise(resolve => {
     assert.equal(listener({ type: "open-local-clipboard-url", url }, from, resolve), true);
+  }), search: (text, from = sender) => new Promise(resolve => {
+    assert.equal(listener({ type: "search-clipboard-text", text }, from, resolve), true);
   }), listener };
 }
 
@@ -54,13 +60,13 @@ test("clipboard surfaces file permission errors", async () => {
   assert.equal(f.button.label, "Enable file URLs");
 });
 
-test("HTTP URLs keep working and javascript URLs are rejected", async () => {
+test("HTTP URLs keep working and unsafe schemes use the default search engine", async () => {
   const good = clipboard("https://www.sec.gov/report.pdf"); await good.run();
   assert.deepEqual(good.navigations, ["https://www.sec.gov/report.pdf"]);
   assert.deepEqual(good.messages, []);
   const bad = clipboard("javascript:alert(1)"); await bad.run();
   assert.deepEqual(bad.navigations, []);
-  assert.deepEqual(bad.messages, []);
+  assert.deepEqual(bad.messages, [{ type: "search-clipboard-text", text: "javascript:alert(1)" }]);
 });
 
 test("clipboard URL button strips surrounding punctuation and repairs spaces after the scheme", async () => {
@@ -91,17 +97,35 @@ test("clipboard URLs keep meaningful punctuation inside paths, queries and fragm
   assert.deepEqual(wrapped.navigations, ["https://en.wikipedia.org/wiki/Function_(mathematics)"]);
 });
 
-test("clipboard navigation refuses arbitrary prose or a non-URL scheme", async () => {
+test("clipboard text that is not a standalone URL searches with the default engine", async () => {
   for (const input of [
-    "See https://example.org/article",
-    "https://example.org/article and other text",
-    "javascript:alert(1)",
-    "https://",
+    "See https://example.org/article", "https://example.org/article and other text",
+    "javascript:alert(1)", "ftp://example.org/file", "https://",
+    "Stellar transfer agents", "  A & B? #C  ",
   ]) {
     const f = clipboard(input);
     await f.run();
     assert.deepEqual(f.navigations, [], input);
-    assert.deepEqual(f.messages, [], input);
+    assert.deepEqual(f.messages, [{ type: "search-clipboard-text", text: input.trim() }], input);
+  }
+});
+
+test("clipboard search errors are surfaced and the button becomes available again", async () => {
+  const f = clipboard("search terms", { ok: false, error: "Browser search unavailable" });
+  await f.run();
+  assert.deepEqual(f.navigations, []);
+  assert.equal(f.button.title, "Browser search unavailable");
+  assert.equal(f.button.label, "Browser search unavailable");
+  assert.equal(f.button.disabled, false);
+});
+
+test("empty clipboard does not navigate or submit a search", async () => {
+  for (const input of ["", "  \t\n  "]) {
+    const f = clipboard(input);
+    await f.run();
+    assert.deepEqual(f.navigations, []);
+    assert.deepEqual(f.messages, []);
+    assert.equal(f.button.title, "Clipboard has no text to open or search");
   }
 });
 
@@ -137,4 +161,36 @@ test("worker reports browser navigation failures", async () => {
   const f = worker(true, true), res = await f.send(fileUrl);
   assert.equal(res.ok, false); assert.match(res.error, /file-URL access/);
   assert.deepEqual(f.navigations, []);
+});
+
+test("worker uses the browser default provider and originating tab", async () => {
+  const f = worker();
+  assert.equal((await f.search("  My Little Pony & Stellar  ")).ok, true);
+  assert.deepEqual(f.searches, [{ tabId: 4, text: "My Little Pony & Stellar" }]);
+  assert.deepEqual(f.navigations, []);
+});
+
+test("worker refuses searches from untrusted origins, frames or empty content", async () => {
+  const f = worker();
+  for (const from of [
+    { url: "https://evil.example/", frameId: 0, tab: { id: 4 } },
+    { url: "https://chatgpt.com/", frameId: 1, tab: { id: 4 } },
+    { url: "https://chatgpt.com/", frameId: 0 },
+  ]) assert.equal((await f.search("hi", from)).ok, false);
+  for (const query of ["", "   ", null, 123])
+    assert.equal((await f.search(query)).ok, false);
+  assert.deepEqual(f.searches, []);
+});
+
+test("worker surfaces search failures without assuming Google or another provider", async () => {
+  const f = worker(true, false, true), result = await f.search("Brave search");
+  assert.equal(result.ok, false);
+  assert.match(result.error, /default search engine/);
+  assert.deepEqual(f.navigations, []);
+  assert.deepEqual(f.searches, []);
+});
+
+test("extension requests the native search permission", () => {
+  const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, "../manifest.json"), "utf8"));
+  assert.ok(manifest.permissions.includes("search"));
 });

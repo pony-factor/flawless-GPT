@@ -15,7 +15,8 @@
 
   // ChatGPT reads this preference again on window focus. Keep its value local
   // to this tab so both hover reveals and manual toggles stay independent.
-  let state = "collapsed";
+  const isSettingsRoute = () => /(?:^|\/)settings(?:\/|$)/.test(location.pathname);
+  let state = isSettingsRoute() ? "expanded" : "collapsed";
 
   Object.defineProperty(document, "cookie", {
     configurable: true,
@@ -23,7 +24,7 @@
     get() {
       const cookies = Reflect.apply(cookie.get, this, []).split(/;\s*/)
         .filter(value => value && value.split("=", 1)[0] !== COOKIE_NAME);
-      cookies.push(`${COOKIE_NAME}=${state}`);
+      cookies.push(`${COOKIE_NAME}=${isSettingsRoute() ? "expanded" : state}`);
       return cookies.join("; ");
     },
     set(value) {

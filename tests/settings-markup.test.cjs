@@ -34,3 +34,11 @@ test("standalone settings section headings are centered", () => {
   assert.match(css, /\.standalone-options fieldset > legend,\s*\.standalone-options fieldset > h3\s*\{\s*text-align:\s*center;/);
   assert.match(css, /\.standalone-options fieldset > legend\s*\{[^}]*width:\s*100%;/);
 });
+
+test("both settings pages expose the queue height percentage control", () => {
+  for (const page of ["popup.html", "options.html"]) {
+    const html = fs.readFileSync(path.join(root, page), "utf8");
+    assert.match(html, /id="message-queue-max-height-percent" type="number" min="20" max="90" step="1" value="60"/);
+    assert.match(html, /id="message-queue-max-height-help"/);
+  }
+});

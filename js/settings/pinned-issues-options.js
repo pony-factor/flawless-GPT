@@ -1,5 +1,6 @@
 (() => {
   "use strict";
+  if (globalThis.__ghrcSettingsContext?.active() === false) return;
   const model = globalThis.__ghrcPinnedIssues;
   if (!model || !document.getElementById("pinned-issues-settings")) return;
   const KEY = "pinnedIssues";

@@ -33,6 +33,7 @@
   function status(job) {
     if (job.state === 'complete' && job.result) return null;
     if (job.state === 'import-retry') return 'Import interrupted · retrying automatically…';
+    if (job.state === 'import-error') return 'Import failed. ' + (job.error || 'Open the report to try again.');
     if (job.error) return job.error;
     if (job.state === 'importing') return 'Adding completed research to the repository…';
     return 'Research import queued · ' + (job.category ? '/' + job.category : 'repository root');
@@ -119,7 +120,7 @@
           retryAt = 0;
         } catch (error) {
           retryAt = Date.now() + 10_000;
-          render({ state: 'import-error', error: error.message });
+          render({ error: error.message });
         }
       }
       if (job?.manual) {
@@ -128,7 +129,7 @@
       } else if (!first) document.getElementById(BAR_ID)?.remove();
     } catch (error) {
       if (document.getElementById(BAR_ID) || firstResearchMessage())
-        render({ state: 'import-error', error: error.message });
+        render({ error: error.message });
     } finally { checking = false; }
   }
   chrome.storage.local.get({ researchPublisherEnabled: false }).then(settings => {

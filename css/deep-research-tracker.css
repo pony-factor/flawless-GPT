@@ -1,3 +1,46 @@
+#ghrc-research-home-launcher {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin: 0 10px 5px;
+  min-height: 30px;
+}
+
+#ghrc-research-home-launcher button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 30px;
+  padding: 3px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+#ghrc-research-home-launcher button:hover,
+#ghrc-research-home-launcher button:focus-visible {
+  background: var(--main-surface-secondary, color-mix(in srgb, currentColor 8%, transparent));
+}
+
+#ghrc-research-home-launcher img {
+  width: 36px;
+  height: 24px;
+  object-fit: contain;
+}
+
+#ghrc-research-home-launcher .ghrc-research-home-status {
+  font-size: 11px;
+  color: var(--text-secondary, inherit);
+}
+
+#ghrc-research-home-launcher .ghrc-research-home-status:empty {
+  display: none;
+}
+
 .ghrc-deep-research-tracker {
   display: flex;
   align-items: center;

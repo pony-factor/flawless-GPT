@@ -63,8 +63,8 @@ function app({ enabled = true, connected = true } = {}) {
   const load = () => {
     listeners = [];
     const context = vm.createContext({ chrome, URL, TextEncoder, Date: { now: () => now }, crypto: { randomUUID: () => 'run-' + nextId }, console });
-    for (const file of ['js/research/research-publisher-background.js', 'js/research/research-launcher-background.js'])
-      vm.runInContext(fs.readFileSync(file, 'utf8'), context);
+    for (const file of ['research-report-origin.js', 'research-publisher-background.js', 'research-launcher-background.js'])
+      vm.runInContext(fs.readFileSync('js/research/' + file, 'utf8'), context);
   };
   load();
   const source = { id: 'extension', frameId: 0, url: 'https://chatgpt.com/c/source', tab: { id: 1, url: 'https://chatgpt.com/c/source' } };
@@ -89,6 +89,19 @@ async function submitted(a) {
 function publish(job) {
   return { type: 'publish-research-report', title: 'Finished report', markdown: '# Finished report\nEvidence', automationJobId: job.id, category: 'Ignored' };
 }
+
+test('connector ID report frames can recover and finish automatic imports', async () => {
+  const a = app();
+  const job = await submitted(a);
+  const sender = {
+    ...a.report(job.tabId),
+    origin: 'https://connector-id-0123456789abcdef0123456789abcdef.web-sandbox.oaiusercontent.com',
+  };
+  const lookup = await a.send({ type: 'research-launch-job' }, sender);
+  assert.equal(lookup.job.state, 'submitted');
+  assert.equal((await a.send(publish(job), sender)).ok, true);
+  assert.equal((await a.send({ type: 'research-launch-job' }, sender)).job.state, 'complete');
+});
 
 test('launcher checks the connection before opening a small window and retains the exact prompt', async () => {
   const a = app();
@@ -176,6 +189,27 @@ test('destination changes stop imports while transient native failures wait for 
     assert.equal(a.session['researchLaunch:' + job.tabId].state, changed ? 'import-error' : 'import-retry');
     assert.equal((await a.send(publish(job), a.report(job.tabId))).ok, false);
     assert.equal(a.calls.filter(x => x[1]?.action === 'publish').length, changed ? 0 : 1);
+  }
+});
+
+test('unpublishable reports persist an import failure visible to the source tab', async () => {
+  for (const [fields, reason] of [
+    [{ markdown: undefined, oversized: true }, /too large/],
+    [{ title: 'x'.repeat(501) }, /title or contents/],
+  ]) {
+    const a = app();
+    const job = await submitted(a);
+    const attempt = { ...publish(job), ...fields };
+    assert.equal((await a.send(attempt, a.report(999))).ok, false);
+    assert.equal(a.session['researchLaunch:' + job.tabId].state, 'submitted');
+    assert.match((await a.send(attempt, a.report(job.tabId))).error, reason);
+    delete a.session['researchLaunch:' + job.tabId];
+    a.restart();
+    const status = await a.send({ type: 'research-launch-status', tabId: job.tabId, id: job.id });
+    assert.equal(status.job.state, 'import-error');
+    assert.match(status.job.error, reason);
+    assert.equal((await a.send(attempt, a.report(job.tabId))).ok, false);
+    assert.equal(a.calls.filter(call => call[1]?.action === 'publish').length, 0);
   }
 });
 

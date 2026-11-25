@@ -139,7 +139,7 @@ function fixture({ clipboard = 'clipboard text', draft = '', suggestionAvailable
   vm.createContext(context);
   const prefix = source.slice(0, source.indexOf('  chrome.storage.onChanged'));
   vm.runInContext(prefix + `
-    globalThis.api = { launchSpellcheck, activateSpellcheckPlugin, appendSpellcheckText, submitWhenReady };
+    globalThis.api = { launchSpellcheck, activateSpellcheckPlugin, appendSpellcheckText, submitWhenReady, createLauncher, setIconSource };
   })();`, context);
 
   return {
@@ -227,4 +227,35 @@ test('spellcheck launcher shows artwork without a CSS border or shadow ring', ()
   const css = fs.readFileSync(path.join(__dirname, '../css/spellcheck-launcher.css'), 'utf8');
   assert.match(css, /#ghrc-spellcheck-gpt-launcher\s*\{[^}]*border:\s*0;/s);
   assert.match(css, /#ghrc-spellcheck-gpt-launcher\s*\{[^}]*box-shadow:\s*none;/s);
+});
+
+test('Spellcheck Only artwork references the bundled JPG', () => {
+  const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, '../manifest.json'), 'utf8'));
+  const asset = 'artwork/spellcheck-only.jpg';
+  assert.ok(fs.existsSync(path.join(__dirname, '..', asset)));
+  assert.match(source, /const ICON_PATH = "artwork\/spellcheck-only\.jpg";/);
+  assert.ok(manifest.web_accessible_resources.some(entry => entry.resources?.includes(asset)));
+  assert.ok(!manifest.web_accessible_resources.some(entry => entry.resources?.includes('artwork/spellcheck-only.png')));
+});
+
+
+test('launcher artwork switches to a local custom image and rejects unsafe formats', () => {
+  const f = fixture();
+  const image = { src: '', addEventListener() {}, setAttribute() {} };
+  const button = {
+    append(child) { this.image = child; },
+    addEventListener() {},
+    setAttribute() {},
+    querySelector(selector) { return selector === 'img' ? this.image : null; },
+  };
+  f.context.document.createElement = (tag) => tag === 'img' ? image : button;
+  f.context.document.getElementById = () => button;
+  f.api.createLauncher();
+  assert.equal(image.src, 'artwork/spellcheck-only.jpg');
+  f.api.setIconSource('data:image/png;base64,aGVsbG8=');
+  assert.equal(image.src, 'data:image/png;base64,aGVsbG8=');
+  f.api.setIconSource('data:image/svg+xml;base64,aGVsbG8=');
+  assert.equal(image.src, 'artwork/spellcheck-only.jpg');
+  f.api.setIconSource(undefined);
+  assert.equal(image.src, 'artwork/spellcheck-only.jpg');
 });

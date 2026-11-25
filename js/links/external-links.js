@@ -2,7 +2,7 @@
   const EXTERNAL_WARNING_SETTING_KEY = "skipExternalSiteWarning";
   const HISTORY_MODAL_SETTING_KEY = "dismissHistoryRateLimitModal";
   const STRIP_UTM_TRACKING_SETTING_KEY = "stripUtmTracking";
-  const USER_MESSAGE_SELECTOR = '[data-message-author-role="user"], [data-author-role="user"], [data-testid="user-message"], [data-markdown-text-tone="user-message"]';
+  const USER_MESSAGE_SELECTOR = '[data-message-author-role="user"], [data-conversation-role="user"], [data-author-role="user"], [data-testid="user-message"], [data-markdown-text-tone="user-message"]';
   const MODAL_ID = "modal-conversation-history-rate-limit";
   const DIALOG_SELECTOR = '[role="dialog"], [role="alertdialog"]';
   const EXTERNAL_DIALOG_TITLE = "External site";
@@ -175,6 +175,31 @@
     event.stopImmediatePropagation();
     if (newTabsEnabled) window.open(url.href, "_blank", "noopener,noreferrer");
     else window.location.assign(url.href);
+    return true;
+  }
+
+  // DIL document/source cards are React pressables without an href. When the
+  // same document is already open beside chat, React can treat another card
+  // click as selecting the current item instead of opening its external URL.
+  function openExternalCard(event) {
+    if (!newTabsEnabled || !isPlainPrimaryActivation(event)) return false;
+    const card = event.target.closest?.('[data-d-component="pressable"]');
+    if (!card || !card.closest('main, [role="dialog"]')
+        || card.closest('#ghrc-link-preview, .ghrc-link-actions')
+        || event.target.closest?.('a[href], input, textarea, select, [contenteditable="true"]')) return false;
+    // Nested buttons retain their own actions, such as expanding card details.
+    const control = event.target.closest?.('button, [role="button"]');
+    if (control && control !== card) return false;
+
+    card.dispatchEvent(new Event(card.closest('[role="dialog"]')
+      ? "ghrc-resolve-citation-url" : "ghrc-resolve-item-url", { bubbles: true }));
+    let url;
+    try { url = new URL(card.getAttribute("data-ghrc-citation-url")); } catch { return false; }
+    if (!["http:", "https:"].includes(url.protocol) || url.origin === window.location.origin
+        || url.username || url.password) return false;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    window.open(stripTrackingFromUrl(url).href, "_blank", "noopener,noreferrer");
     return true;
   }
 
@@ -441,6 +466,7 @@
     header.append(close, copy, open, destination);
     panel.append(resizer, header);
 
+
     if (nativeGuide) {
       const content = document.createElement("div");
       content.className = "ghrc-preview-content";
@@ -540,12 +566,45 @@
     });
   }
 
-  function handleBlockedPreview(error) {
+  function handleBlockedPreview(error, destinationUrl) {
     if (!previewWatch) return;
-    const { href, link, panel } = previewWatch;
+    const { href, panel } = previewWatch;
     const hostname = new URL(href).hostname;
     if (hostname !== "github.com" && hostname !== "www.github.com") {
-      void openNativeSplitView(href, link);
+      const watch = previewWatch;
+      previewWatch = null;
+      void (async () => {
+        try {
+          const result = await chrome.runtime.sendMessage({
+            type: "open-blocked-link-preview", url: href, previewId: watch.id,
+          });
+          if (!result?.ok) throw new Error("Could not open this website in a separate tab.");
+          if (previewPanel === panel) closeLinkPreview(false);
+        } catch {
+          if (!panel.isConnected) return;
+          panel.querySelector("iframe")?.remove();
+          const content = document.createElement("div");
+          content.className = "ghrc-preview-content";
+          content.setAttribute("role", "status");
+          content.textContent = "This website cannot load in the sidebar. Use Open in new tab to complete verification or view the page.";
+          try {
+            const target = new URL(destinationUrl || href);
+            if (["https:", "http:"].includes(target.protocol) && !target.username && !target.password) {
+              const open = document.createElement("a");
+              open.href = target.href;
+              open.target = "_blank";
+              open.rel = "noopener noreferrer";
+              open.textContent = "Open this link in a new tab";
+              content.append(document.createElement("br"), open);
+            }
+          } catch {
+            // The existing header control remains usable for the original URL.
+          }
+          panel.append(content);
+        } finally {
+          void unwatchLinkPreview(watch.id);
+        }
+      })();
       return;
     }
     if (!["net::ERR_BLOCKED_BY_RESPONSE", "net::ERR_BLOCKED_BY_CSP"].includes(error)) return;
@@ -980,7 +1039,7 @@
   chrome.runtime.onMessage.addListener(message => {
     if (message?.type !== "link-preview-navigation-error" || !previewWatch
         || message.previewId !== previewWatch.id || message.url !== previewWatch.href) return;
-    handleBlockedPreview(message.error);
+    handleBlockedPreview(message.error, message.destinationUrl);
   });
 
   function preserveNativeScroll(event) {
@@ -1068,7 +1127,7 @@
       characterData: true,
       subtree: true,
       attributes: true,
-      attributeFilter: ["href", "data-message-author-role", "data-author-role", "data-testid", "data-markdown-text-tone"],
+      attributeFilter: ["href", "data-message-author-role", "data-conversation-role", "data-author-role", "data-testid", "data-markdown-text-tone"],
     });
   }
 
@@ -1167,7 +1226,7 @@
     }
     const link = event.target.closest?.("a[href]");
     stripTrackingFromLink(link);
-    openExternalLink(event, link);
+    if (!openExternalLink(event, link)) openExternalCard(event);
   }, true);
 
   document.addEventListener("keydown", (event) => {

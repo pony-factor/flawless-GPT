@@ -1,4 +1,5 @@
 (() => {
+  if (globalThis.__ghrcSettingsContext?.active() === false) return;
   const researchButton = document.getElementById('show-writing-research-button');
   const RESEARCH_BUTTON_KEY = 'showWritingResearchButton';
   const CONNECTION_KEY = 'researchPublisherConnection';

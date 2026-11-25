@@ -8,17 +8,23 @@ let browser;
 
 before(async () => {
   browser = await chromium.launch({
-    executablePath: '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser',
+    executablePath: process.env.BROWSER_EXECUTABLE || '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser',
     headless: true,
   });
 });
 after(async () => { await browser?.close(); });
 
-async function fixture() {
+async function fixture({ html, route = '/' } = {}) {
   const page = await browser.newPage({ viewport: { width: 1100, height: 800 } });
   page.errors = [];
   page.on('pageerror', error => page.errors.push(error.message));
-  await page.setContent('<style>body{margin:0}aside{position:fixed;left:0;top:0;width:260px;height:100vh;background:#eee}svg{width:24px;height:24px}button{display:flex;align-items:center}button[aria-label="Show sidebar"]{position:absolute;left:7px;top:12px;width:44px;height:44px}</style><aside><button aria-label="Show sidebar" onclick="window.sidebarClicks=(window.sidebarClicks||0)+1"><svg></svg></button><button aria-label="New chat" onclick="window.newChats=(window.newChats||0)+1"><svg></svg><span>New chat</span></button><p>ChatGPT</p></aside><main></main>');
+  const body = html ||
+    '<style>body{margin:0}aside{position:fixed;left:0;top:0;width:260px;height:100vh;background:#eee}svg{width:24px;height:24px}button{display:flex;align-items:center}button[aria-label="Show sidebar"]{position:absolute;left:7px;top:12px;width:44px;height:44px}</style><aside><button aria-label="Show sidebar" onclick="window.sidebarClicks=(window.sidebarClicks||0)+1"><svg></svg></button><button aria-label="New chat" onclick="window.newChats=(window.newChats||0)+1"><svg></svg><span>New chat</span></button><p>ChatGPT</p></aside><main></main>';
+  await page.route('https://chatgpt.com/**', request => request.fulfill({
+    body: '<!doctype html>' + body,
+    contentType: 'text/html',
+  }));
+  await page.goto('https://chatgpt.com' + route);
   await page.evaluate(() => {
     window.chrome = {
       runtime: { id: 'fixture', getURL: file => 'chrome-extension://fixture/' + file },
@@ -36,7 +42,7 @@ test('one mascot starts native New chat without opening the sidebar', async () =
   const mascot = page.locator('#ghrc-flawless-corner');
   assert.equal(await mascot.count(), 1);
   assert.equal(await mascot.getAttribute('aria-label'), 'New chat');
-  assert.match(await mascot.locator('img').getAttribute('src'), /artwork\/squeaky-belle-full\.webp$/);
+  assert.match(await mascot.locator('img').getAttribute('src'), /artwork\/SB-icon\.webp$/);
   const bounds = await mascot.boundingBox();
   assert.equal(bounds.width, 33);
   assert.equal(bounds.height, 33);
@@ -75,17 +81,17 @@ test('mascot animates in place on hover and returns to its still frame on exit',
   const image = mascot.locator('img');
   const initialBounds = await mascot.boundingBox();
 
-  assert.ok((await image.getAttribute('src')).endsWith('artwork/squeaky-belle-full.webp'));
+  assert.ok((await image.getAttribute('src')).endsWith('artwork/SB-icon.webp'));
   await mascot.hover();
-  assert.ok((await image.getAttribute('src')).endsWith('artwork/squeaky-belle-full.gif'));
+  assert.ok((await image.getAttribute('src')).endsWith('artwork/SB-icon.gif'));
   assert.deepEqual(await mascot.boundingBox(), initialBounds);
 
   await page.mouse.move(600, 300);
-  assert.ok((await image.getAttribute('src')).endsWith('artwork/squeaky-belle-full.webp'));
+  assert.ok((await image.getAttribute('src')).endsWith('artwork/SB-icon.webp'));
   assert.deepEqual(await mascot.boundingBox(), initialBounds);
 
   await mascot.hover();
-  assert.ok((await image.getAttribute('src')).endsWith('artwork/squeaky-belle-full.gif'));
+  assert.ok((await image.getAttribute('src')).endsWith('artwork/SB-icon.gif'));
   await mascot.click();
   assert.equal(await page.evaluate(() => window.newChats), 1);
   assert.equal(await page.evaluate(() => window.sidebarClicks || 0), 0);
@@ -96,8 +102,81 @@ test('mascot animates in place on hover and returns to its still frame on exit',
 test('animated mascot image is web-accessible to ChatGPT pages', () => {
   const manifest = JSON.parse(read('manifest.json'));
   const resources = manifest.web_accessible_resources.flatMap(group => group.resources);
-  assert.ok(resources.includes('artwork/squeaky-belle-full.webp'));
-  assert.ok(resources.includes('artwork/squeaky-belle-full.gif'));
+  assert.ok(resources.includes('artwork/SB-icon.webp'));
+  assert.ok(resources.includes('artwork/SB-icon.gif'));
+});
+
+test('the modern toolbar keeps the native New chat action and uses its icon slot', async () => {
+  const page = await fixture({
+    html: '<aside hidden><button aria-label="Toggle sidebar"><svg></svg></button><button aria-label="New chat"><svg></svg></button></aside><header><button aria-label="New chat" onclick="window.newChats=(window.newChats||0)+1"><svg aria-hidden="true" width="20" height="20"></svg></button></header>',
+    route: '/c/example',
+  });
+  const button = page.getByRole('button', { name: 'New chat', exact: true });
+  const image = button.locator('.ghrc-flawless-mascot-image');
+  assert.equal(await image.count(), 1);
+  assert.equal(await page.locator('#ghrc-flawless-corner').count(), 0);
+  assert.equal(await button.locator('svg').isVisible(), false);
+  await page.mouse.move(600, 300);
+  await button.hover();
+  assert.match(await image.getAttribute('src'), /SB-icon\.gif$/);
+  await button.click();
+  assert.equal(await page.evaluate(() => window.newChats), 1);
+  await button.evaluate(element => { element.innerHTML = '<svg width="20" height="20"></svg>'; });
+  await image.waitFor();
+  await page.evaluate(() => { history.pushState({}, '', '/s/example'); });
+  await image.waitFor({ state: 'detached' });
+  assert.equal(await button.locator('svg').isVisible(), true);
+  await page.evaluate(() => { history.pushState({}, '', '/c/example'); });
+  await image.waitFor();
+  assert.deepEqual(page.errors, []);
+  await page.close();
+});
+
+test('the app navigation rail uses its native Home button for the mascot', async () => {
+  const page = await fixture({
+    html: `<nav aria-label="App navigation" data-app-navigation-rail="true">
+      <button data-sidebar-destination="builtin:home" onclick="window.homeClicks=(window.homeClicks||0)+1">
+        <span><svg aria-hidden="true" width="20" height="20"></svg><span>Home</span></span>
+      </button>
+      <button data-sidebar-destination="builtin:space">Space</button>
+    </nav><header><button aria-label="New chat"><svg width="20" height="20"></svg></button></header>`,
+    route: '/c/example',
+  });
+  const home = page.getByRole('button', { name: 'Home', exact: true });
+  const newChat = page.getByRole('button', { name: 'New chat', exact: true });
+  const mascot = home.locator('.ghrc-flawless-mascot-image');
+  assert.equal(await page.locator('.ghrc-flawless-mascot-image').count(), 1);
+  assert.equal(await home.locator('svg').isVisible(), false);
+  assert.equal(await newChat.locator('svg').isVisible(), true);
+  await home.hover();
+  assert.match(await mascot.getAttribute('src'), /SB-icon\.gif$/);
+  await home.press('Enter');
+  assert.equal(await page.evaluate(() => window.homeClicks), 1);
+
+  await home.evaluate(element => { element.firstElementChild.outerHTML = element.firstElementChild.outerHTML.replace(/<img[^>]+>/, ''); });
+  await mascot.waitFor();
+  assert.equal(await home.locator('svg').isVisible(), false);
+  await page.evaluate(() => {
+    chrome.runtime = undefined;
+    __ghrcExtensionContext.active();
+  });
+  assert.equal(await mascot.count(), 0);
+  assert.equal(await home.locator('svg').isVisible(), true);
+  assert.deepEqual(page.errors, []);
+  await page.close();
+});
+
+test('shared links and pages without an eligible control have no floating mascot', async () => {
+  for (const route of ['/s/example', '/share/example', '/']) {
+    const html = route === '/'
+      ? '<main><button aria-label="New chat">New chat</button></main>'
+      : '<header><button aria-label="New chat"><svg width="20" height="20"></svg></button></header>';
+    const page = await fixture({ html, route });
+    assert.equal(await page.locator('.ghrc-flawless-mascot-image, #ghrc-flawless-corner').count(), 0);
+    assert.equal(await page.getByRole('button', { name: 'New chat', exact: true }).isVisible(), true);
+    assert.deepEqual(page.errors, []);
+    await page.close();
+  }
 });
 
 test('native controls return when extension stops', async () => {

@@ -4,10 +4,15 @@
   const TOGGLE_SELECTOR = 'button[aria-label="Show sidebar"], button[aria-label="Open sidebar"], button[aria-label="Expand sidebar"]';
   const HEADER_TOGGLE_SELECTOR = `${TOGGLE_SELECTOR}, button[aria-label="Hide sidebar"], button[aria-label="Close sidebar"], button[aria-label="Collapse sidebar"]`;
   const NEW_CHAT_SELECTOR = 'button[aria-label="New chat"], a[aria-label="New chat"], [data-testid="create-new-chat-button"]';
+  const TOOLBAR_NEW_CHAT_SELECTOR = 'header button[aria-label="New chat"]';
+  const RAIL_HOME_SELECTOR = '[data-app-navigation-rail] button[data-sidebar-destination="builtin:home"]';
   const toggles = new Set();
   const newChats = new Set();
   const wordmarks = new Set();
   let link = null;
+  let nativeControl = null;
+  let nativeIconSlot = null;
+  let removeNativeMascot = null;
   const MASCOT_SIZE = 33;
 
   function centerOverToggle(toggle) {
@@ -52,31 +57,99 @@
     }
   }
 
+  function installMascot(control, slot = control) {
+    const image = document.createElement("img");
+    image.className = "ghrc-flawless-mascot-image";
+    image.alt = "";
+    image.draggable = false;
+    const stillSource = chrome.runtime.getURL("artwork/SB-icon.webp");
+    const animatedSource = chrome.runtime.getURL("artwork/SB-icon.gif");
+    image.src = stillSource;
+    // Warm the GIF cache so the first hover does not flash an empty image.
+    const animatedPreload = new Image();
+    animatedPreload.src = animatedSource;
+    slot.append(image);
+    const listeners = new AbortController();
+    const updateMascotAnimation = () => {
+      const source = control.matches(":hover, :focus-visible") ? animatedSource : stillSource;
+      if (image.src !== source) image.src = source;
+    };
+    for (const eventName of ["mouseenter", "mouseleave", "focus", "blur"]) {
+      control.addEventListener(eventName, updateMascotAnimation, { signal: listeners.signal });
+    }
+    updateMascotAnimation();
+    return () => {
+      listeners.abort();
+      image.remove();
+    };
+  }
+
+  function clearLegacyMascot() {
+    link?.remove();
+    link = null;
+    toggles.forEach(toggle => toggle.classList.remove("ghrc-flawless-logo-button"));
+    newChats.forEach(control => control.classList.remove("ghrc-flawless-hidden-new-chat"));
+    wordmarks.forEach(wordmark => wordmark.classList.remove("ghrc-flawless-hidden-wordmark"));
+    toggles.clear();
+    newChats.clear();
+    wordmarks.clear();
+  }
+
+  function setNativeMascot(control, slot = control) {
+    if (control === nativeControl && slot === nativeIconSlot
+      && (!slot || slot.querySelector(":scope > .ghrc-flawless-mascot-image"))) {
+      slot?.classList.add("ghrc-flawless-native-icon-slot");
+      return;
+    }
+    removeNativeMascot?.();
+    nativeIconSlot?.classList.remove("ghrc-flawless-native-icon-slot");
+    nativeControl = control;
+    nativeIconSlot = slot;
+    removeNativeMascot = null;
+    if (control) {
+      removeNativeMascot = installMascot(control, slot);
+      slot.classList.add("ghrc-flawless-native-icon-slot");
+    }
+  }
+
+  function isVisible(control) {
+    const bounds = control.getBoundingClientRect();
+    return bounds.width && bounds.height && getComputedStyle(control).visibility === "visible";
+  }
+
   function reconcile() {
     if (!context.active() || !document.body) return;
+    if (/^\/(?:s|share)(?:\/|$)/.test(location.pathname)) {
+      clearLegacyMascot();
+      setNativeMascot(null);
+      return;
+    }
+    const home = Array.from(document.querySelectorAll(RAIL_HOME_SELECTOR)).find(isVisible);
+    if (home) {
+      clearLegacyMascot();
+      setNativeMascot(home, home.querySelector("svg")?.parentElement || home);
+      return;
+    }
+    // The rail also has an invisible, full-area resize button with the same
+    // label. Only the actual header control provides the mascot's row center.
+    const headerControls = Array.from(document.querySelectorAll(HEADER_TOGGLE_SELECTOR))
+      .filter(control => !control.matches(".absolute.inset-0"));
+    const headerToggle = headerControls.find(isVisible);
+    if (!headerToggle) {
+      clearLegacyMascot();
+      const button = Array.from(document.querySelectorAll(TOOLBAR_NEW_CHAT_SELECTOR)).find(isVisible);
+      setNativeMascot(button || null);
+      return;
+    }
+
+    setNativeMascot(null);
     if (!link?.isConnected) {
       link = document.createElement("a");
       link.id = "ghrc-flawless-corner";
       link.href = "/";
       link.setAttribute("aria-label", "New chat");
       link.title = "New chat";
-      const image = document.createElement("img");
-      image.alt = "";
-      image.draggable = false;
-      const stillSource = chrome.runtime.getURL("artwork/squeaky-belle-full.webp");
-      const animatedSource = chrome.runtime.getURL("artwork/squeaky-belle-full.gif");
-      image.src = stillSource;
-      // Warm the GIF cache so the first hover does not flash an empty image.
-      const animatedPreload = new Image();
-      animatedPreload.src = animatedSource;
-      link.append(image);
-      const updateMascotAnimation = () => {
-        const source = link.matches(":hover, :focus-visible") ? animatedSource : stillSource;
-        if (image.src !== source) image.src = source;
-      };
-      for (const eventName of ["mouseenter", "mouseleave", "focus", "blur"]) {
-        link.addEventListener(eventName, updateMascotAnimation);
-      }
+      installMascot(link);
       link.addEventListener("click", event => {
         const controls = Array.from(document.querySelectorAll(NEW_CHAT_SELECTOR)).filter(control => control !== link);
         const native = controls.find(control => control.getClientRects().length) || controls[0];
@@ -86,17 +159,7 @@
       });
       document.body.append(link);
     }
-    // The rail also has an invisible, full-area resize button with the same
-    // label. Only the actual header control provides the mascot's row center.
-    const isHeaderControl = control => !control.matches('.absolute.inset-0');
-    const controls = Array.from(document.querySelectorAll(TOGGLE_SELECTOR)).filter(isHeaderControl);
-    const headerControls = Array.from(document.querySelectorAll(HEADER_TOGGLE_SELECTOR)).filter(isHeaderControl);
-    const visibleControl = control => {
-      const bounds = control.getBoundingClientRect();
-      return bounds.width && bounds.height && getComputedStyle(control).visibility !== "hidden";
-    };
-    const visible = controls.find(visibleControl);
-    const headerToggle = headerControls.find(visibleControl);
+    const collapsed = headerToggle.matches(TOGGLE_SELECTOR);
     centerOverToggle(headerToggle);
     concealSidebarWordmark(headerToggle);
     for (const toggle of headerControls) {
@@ -107,7 +170,7 @@
       if (control !== link) newChats.add(control);
     }
     for (const control of newChats) {
-      control.classList.toggle("ghrc-flawless-hidden-new-chat", Boolean(visible));
+      control.classList.toggle("ghrc-flawless-hidden-new-chat", collapsed);
       if (!control.isConnected) newChats.delete(control);
     }
     for (const toggle of toggles) {
@@ -119,17 +182,23 @@
   }
 
   const observer = new MutationObserver(reconcile);
-  observer.observe(document.documentElement, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ["aria-label"] });
+  observer.observe(document.documentElement, {
+    childList: true,
+    subtree: true,
+    characterData: true,
+    attributes: true,
+    attributeFilter: ["aria-label", "hidden", "data-app-navigation-rail", "data-sidebar-destination"],
+  });
+  window.navigation?.addEventListener("currententrychange", reconcile);
   window.addEventListener("resize", reconcile);
   window.addEventListener("scroll", reconcile, true);
   reconcile();
   context.onStop(() => {
     observer.disconnect();
+    window.navigation?.removeEventListener("currententrychange", reconcile);
     window.removeEventListener("resize", reconcile);
     window.removeEventListener("scroll", reconcile, true);
-    link?.remove();
-    toggles.forEach(toggle => toggle.classList.remove("ghrc-flawless-logo-button"));
-    newChats.forEach(control => control.classList.remove("ghrc-flawless-hidden-new-chat"));
-    wordmarks.forEach(wordmark => wordmark.classList.remove('ghrc-flawless-hidden-wordmark'));
+    clearLegacyMascot();
+    setNativeMascot(null);
   });
 })();

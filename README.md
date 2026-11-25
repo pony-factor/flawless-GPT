@@ -16,6 +16,8 @@ The dashboard:
   by default), or disables ChatGPT Work mode and manual web Search mode;
 - wraps long ChatGPT response text, links, and code by default, with a Display
   preference to restore native horizontal overflow;
+- shows the conversation Refresh view button by default, with a ChatGPT Display
+  switch to hide it without affecting conversation recovery;
 - optionally displays one dot per completed minute beneath the work-duration cannon instead of its minute counter (ChatGPT settings; off by default);
 - strips UTM tracking parameters from links shown by ChatGPT by default;
 - can skip ChatGPT's external-site warning and dismiss its history rate-limit
@@ -39,10 +41,16 @@ Extension icon and settings artwork by [Squeaky_Belle](https://disqus.com/by/Squ
 from the provided [source post](https://x.com/Squeaky_Belle/status/1855267207577731504).
 
 Spellcheck Only launcher artwork by Kiriya, from the [source image](https://derpibooru.org/images/3394656).
+In **ChatGPT → Interaction**, both the popup and full settings allow replacing the
+launcher icon with a PNG, JPEG, WebP, or GIF up to 1 MB, and restoring the default.
+The image is stored in the browser extension's local
+`chrome.storage.local.spellcheckLauncherImage` record, survives normal extension
+updates, and is not uploaded or browser-synced. It is not encrypted like GitHub
+tokens, since the artwork is not a secret. An open ChatGPT tab updates immediately.
 
 Work-duration cannon artwork by Cerberus (`@fcolumnare`), from the
 [original artwork post](https://x.com/fcolumnare/status/1952740544443998252).
-The bundled `artwork/searching-complete.png` is an AI-assisted transparent cutout
+The bundled `artwork/thinking-cannon.png` is an AI-assisted transparent cutout
 of the cannon, with obscured portions reconstructed, from `love-weapon.jpg`:
 https://github.com/JFWooten4/JFWooten4/blob/main/headshots/final-form/love-weapon.jpg
 Original artwork credits:
@@ -82,7 +90,10 @@ added, removed, or reordered at any time. Existing single-token settings are
 migrated automatically. Use a fine-grained token with read-only access to only
 the repository metadata the extension should display.
 
-The **Open clipboard URL** button on New Chat also supports local `file:///` links.
+The **Open clipboard URL** button on New Chat opens recognized web and local
+`file:///` links in the current tab. If the clipboard does not contain a
+recognized URL, the button instead searches that text using the browser's
+configured default search engine (via the extension's search permission).
 For local files, enable **Allow access to file URLs** in Flawless ChatGPT's
 `chrome://extensions` or `brave://extensions` details. The local file opens in
 the current tab; this feature does not upload its contents.
@@ -112,46 +123,45 @@ Synchronization uses ChatGPT's own same-origin `/backend-api/user_system_message
 
 Existing guidance from the older `codexCustomInstructions` / `chatgptCustomInstructions` keys is migrated into `webCommitGuidance`. If the older Codex Web co-author preference was enabled, its trailer instruction is folded into the migrated guidance rather than kept as a separate setting. Personalization never writes `~/.codex/AGENTS.md`, inspects `CODEX_HOME`, imports PGP keys, or changes global Git configuration. Commit signing remains a separate feature.
 
-### Sidebar hover behavior
-
-The sidebar starts collapsed on page load. **ChatGPT → Reveal sidebar on hover**
-is off by default. Enable it to reveal the sidebar by holding the mouse in the
-leftmost 64 pixels, anywhere from directly below **Library** to the bottom
-of the viewport, for 650 milliseconds.
-
-The reveal area covers the entire remaining left rail, even below the last
-preset icon or when no preset icons exist. Hovering Library itself or the
-left edge above Library does not trigger the reveal.
-
-The sidebar stays open while the mouse is inside it or one of its open menus,
-including nested menus and a 12-pixel margin around those menus. It collapses
-90 milliseconds after the mouse leaves those areas. Hovering should work
-without clicking or giving the browser keyboard focus; moving keyboard focus
-away alone should not collapse it. The hover delay also works in visible but
-unfocused browser windows when animation frames pause; hidden/background tabs
-cannot respond to mouse hover because they are not visible.
-
 ### Chat creation ages
 
 Chat history entries show compact creation ages (such as `2d`, `2mo`, or `2y`).
 Conversations less than a day old show a small 🆕 icon rather than `0d`.
 Hovering the age or icon still reveals the absolute creation date.
 
+### Research telescope shortcuts
+
+Under **Research**, independently toggle the homepage telescope above the new-chat
+composer and the Deep Research telescope button on writing blocks. Both are on by
+default. Clicking the homepage telescope selects the Deep Research app in the
+existing chat input without submitting or replacing the draft, and opens a second
+ChatGPT tab beside it with the Spellcheck Only app selected. Supported browsers use
+native split view; otherwise the Spellcheck Only tab opens normally. The existing
+Deep Research allowance tracker remains separately configurable.
+
 ### Deep Research allowance tracker
 
 Under **Research** in either the compact extension menu or Full settings, customize
-Deep Research allowance tracking separately for the homepage and the active research
-composer. The master **Enable Deep Research allowance trackers** switch continues
-to disable both locations when turned off.
+Deep Research allowance tracking for the homepage and active research composer.
+The master **Enable Deep Research allowance trackers** switch continues to disable
+both locations when turned off.
 
-The homepage has independent settings for its tracker, **Show reports remaining**,
-and **Show reset countdown**. By default the homepage tracker appears only within
-**5 days** of the next reset, as before. Change **Homepage visibility** to
-**Always show on homepage** to see the report count throughout the cycle, or
-adjust the reset window from 1 to 365 days. To show only the report count,
-enable homepage tracking and reports remaining, then disable **Show reset
-countdown**. The composer has independent visibility, count, and countdown
-settings. Changes save automatically and update existing ChatGPT tabs.
+The homepage and active Deep Research composer each have independent switches for
+**Show tracker**, **Show reports remaining**, **Show reset countdown**, and
+**Show usage pie**. The composer can stay visible when the homepage tracker is
+also visible, and changing one location does not affect the other. The in-chat
+tracker only mounts while the Deep Research plugin is selected.
+
+By default the homepage tracker appears only within **5 days** of the next
+reset. Change **Homepage visibility** to **Always show on homepage** to see the
+report count throughout the cycle, or adjust the reset window from 1 to 365
+days. Full/combined quota selection and the optional allowance total are shared
+data settings. Legacy shared pie preferences carry forward until the new
+per-location switches are saved. Changes take effect in existing ChatGPT tabs.
+
+Research selection is detected through native interactions and a filtered
+DOM fallback; unrelated streaming conversation text no longer schedules
+tracker rerenders.
 
 The **Counter allowance** setting defaults to **Full research only**, using
 ChatGPT's `deep_research` quota and excluding the `deep_research_mini` lightweight
@@ -166,6 +176,10 @@ are labeled as last checked rather than being presented as fresh balances.
 ### Chat bar colors
 
 Under **ChatGPT → Chat bar colors**, choose independent opt-in colors for the composer background, border, focus ring, typed text, caret, placeholder, selection, toolbar, send/stop buttons, and attachments. Unchecked swatches use ChatGPT's own theme, including dark-mode changes. Colors are stored locally under `composerColors`, update live in open chats, and can all be reset with **Restore ChatGPT colors**.
+
+### Dashboard accent and repository link colors
+
+Under **Dashboard → Dashboard colors** in both the extension popup and full settings, set independent light- and dark-mode colors for dashboard accents and repository names. Each swatch has a **custom HEX field** accepting six digits with or without the `#` prefix. Changes are stored locally under `dashboardColors` and update open dashboards immediately. Repository names follow the accent unless customized; **Default** restores an individual color and **Restore dashboard colors** clears all four overrides. Existing **Chat bar colors** continue to support HEX entry independently.
 
 ### Token storage
 
@@ -222,9 +236,16 @@ Close it with the browser’s **Close This View** control. Browsers without nati
 split support use an embedded preview; close that preview with **Close** or
 **Escape**. Websites may block embedding, so the preview also provides
 **Open in new tab**. Modifier clicks keep browser behavior.
+
+On conversation pages, the icon-only **↻ Refresh view** button at the bottom left requests an in-place refresh through ChatGPT's existing router without reloading the document. The **Show Refresh view button** option in either settings menu controls its visibility immediately and is enabled by default. It asks you to wait for active responses to finish and spaces manual requests at least 30 seconds apart. If the router is unavailable, it uses the conversation error screen's native retry when available and reports unsupported refreshes explicitly. Server rate limits can still prevent a conversation from loading. Missing-answer recovery retains only the final text needed for broken turns, rather than the full fetched conversation.
+
+Automatic answer recovery is capped at three saved-conversation reads for the same group of broken turns. It skips hidden and offline tabs, backs off after failures, and honors the server's `Retry-After` cooldown even across navigation or manual refresh. **Refresh view** can open a new recovery attempt window after cooldown. Research quota data updates through normal ChatGPT activity or an explicit click on the tracker; its periodic local redraw makes no automatic quota requests.
+
 The history setting hides the known conversation-history rate-limit modal, clears the page locks it
 leaves behind, and preserves native wheel and touch scrolling if stale modal
 listeners remain. Link previews load the destination in a sandboxed iframe.
+
+Recognized rate-limit and conversation-loading error panels get a pony-themed card with the existing mascot, lavender colors, and light/dark styling. Their original error messages and controls remain available. The artwork is a CSS background; it is never inserted as a message or attachment, and this styling makes no network requests to refresh the conversation.
 
 ### Browsing GitHub pages inside the sidebar
 
@@ -360,6 +381,23 @@ shortcut hint immediately, and includes **Reset** to restore Alt+R. A plain
 shortcut key leaves normal typing, deletion, and editing alone while a text
 field is active. Browser-reserved keyboard combinations may be unavailable.
 
+## Automated tests
+
+Pull requests and pushes to `main` require all Node.js unit tests and focused
+user-message / sidebar-icon browser regressions. The full external-link browser
+suite also runs as an advisory check while unrelated existing browser failures
+are addressed. On Linux browser checks use Playwright's Chromium; macOS uses
+Brave by default or `BRAVE_PATH` when set.
+
+```sh
+node --test tests/*.test.cjs
+npm install --no-save --package-lock=false playwright@1.56.1
+npx playwright install chromium
+node --test tests/external-links.browser.cjs
+```
+
+Other browser suites are not yet enforced by CI.
+
 ## JavaScript organization
 
 Scripts live in feature folders under `js/`. The manifest and extension HTML
@@ -371,6 +409,7 @@ pages declare their loading order; the background entry point is
 | `core/` | Extension lifecycle, route events, and background entry points |
 | `chat/` | Conversation display, model controls, recovery, and notices |
 | `composer/` | Input styling, focus, clipboard sending, uploads, and message queue |
+| `dispatcher/` | Ten-chat task dispatch, completion guards, and verified squash-merge gates |
 | `sidebar/` | Chat history dates, loading, collapse, and tab state |
 | `dashboard/` | Repositories, account columns, avatars, pins, and highlighted pages |
 | `links/` | Citations, previews, split views, image recovery, and URL cleanup |
@@ -382,3 +421,7 @@ pages declare their loading order; the background entry point is
 
 Worker `importScripts()` paths resolve relative to `js/core/background.js`,
 including calls made by imported scripts. Tests refer directly to feature paths.
+
+## Chat dispatcher
+
+The popup and full settings include **ChatGPT → Open chat dispatcher**. This feature reuses ten existing chats, sends only after stable completion, and requires GitHub-verified merge confirmations before advancing a slot. It uses Flawless's existing GitHub connection and runs inside the extension without a separate app or terminal process. See the [dispatcher guide](docs/chat-dispatcher.md) for adoption, Start/Pause, and migration from the Studio prototype.

@@ -15,7 +15,10 @@
     "webNavigation",
     "identity",
     "clipboardRead",
-    "nativeMessaging"
+    "search",
+    "nativeMessaging",
+    "alarms",
+    "scripting"
   ],
   "host_permissions": [
     "https://*/*",
@@ -59,7 +62,7 @@
         "vendor/showdown.min.js",
         "vendor/purify.min.js",
         "js/chat/missing-response-recovery.js",
-        "js/sidebar/sidebar-tab-state.js",
+        "js/chat/refresh-view.js",
         "js/research/deep-research-usage.js",
         "js/settings/chatgpt-personalization-api.js"
       ],
@@ -79,6 +82,8 @@
         "css/flawless-corner.css",
         "css/chat-display.css",
         "css/missing-response-recovery.css",
+        "css/refresh-view.css",
+        "css/pony-error-page.css",
         "css/worked-duration.css",
         "css/composer-colors.css",
         "css/file-drop.css",
@@ -93,10 +98,10 @@
       "js": [
         "js/core/extension-context.js",
         "js/chat/flawless-corner.js",
+        "js/chat/pony-error-page.js",
         "js/settings/web-commit-guidance-sync.js",
         "js/chat/compact-header.js",
         "js/games/2048-keyboard.js",
-        "js/sidebar/collapse-sidebar.js",
         "js/sidebar/sidebar-chat-dates.js",
         "js/dashboard/dashboard-visibility.js",
         "js/chat/disable-work-mode.js",
@@ -113,7 +118,9 @@
         "js/chat/hide-background-completion-notifications.js",
         "js/chat/hide-usage-card.js",
         "js/chat/hide-upgrade-promotions.js",
+        "js/chat/hide-scheduled-recommendations.js",
         "js/links/external-links.js",
+        "js/research/research-report-origin.js",
         "js/research/research-report-host.js",
         "js/research/research-import-dialog.js",
         "js/research/research-launcher.js",
@@ -126,6 +133,7 @@
         "js/dashboard/repository-fast-ui.js",
         "js/dashboard/owner-grid.js",
         "js/dashboard/repository-search-shortcut.js",
+        "js/dashboard/dashboard-colors.js",
         "js/dashboard/content.js"
       ],
       "run_at": "document_start"
@@ -151,9 +159,11 @@
         "js/launchers/youtube-search.js",
         "js/launchers/wooten-link-zipp-placeholder.js",
         "js/launchers/spellcheck-launcher.js",
+        "js/research/deep-research-spellcheck.js",
         "js/games/2048.js",
         "js/composer/clipboard-send.js",
         "js/composer/message-queue.js",
+        "js/composer/chat-dispatcher.js",
         "js/composer/file-drop.js",
         "js/composer/temporary-chat-inline.js",
         "js/dashboard/pinned-issues-model.js",
@@ -192,12 +202,12 @@
     {
       "resources": [
         "link-preview.html",
-        "artwork/spellcheck-only.png",
+        "artwork/spellcheck-only.jpg",
         "artwork/calligraphy-initials.png",
         "artwork/research-telescope.png",
-        "artwork/squeaky-belle-full.webp",
-        "artwork/squeaky-belle-full.gif",
-        "artwork/searching-complete.png"
+        "artwork/SB-icon.webp",
+        "artwork/SB-icon.gif",
+        "artwork/thinking-cannon.png"
       ],
       "matches": [
         "https://chatgpt.com/*"
