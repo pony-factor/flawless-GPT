@@ -6,6 +6,7 @@
   const NEW_CHAT_SELECTOR = 'button[aria-label="New chat"], a[aria-label="New chat"], [data-testid="create-new-chat-button"]';
   const TOOLBAR_NEW_CHAT_SELECTOR = 'header button[aria-label="New chat"]';
   const RAIL_HOME_SELECTOR = '[data-app-navigation-rail] button[data-sidebar-destination="builtin:home"]';
+  const COMPACT_HEADER_ATTR = "data-ghrc-compact-header";
   const toggles = new Set();
   const newChats = new Set();
   const wordmarks = new Set();
@@ -143,6 +144,10 @@
     }
 
     setNativeMascot(null);
+    if (location.pathname === "/" && document.documentElement.hasAttribute(COMPACT_HEADER_ATTR)) {
+      clearLegacyMascot();
+      return;
+    }
     if (!link?.isConnected) {
       link = document.createElement("a");
       link.id = "ghrc-flawless-corner";
@@ -187,7 +192,7 @@
     subtree: true,
     characterData: true,
     attributes: true,
-    attributeFilter: ["aria-label", "hidden", "data-app-navigation-rail", "data-sidebar-destination"],
+    attributeFilter: ["aria-label", "hidden", "data-app-navigation-rail", "data-sidebar-destination", COMPACT_HEADER_ATTR],
   });
   window.navigation?.addEventListener("currententrychange", reconcile);
   window.addEventListener("resize", reconcile);

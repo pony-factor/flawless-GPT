@@ -75,6 +75,29 @@ test('one mascot starts native New chat without opening the sidebar', async () =
 });
 
 
+test('compact homepage removes the floating mascot and restores the native controls', async () => {
+  const page = await fixture();
+  try {
+    await page.setViewportSize({ width: 562, height: 800 });
+    const mascot = page.locator('#ghrc-flawless-corner');
+    const toggle = page.getByRole('button', { name: 'Show sidebar' });
+    const newChat = page.getByRole('button', { name: 'New chat', exact: true });
+    await mascot.waitFor();
+    await page.evaluate(() => document.documentElement.setAttribute('data-ghrc-compact-header', 'true'));
+    await mascot.waitFor({ state: 'detached' });
+    assert.equal(await toggle.locator('svg').isVisible(), true);
+    assert.equal(await newChat.isVisible(), true);
+    await newChat.click();
+    assert.equal(await page.evaluate(() => window.newChats), 1);
+    await page.evaluate(() => document.documentElement.removeAttribute('data-ghrc-compact-header'));
+    await mascot.waitFor();
+    assert.equal(await toggle.locator('svg').isVisible(), false);
+    assert.deepEqual(page.errors, []);
+  } finally {
+    await page.close();
+  }
+});
+
 test('mascot animates in place on hover and returns to its still frame on exit', async () => {
   const page = await fixture();
   const mascot = page.locator('#ghrc-flawless-corner');
