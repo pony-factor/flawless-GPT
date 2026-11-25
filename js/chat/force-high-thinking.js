@@ -145,17 +145,16 @@
     }
   }
 
-  async function selectModel(valid) {
+  async function withModelChoices(valid, callback) {
     const trigger = modelControl();
-    if (!trigger) return null;
-    const target = await withMenu(trigger, valid, async session => {
+    return withMenu(trigger, valid, async session => {
       let nested = null;
-      const candidate = await waitFor(() => {
+      const models = await waitFor(() => {
         const options = choices(session);
-        const result = newest(options.map(node => ({
+        const numbered = options.map(node => ({
           node, enabled: true, version: version(visibleText(node)) || version(label(node)),
-        })));
-        if (result) return result;
+        })).filter(choice => choice.version);
+        if (numbered.length) return numbered;
         const submenu = options.find(node => /^select model$/i.test(label(node)) || /^select model$/i.test(visibleText(node)));
         if (submenu && nested !== submenu && submenu.getAttribute("aria-expanded") !== "true") {
           nested = submenu;
@@ -163,11 +162,34 @@
         }
         return null;
       }, valid, 3000);
-      if (!candidate) return null;
-      if (!matches(modelValue(modelControl()), candidate.version)) candidate.node.click();
-      return await waitFor(() => matches(modelValue(modelControl()), candidate.version) && candidate.version, valid);
+      return models && callback(models);
     });
-    return target && matches(modelValue(modelControl()), target) ? target : null;
+  }
+
+  function checkedModel(choice) {
+    return choice.node.getAttribute("aria-checked") === "true"
+      || choice.node.getAttribute("aria-selected") === "true";
+  }
+
+  async function selectModel(valid) {
+    return withModelChoices(valid, async models => {
+      const candidate = newest(models);
+      const current = modelValue(modelControl());
+      if (matches(current, candidate.version) || checkedModel(candidate)) return candidate.version;
+      candidate.node.click();
+      // On compact composers, selection can close the only UI that shows the model version.
+      if (current) await waitFor(() => matches(modelValue(modelControl()), candidate.version), valid);
+      return candidate.version;
+    });
+  }
+
+  async function confirmModel(expected, valid) {
+    const control = modelControl();
+    const current = modelValue(control);
+    if (!control || !valid()) return null;
+    const selected = current ? matches(current, expected) : await withModelChoices(valid, models =>
+      models.some(choice => matches(choice.version, expected) && checkedModel(choice)));
+    return selected && valid() && modelControl() === control ? { version: expected, control } : null;
   }
 
   async function selectEffort(target, valid, probe) {
@@ -215,9 +237,11 @@
     if (!valid()) return null;
     extraAvailable = false;
     const model = await selectModel(valid);
-    if (!model || !valid() || !await selectEffort(target, valid, probe)) return null;
-    if (!valid() || !matches(modelValue(modelControl()), model) || level(effortControl()) !== target) return null;
-    return model;
+    if (!model || !valid()) return null;
+    const beforeEffort = await confirmModel(model, valid);
+    if (!beforeEffort || !await selectEffort(target, valid, probe)) return null;
+    const confirmedModel = await confirmModel(model, valid);
+    return confirmedModel && confirmed(target, confirmedModel) ? confirmedModel : null;
   }
   function begin(kind, operation) {
     if (active) return null;
@@ -236,7 +260,10 @@
     return token.promise;
   }
   function confirmed(target, model) {
-    return matches(modelValue(modelControl()), model) && level(effortControl()) === target;
+    const control = modelControl();
+    const current = modelValue(control);
+    return Boolean(control && (current ? matches(current, model.version) : control === model.control)
+      && level(effortControl()) === target);
   }
   async function prepareHigh(input = composer()) {
     if (!loaded) return false;
@@ -303,9 +330,10 @@
   }
   async function manualHigh(input) {
     const snapshot = draftSnapshot(input);
-    if (!await prepareHigh(input) || !unchanged(snapshot) || !idleForManual(input)) {
+    if (!await prepareHigh(input)) return;
+    if (!unchanged(snapshot) || !idleForManual(input)) {
       permit = null;
-      report("Draft or model changed. Nothing sent; try Send again.");
+      report("The draft or conversation changed. Try Send again.");
       return;
     }
     if (!clickHigh(readySend(input))) report("High could not be reconfirmed. Nothing sent.");
