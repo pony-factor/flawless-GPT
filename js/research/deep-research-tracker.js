@@ -47,6 +47,18 @@
     return { remaining, total };
   }
 
+  // Scoped totals supersede the legacy single total, even when cleared.
+  function selectedResearchPieTotal(settings, mode = 'full') {
+    const selectedMode = mode === 'all' ? 'all' : 'full';
+    const scoped = settings?.deepResearchUsagePieTotals;
+    const preferred = scoped && typeof scoped === 'object' && !Array.isArray(scoped)
+      ? scoped[selectedMode]
+      : ((settings?.deepResearchAllowanceMode === 'all' ? 'all' : 'full') === selectedMode
+        ? settings.deepResearchUsagePieTotal : null);
+    return Number.isSafeInteger(preferred) && preferred > 0 && preferred <= 10000
+      ? preferred : null;
+  }
+
   function usagePiePercent(remaining, total) {
     if (!Number.isSafeInteger(remaining) || remaining < 0 ||
         !Number.isSafeInteger(total) || total <= 0 || remaining > total) return null;
@@ -54,7 +66,7 @@
   }
 
   if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { parseAllowance, selectedResearchQuota, usagePieTotal, usagePiePercent };
+    module.exports = { parseAllowance, selectedResearchQuota, selectedResearchPieTotal, usagePieTotal, usagePiePercent };
     return;
   }
   const context = globalThis.__ghrcExtensionContext;
@@ -62,6 +74,7 @@
   const ID = 'ghrc-deep-research-tracker';
   const DASHBOARD_ID = 'ghrc-deep-research-dashboard';
   const COMPOSER_ID = `${ID}-composer`;
+  const HOME_LAUNCHER_ID = 'ghrc-research-home-launcher';
   const USAGE_ATTRIBUTE = 'data-ghrc-deep-research-usage';
   const DAY_MS = 24 * 60 * 60_000;
   const CACHE_MS = 8 * 60 * 60_000;
@@ -71,6 +84,7 @@
   const USER_TURNS = '[data-message-author-role="user"], [data-conversation-role="user"], [data-content-search-unit-key$=":user"]';
   const RESEARCH_MENTION = '[data-prompt-link-href="app://connector_openai_deep_research"], [app-mention-path="app://connector_openai_deep_research"], [data-prompt-link-href="app://connector_openai_deep_research_work"], [app-mention-path="app://connector_openai_deep_research_work"]';
   const SETTINGS_DEFAULTS = Object.freeze({
+    showResearchHomepageLauncher: true,
     showDeepResearchTracker: true,
     showDeepResearchHomepage: true,
     showDeepResearchComposer: true,
@@ -78,8 +92,12 @@
     showDeepResearchHomepageReset: true,
     showDeepResearchComposerCount: true,
     showDeepResearchComposerReset: true,
+    // Inherit the prior shared pie preference until each location is saved.
+    showDeepResearchHomepagePie: null,
+    showDeepResearchComposerPie: null,
     showDeepResearchUsagePie: false,
-    deepResearchUsagePieTotal: null,
+    deepResearchUsagePieTotal: null, // Legacy single-mode preference.
+    deepResearchUsagePieTotals: null,
     deepResearchAllowanceMode: 'full',
     deepResearchHomepageVisibility: 'near-reset',
     deepResearchHomepageWindowDays: 5,
@@ -90,9 +108,8 @@
   let observedAt = 0;
   let pending = false;
   let serverQuota = null;
+  let launchingResearch = false;
   let lastRawQuota = null;
-  let refreshPending = false;
-  let lastStandaloneRefresh = 0;
   let researchAttempt = null;
   const cacheBridge = typeof globalThis.chrome?.runtime?.sendMessage === 'function';
 
@@ -223,6 +240,89 @@
     // No task is selected or submitted. The user can hover the native research entry.
   }
 
+
+  const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+  async function prefillResearchMention() {
+    const input = [...document.querySelectorAll('#prompt-textarea, [data-composer-markdown][contenteditable="true"]')]
+      .find(visible);
+    if (!input || !input.isContentEditable) throw new Error('The ChatGPT input is not ready.');
+    const scope = input.closest('form, [data-type="unified-composer"]') || input;
+    if (scope.querySelector(RESEARCH_MENTION)) { input.focus(); return; }
+
+    // Insert an actual app mention at the beginning; never erase existing text.
+    input.focus();
+    const selection = window.getSelection();
+    if (!selection) throw new Error('Could not select the chat input.');
+    const range = document.createRange();
+    range.selectNodeContents(input);
+    range.collapse(true);
+    selection.removeAllRanges();
+    selection.addRange(range);
+    const transfer = new DataTransfer();
+    transfer.setData('text/plain', 'Deep research ');
+    transfer.setData('text/html', '<p><span app-mention-name="deep-research" app-mention-display-name="Deep research" app-mention-path="app://connector_openai_deep_research" app-mention-icon="/images/ecosystem/apps/deep_research_app/icon.png" data-prompt-link-href="app://connector_openai_deep_research" data-prompt-link-label="$deep-research" contenteditable="false">Deep research</span> </p>');
+    input.dispatchEvent(new ClipboardEvent('paste', { bubbles: true, cancelable: true, clipboardData: transfer }));
+    for (let i = 0; i < 30; i++) {
+      if (scope.querySelector(RESEARCH_MENTION)) {
+        (document.querySelector('#prompt-textarea, [data-composer-markdown][contenteditable="true"]') || input).focus();
+        return;
+      }
+      await pause(100);
+    }
+    throw new Error('ChatGPT did not accept the Deep Research plugin.');
+  }
+
+  async function launchResearchWithSpellcheck() {
+    if (launchingResearch || location.pathname !== '/') return;
+    launchingResearch = true;
+    const homeLauncher = document.getElementById(HOME_LAUNCHER_ID);
+    const status = homeLauncher?.querySelector('.ghrc-research-home-status');
+    if (status) status.textContent = 'Preparing Deep Research…';
+    try {
+      await prefillResearchMention();
+      if (status) status.textContent = 'Opening Spellcheck Only…';
+      const settings = await chrome.storage.local.get({ openExternalLinksInSplitViewOnLeft: false });
+      const result = await chrome.runtime.sendMessage({
+        type: 'open-research-spellcheck-split',
+        onLeft: settings.openExternalLinksInSplitViewOnLeft === true,
+      });
+      if (!result?.ok) throw new Error(result?.error || 'Could not open Spellcheck Only.');
+      if (status) status.textContent = result.split
+        ? '' : 'Split view unavailable; Spellcheck Only opened in a separate tab.';
+    } catch (error) {
+      if (status) status.textContent = error?.message || 'Could not prepare Deep Research.';
+    } finally {
+      launchingResearch = false;
+    }
+  }
+
+  function renderHomepageLauncher(composer) {
+    let wrapper = document.getElementById(HOME_LAUNCHER_ID);
+    if (!wrapper) {
+      wrapper = document.createElement('div');
+      wrapper.id = HOME_LAUNCHER_ID;
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.title = 'Prepare Deep Research and open Spellcheck Only in split view';
+      button.setAttribute('aria-label', 'Prepare Deep Research with Spellcheck Only');
+      const icon = document.createElement('img');
+      icon.src = chrome.runtime.getURL('artwork/research-telescope.png');
+      icon.alt = '';
+      icon.setAttribute('aria-hidden', 'true');
+      button.append(icon);
+      button.addEventListener('click', () => { void context.run(launchResearchWithSpellcheck); });
+      const status = document.createElement('span');
+      status.className = 'ghrc-research-home-status';
+      status.setAttribute('role', 'status');
+      status.setAttribute('aria-live', 'polite');
+      wrapper.append(button, status);
+    }
+    const tracker = document.getElementById(COMPOSER_ID);
+    const anchor = tracker?.nextElementSibling === composer ? tracker : composer;
+    if (wrapper.nextElementSibling !== anchor) anchor.before(wrapper);
+  }
+
   function renderWidget(id) {
     let widget = document.getElementById(id);
     if (!widget) {
@@ -256,12 +356,14 @@
     if (widget.classList.contains('ghrc-research-near-reset') !== nearReset) {
       widget.classList.toggle('ghrc-research-near-reset', nearReset);
     }
-    const includeCount = homepage
-      ? preferences.showDeepResearchHomepageCount !== false
+    const includeCount = homepage ? preferences.showDeepResearchHomepageCount !== false
       : preferences.showDeepResearchComposerCount !== false;
-    const includeReset = homepage
-      ? preferences.showDeepResearchHomepageReset !== false
+    const includeReset = homepage ? preferences.showDeepResearchHomepageReset !== false
       : preferences.showDeepResearchComposerReset !== false;
+    const pieChoice = homepage ? preferences.showDeepResearchHomepagePie
+      : preferences.showDeepResearchComposerPie;
+    const showPiePreference = pieChoice == null
+      ? preferences.showDeepResearchUsagePie === true : pieChoice === true;
     const text = serverText(includeCount, includeReset)
       || ['Deep Research', ...(includeCount ? [count] : []), ...(includeReset ? [reset] : [])].join(' · ');
     const pie = widget.querySelector('.ghrc-research-usage-pie');
@@ -272,13 +374,13 @@
     const pieRemaining = serverQuota ? selected?.remaining : (
       fresh && allowance.full && preferences.deepResearchAllowanceMode === 'full'
         ? allowance.remaining : null);
-    const preferredTotal = preferences.deepResearchUsagePieTotal;
+    const preferredTotal = selectedResearchPieTotal(preferences, preferences.deepResearchAllowanceMode);
     const reportedTotal = selected?.total ?? null;
     // A missing maximum must not silently disable an enabled pie. Use the
     // estimated scale in either mode and identify it in the tooltip; the
     // selected remaining count still excludes other pools in full-only mode.
     const total = usagePieTotal(pieRemaining, reportedTotal, preferredTotal);
-    const percent = preferences.showDeepResearchUsagePie && includeCount
+    const percent = showPiePreference && includeCount
       ? usagePiePercent(pieRemaining, total) : null;
     const showPie = percent !== null;
     if (pie.hidden !== !showPie) pie.hidden = !showPie;
@@ -348,6 +450,12 @@
     readServerQuota();
     checkResearchAttempt();
     readAllowance();
+    const homeComposer = [...document.querySelectorAll('#prompt-textarea, [data-composer-markdown][contenteditable="true"]')]
+      .find(visible)?.closest('form, [data-type="unified-composer"]');
+    if (preferences.showResearchHomepageLauncher !== false && location.pathname === '/' && homeComposer?.parentElement) {
+      renderHomepageLauncher(homeComposer);
+    } else document.getElementById(HOME_LAUNCHER_ID)?.remove();
+
     const repositories = document.getElementById('github-repositories-for-chatgpt');
     const footer = repositories?.querySelector('.ghrc-dashboard-footer');
     const homepageRowVisible = enabled && preferences.showDeepResearchHomepage !== false
@@ -369,19 +477,12 @@
     } else document.getElementById(DASHBOARD_ID)?.remove();
 
     const prompts = [...document.querySelectorAll('#prompt-textarea, [data-composer-markdown][contenteditable="true"]')].filter(visible);
-    const researchPrompt = prompts.find(prompt => prompt.querySelector([
-      '[data-prompt-link-href="app://connector_openai_deep_research"]',
-      '[data-prompt-link-href="app://connector_openai_deep_research_work"]',
-      '[data-prompt-link-label="$deep-research"]',
-    ].join(',')));
+    // Match both current and legacy research mention representations.
+    const researchPrompt = prompts.find(prompt => prompt.querySelector(RESEARCH_MENTION)
+      || prompt.querySelector('[data-prompt-link-label="$deep-research"]'));
     const composer = researchPrompt?.closest('form, [data-type="unified-composer"]');
-    // Avoid a duplicate composer counter when the homepage row shows at least
-    // one allowance field. Otherwise the composer remains a useful fallback.
-    const homepageShowsAllowance = homepageRowVisible
-      && (preferences.showDeepResearchHomepageCount !== false
-        || preferences.showDeepResearchHomepageReset !== false);
-    if (enabled && preferences.showDeepResearchComposer !== false && composer?.parentElement
-      && !homepageShowsAllowance) {
+    // The in-chat tracker is independent of the homepage; both can display.
+    if (enabled && preferences.showDeepResearchComposer !== false && composer?.parentElement) {
       const widget = renderWidget(COMPOSER_ID);
       if (widget.nextElementSibling !== composer) composer.before(widget);
     } else document.getElementById(COMPOSER_ID)?.remove();
@@ -392,11 +493,50 @@
     pending = true;
     requestAnimationFrame(update);
   }
-  const observer = new MutationObserver(schedule);
-  observer.observe(document.documentElement, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['aria-describedby', 'aria-label', 'data-state', 'data-prompt-link-href', 'data-prompt-link-label', 'data-ghrc-hide-repository-dashboard', 'style', USAGE_ATTRIBUTE] });
-  document.addEventListener('pointerover', schedule);
-  document.addEventListener('focusin', schedule);
+  // ChatGPT has no documented native Deep Research activation webhook.
+  // Native interactions and quota updates trigger the tracker; a filtered
+  // mutation fallback handles asynchronous React composer/portal changes.
+  const TRACKER_HOST = 'form, [data-type="unified-composer"], #github-repositories-for-chatgpt, [role="menu"], [role="listbox"], [role="tooltip"]';
+  const WATCHED_MOUNTS = TRACKER_HOST + ', [data-message-author-role="user"], [data-conversation-role="user"], [data-content-search-unit-key$=":user"]';
+  function relevantMount(node) {
+    return node.nodeType === 1
+      && (node.matches(WATCHED_MOUNTS) || Boolean(node.querySelector(WATCHED_MOUNTS)));
+  }
+  function onMutations(mutations) {
+    if (!context.active() || (!enabled && !researchAttempt
+      && preferences.showResearchHomepageLauncher === false)) return;
+    for (const mutation of mutations) {
+      if (mutation.type === 'attributes') {
+        if (mutation.target === document.documentElement || mutation.target.closest?.(TRACKER_HOST)) {
+          schedule();
+          return;
+        }
+        continue;
+      }
+      if (mutation.target.closest?.(TRACKER_HOST)
+        || (researchAttempt && mutation.target.closest?.('[data-testid^="conversation-turn-"], article'))
+        || [...mutation.addedNodes, ...mutation.removedNodes].some(relevantMount)) {
+        schedule();
+        return;
+      }
+    }
+  }
+  const observer = new MutationObserver(onMutations);
+  observer.observe(document.documentElement, {
+    childList: true, subtree: true, attributes: true,
+    // Do not observe streaming response text or unrelated style/ARIA changes.
+    attributeFilter: ['aria-describedby', 'data-prompt-link-href', 'app-mention-path',
+      'data-prompt-link-label', 'data-ghrc-hide-repository-dashboard', USAGE_ATTRIBUTE],
+  });
+  function onResearchInteraction(event) {
+    if (event.target.closest?.(TRACKER_HOST)) schedule();
+  }
+  document.addEventListener('click', onResearchInteraction, true);
+  document.addEventListener('pointerover', onResearchInteraction, true);
+  document.addEventListener('focusin', onResearchInteraction, true);
   window.addEventListener('resize', schedule);
+  window.addEventListener('ghrc:route-change', schedule);
+  window.addEventListener('popstate', schedule);
   function applySettings(next) {
     preferences = { ...SETTINGS_DEFAULTS, ...next };
     if (preferences.deepResearchHomepageVisibility !== 'always') {
@@ -405,10 +545,6 @@
     const days = preferences.deepResearchHomepageWindowDays;
     preferences.deepResearchHomepageWindowDays =
       Number.isInteger(days) && days >= 1 && days <= 365 ? days : 5;
-    const selectedTotal = preferences.deepResearchUsagePieTotal;
-    preferences.deepResearchUsagePieTotal =
-      Number.isSafeInteger(selectedTotal) && selectedTotal > 0 && selectedTotal <= 10000
-        ? selectedTotal : null;
     preferences.deepResearchAllowanceMode = preferences.deepResearchAllowanceMode === 'all' ? 'all' : 'full';
     enabled = preferences.showDeepResearchTracker !== false;
     schedule();
@@ -433,22 +569,13 @@
   }
   // One initial cache read per tab; all later changes propagate via storage.
   void quotaMessage({ type: 'deep-research-quota-read' });
-  const automaticRefresh = async () => {
-    if (!enabled || document.visibilityState !== 'visible') return;
-    const due = !serverQuota || Date.now() - serverQuota.observedAt >= quotaRefreshInterval();
-    if (!due || refreshPending) return;
-    refreshPending = true;
-    try {
-      if (cacheBridge) {
-        const result = await quotaMessage({ type: 'deep-research-quota-refresh-claim' });
-        if (result?.refresh) window.dispatchEvent(new Event('ghrc-refresh-deep-research-usage'));
-      } else if (Date.now() - lastStandaloneRefresh >= 5 * 60_000) {
-        lastStandaloneRefresh = Date.now();
-        window.dispatchEvent(new Event('ghrc-refresh-deep-research-usage'));
-      }
-    } finally { refreshPending = false; }
-  };
-  const timer = setInterval(() => { void automaticRefresh(); schedule(); }, 30_000);
+  // Redraw local time labels only; no automatic quota refresh request.
+  // Preserve the independent tracker visibility controls from main.
+  const timer = setInterval(() => {
+    if (document.visibilityState === 'visible' && enabled
+      && (preferences.showDeepResearchHomepage !== false
+        || preferences.showDeepResearchComposer !== false)) schedule();
+  }, 30_000);
   document.addEventListener('click', watchResearchSend, true);
   document.addEventListener('submit', watchResearchSend, true);
   document.addEventListener('keydown', watchResearchSend, true);
@@ -458,12 +585,16 @@
     document.removeEventListener('click', watchResearchSend, true);
     document.removeEventListener('submit', watchResearchSend, true);
     document.removeEventListener('keydown', watchResearchSend, true);
-    document.removeEventListener('pointerover', schedule);
-    document.removeEventListener('focusin', schedule);
+    document.removeEventListener('click', onResearchInteraction, true);
+    document.removeEventListener('pointerover', onResearchInteraction, true);
+    document.removeEventListener('focusin', onResearchInteraction, true);
     window.removeEventListener('resize', schedule);
+    window.removeEventListener('ghrc:route-change', schedule);
+    window.removeEventListener('popstate', schedule);
     globalThis.chrome?.storage?.onChanged?.removeListener(settingsChanged);
     document.getElementById(DASHBOARD_ID)?.remove();
     document.getElementById(COMPOSER_ID)?.remove();
+    document.getElementById(HOME_LAUNCHER_ID)?.remove();
   });
   schedule();
 })();
