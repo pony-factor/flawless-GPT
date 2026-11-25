@@ -77,6 +77,7 @@ const showSpellcheckGptLauncherInput = document.getElementById("show-spellcheck-
 const show2048LauncherInput = document.getElementById("show-2048-launcher");
 const deepResearchSpellcheckEnabledInput = document.getElementById("deep-research-spellcheck-enabled");
 const showDeepResearchTrackerInput = document.getElementById("show-deep-research-tracker");
+const showResearchHomepageLauncherInput = document.getElementById("show-research-homepage-launcher");
 const showDeepResearchHomepageInput = document.getElementById("show-deep-research-homepage");
 const showDeepResearchComposerInput = document.getElementById("show-deep-research-composer");
 const showDeepResearchHomepageCountInput = document.getElementById("show-deep-research-homepage-count");
@@ -456,6 +457,7 @@ async function loadSettings() {
     disableWorkMode: false,
     showSpellcheckGptLauncher: false,
     show2048Launcher: false,
+    showResearchHomepageLauncher: true,
     deepResearchSpellcheckEnabled: true,
     showDeepResearchTracker: true,
     showDeepResearchHomepage: true,
@@ -531,6 +533,7 @@ async function loadSettings() {
   disableManualWebSearchInput.checked = Boolean(settings.disableManualWebSearch);
   showSpellcheckGptLauncherInput.checked = Boolean(settings.showSpellcheckGptLauncher);
   show2048LauncherInput.checked = Boolean(settings.show2048Launcher);
+  showResearchHomepageLauncherInput.checked = settings.showResearchHomepageLauncher !== false;
   deepResearchSpellcheckEnabledInput.checked = settings.deepResearchSpellcheckEnabled !== false;
   showDeepResearchTrackerInput.checked = settings.showDeepResearchTracker !== false;
   showDeepResearchHomepageInput.checked = settings.showDeepResearchHomepage !== false;
@@ -657,6 +660,7 @@ async function saveSettings() {
       disableManualWebSearch: disableManualWebSearchInput.checked,
       showSpellcheckGptLauncher: showSpellcheckGptLauncherInput.checked,
       show2048Launcher: show2048LauncherInput.checked,
+      showResearchHomepageLauncher: showResearchHomepageLauncherInput.checked,
       deepResearchSpellcheckEnabled: deepResearchSpellcheckEnabledInput.checked,
       showDeepResearchTracker: showDeepResearchTrackerInput.checked,
       showDeepResearchHomepage: showDeepResearchHomepageInput.checked,

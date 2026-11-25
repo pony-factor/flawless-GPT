@@ -424,7 +424,25 @@
     }
   });
 
+
+  async function prepareSplitSpellcheck() {
+    const result = await chrome.runtime.sendMessage({ type: "research-spellcheck-pending" });
+    if (!result?.pending || !isHomePage()) return;
+    const input = await waitUntil(() => {
+      const editor = findComposerInput();
+      return isVisible(editor) ? editor : null;
+    }, 20_000);
+    if (!input || !context.active()) return;
+    const activated = Boolean(findPluginMention(input) || await activateSpellcheckPlugin(input));
+    if (activated) {
+      await chrome.runtime.sendMessage({ type: "research-spellcheck-ready" });
+    } else {
+      console.warn("Spellcheck Only was opened, but ChatGPT did not expose the plugin suggestion.");
+    }
+  }
+
   void context.run(loadSettings);
+  void context.run(prepareSplitSpellcheck);
   const observer = new MutationObserver(scheduleMount);
   const narrowViewport = window.matchMedia?.("(max-width: 700px)");
   narrowViewport?.addEventListener("change", scheduleMount);
