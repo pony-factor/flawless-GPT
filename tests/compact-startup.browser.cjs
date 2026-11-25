@@ -7,9 +7,10 @@ const os = require('node:os');
 const http = require('node:http');
 const { chromium } = require('playwright');
 
-for (const [shell, frame] of [
+for (const [shell, frame, centeredGrid] of [
   ['thread divider', 'data-app-shell-thread-edge-divider'],
   ['main content container', 'class="@container/app-shell-main-content"'],
+  ['homepage grid', 'class="@container/app-shell-main-content"', true],
 ]) test(`compact composer stays inside the ${shell} scroll boundary`, async () => {
   const browser = await chromium.launch({
     executablePath: process.env.BROWSER_EXECUTABLE || '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser',
@@ -33,12 +34,15 @@ for (const [shell, frame] of [
         :is(.home-composer-centered, [class~="sm:home-composer-centered"]) {
           margin-top: calc(-1 * var(--app-shell-main-content-offset));
         }
+        .centered-grid { display: grid; height: 700px; grid-template-rows: 1fr auto 1fr }
         form { height: 52px; background: #303030; color: white }
       </style>
       <main><div data-app-shell-main-content-layout><div ${frame}><div class="frame"><div role="presentation">
-        <div class="group/home-composer-layout"><div class="${shell === 'thread divider' ? '' : 'sm:'}home-composer-centered">
+        <div class="group/home-composer-layout"><div class="${shell === 'thread divider' ? '' : 'sm:'}home-composer-centered${centeredGrid ? ' centered-grid' : ''}">
+          ${centeredGrid ? '<div></div><div>' : ''}
           <form><div contenteditable="true">Dash</div><button>Send</button></form>
-          <section style="height:1000px">Repositories</section>
+          <section style="height:${centeredGrid ? 300 : 1000}px">Repositories</section>
+          ${centeredGrid ? '</div><div></div>' : ''}
         </div></div>
       </div></div></div></div></main>
     `);
@@ -54,7 +58,11 @@ for (const [shell, frame] of [
       document.documentElement.setAttribute('data-ghrc-compact-header', 'true');
     });
     const before = await geometry();
-    assert.ok(before.top < before.boundaryTop, 'native centering reproduces the clipped composer');
+    if (centeredGrid) {
+      assert.ok(before.top > before.boundaryTop + 100, 'native grid centers the composer and dashboard');
+    } else {
+      assert.ok(before.top < before.boundaryTop, 'native centering reproduces the clipped composer');
+    }
     await page.addStyleTag({ path: path.join(__dirname, '../css/compact-header.css') });
     for (const width of [1280, 390]) {
       await page.setViewportSize({ width, height: 800 });
@@ -73,7 +81,9 @@ for (const [shell, frame] of [
       document.documentElement.removeAttribute('data-ghrc-show-model-controls');
       document.documentElement.removeAttribute('data-ghrc-compact-header');
     });
-    assert.equal((await geometry()).boundaryTop, 52, 'disabling compact mode restores native spacing');
+    const restored = await geometry();
+    assert.equal(restored.boundaryTop, 52, 'disabling compact mode restores native spacing');
+    if (centeredGrid) assert.equal(restored.top, before.top, 'disabling compact mode restores grid centering');
   } finally {
     await browser.close();
   }
