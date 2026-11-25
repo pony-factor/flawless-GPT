@@ -15,7 +15,7 @@ before(async () => {
 });
 after(async () => { await browser?.close(); });
 
-async function fixture({ stored = {}, maximize = false, slider = false, unresolved = false, delayed = false, delayStorage = false } = {}) {
+async function fixture({ stored = {}, maximize = false, slider = false, unresolved = false, delayed = false, delayStorage = false, compactModel = false } = {}) {
   const p = await browser.newPage();
   p.errors = [];
   p.on('pageerror', error => p.errors.push(error.message));
@@ -29,7 +29,7 @@ async function fixture({ stored = {}, maximize = false, slider = false, unresolv
     <div id="timestamp-separator" class="text-xs text-token-text-secondary">Today 3:17 PM</div>
     <div id="conversation-feedback"><span>Is this conversation helpful so far?</span><button type="button">Helpful</button><button type="button">Not helpful</button><button type="button">Close</button></div></div></main>` }));
   await p.goto('https://display.test/');
-  await p.evaluate(({ stored, slider, unresolved, delayed, delayStorage }) => {
+  await p.evaluate(({ stored, slider, unresolved, delayed, delayStorage, compactModel }) => {
     window.settings = structuredClone(stored);
     window.listeners = [];
     window.chrome = { runtime: { id: "fixture" }, storage: { local: {
@@ -52,8 +52,9 @@ async function fixture({ stored = {}, maximize = false, slider = false, unresolv
     window.sends = [];
     const render = () => {
       trigger.setAttribute('data-selected-reasoning-effort', window.selectedLevel.toLowerCase());
-      document.getElementById('level').textContent = window.selectedModel + ' ' + window.selectedLevel;
+      document.getElementById('level').textContent = compactModel ? window.selectedLevel : window.selectedModel + ' ' + window.selectedLevel;
     };
+    render();
     document.getElementById('send').addEventListener('click', () => {
       window.sends.push([window.selectedModel, window.selectedLevel]);
       const turn = document.createElement('div'); turn.setAttribute('data-message-author-role', 'user');
@@ -70,12 +71,32 @@ async function fixture({ stored = {}, maximize = false, slider = false, unresolv
         menu.id = 'model-menu'; menu.role = 'menu';
         if (unresolved) menu.textContent = 'Loading model options';
         else {
-          for (const name of ['6.2', '6.10', '7']) {
-            const option = document.createElement('button'); option.type = 'button'; option.role = 'menuitemradio';
-            option.textContent = name;
-            if (name === '7') option.disabled = true;
-            option.addEventListener('click', () => { window.selectedModel = name; render(); });
-            menu.append(option);
+          const appendModels = container => {
+            for (const name of ['6.2', '6.10', '7']) {
+              const option = document.createElement('button'); option.type = 'button'; option.role = 'menuitemradio';
+              option.textContent = name;
+              if (name === '7') option.disabled = true;
+              option.setAttribute('aria-checked', String(window.selectedModel === name));
+              option.addEventListener('click', () => {
+                window.selectedModel = name;
+                render();
+                if (compactModel) close();
+              });
+              container.append(option);
+            }
+          };
+          if (compactModel) {
+            const submenu = document.createElement('button'); submenu.type = 'button'; submenu.role = 'menuitem';
+            submenu.setAttribute('aria-label', 'Select model');
+            submenu.textContent = window.selectedLevel;
+            submenu.addEventListener('click', () => {
+              const models = document.createElement('div'); models.role = 'menu';
+              appendModels(models);
+              menu.append(models);
+            });
+            menu.append(submenu);
+          } else {
+            appendModels(menu);
           }
           if (slider) {
             const power = document.createElement('div'); power.role = 'slider'; power.tabIndex = 0;
@@ -120,7 +141,7 @@ async function fixture({ stored = {}, maximize = false, slider = false, unresolv
       requestAnimationFrame(frame);
     };
     requestAnimationFrame(frame);
-  }, { stored, slider, unresolved, delayed, delayStorage });
+  }, { stored, slider, unresolved, delayed, delayStorage, compactModel });
   await p.addStyleTag({ content: displayCss + compactCss });
   await p.addScriptTag({ content: read("js/core/extension-context.js") });
   await p.addScriptTag({ content: displaySource });
@@ -292,6 +313,19 @@ test('reasoning policy stops the slider at High instead of Extra High', async ()
   const p = await fixture({ maximize: true, slider: true, stored: { forceHighThinking: true } });
   await p.waitForFunction(() => window.sliderValue === 2 && window.selectedModel === '6.10' && !document.getElementById('model-menu'));
   assert.equal(await p.evaluate(() => visibleMenuFrames), 0);
+  assert.deepEqual(p.errors, []);
+  await p.close();
+});
+
+test('reasoning policy confirms the checked model in the compact composer before sending', async () => {
+  const p = await fixture({ maximize: true, compactModel: true, slider: true, stored: { forceHighThinking: true } });
+  await p.waitForFunction(() => window.selectedModel === '6.10' && window.selectedLevel === 'High'
+    && !window.__ghrcReasoningPolicy.isSelecting());
+  assert.equal(await p.locator('#level').textContent(), 'High');
+  assert.equal(await p.locator('#prompt-textarea').inputValue(), 'Partial draft');
+  await p.locator('#send').click();
+  await p.waitForFunction(() => window.sends.length === 1);
+  assert.deepEqual(await p.evaluate(() => sends), [['6.10', 'High']]);
   assert.deepEqual(p.errors, []);
   await p.close();
 });
