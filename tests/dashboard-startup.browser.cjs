@@ -34,7 +34,18 @@ test("cached dashboard controls and highlights mount before the host page finish
   }));
   fs.writeFileSync(path.join(extension, workerScript), `
     chrome.runtime.onMessage.addListener((message, sender, reply) => {
-      if (message.type === "load-repositories") reply({ok:true,mode:"public",ownerOrder:["octo"],repositories:[{name:"example",fullName:"octo/example",url:"https://github.com/octo/example",pushedAt:new Date().toISOString(),owner:{login:"octo",type:"User",displayName:"Octo",avatarUrl:""}}]});
+      if (message.type === "load-repositories") {
+        const respond = () => reply({ok:true,mode:"public",ownerOrder:["octo"],repositories:[{name:"example",fullName:"octo/example",url:"https://github.com/octo/example",pushedAt:new Date().toISOString(),owner:{login:"octo",type:"User",displayName:"Octo",avatarUrl:""}}]});
+        if (globalThis.repositoriesReleased) {
+          respond();
+          return;
+        }
+        globalThis.releaseRepositories = () => {
+          globalThis.repositoriesReleased = true;
+          respond();
+        };
+        return true;
+      }
       else {
         if (message.type === "open-wooten-link") globalThis.wootenSearchUrl = message.url;
         if (message.type === "open-chat-dispatcher") globalThis.openedDispatcher = true;
@@ -47,7 +58,24 @@ test("cached dashboard controls and highlights mount before the host page finish
   const server = http.createServer((request, response) => {
     if (request.url === "/slow.png") { stalledResponse = response; return; }
     response.writeHead(200, { "content-type": "text/html" });
-    response.write('<style>body{margin:0}.group\\/home-composer-layout{display:flex;flex-direction:column;min-height:100vh;justify-content:center}</style><main><div class="group/home-composer-layout"><div class="home-composer-anchor">Welcome</div><script>window.startupFrames=[];function sample(){const w=document.querySelector(".home-composer-anchor"),c=document.querySelector("form");if(w)startupFrames.push({welcomeVisible:!!w.getClientRects().length,top:c?.getBoundingClientRect().top});requestAnimationFrame(sample)}requestAnimationFrame(sample)</script>');
+    response.write(`<style>body{margin:0}.group\\/home-composer-layout{display:flex;flex-direction:column;min-height:100vh;justify-content:center}</style>
+      <header>ChatGPT</header><main><div class="group/home-composer-layout"><div class="home-composer-anchor">Welcome</div>
+      <script>
+        window.startupFrames = [];
+        function sample() {
+          const welcome = document.querySelector(".home-composer-anchor");
+          const composer = document.querySelector("form");
+          startupFrames.push({
+            welcomeVisible: !!welcome.getClientRects().length,
+            top: composer?.getBoundingClientRect().top,
+            headerVisible: document.querySelector("header").checkVisibility({opacityProperty:true,visibilityProperty:true}),
+            canvasVisible: document.querySelector("main").checkVisibility({opacityProperty:true,visibilityProperty:true}),
+            repositories: document.querySelectorAll(".ghrc-repository").length,
+          });
+          requestAnimationFrame(sample);
+        }
+        requestAnimationFrame(sample);
+      </script>`);
     markupTimer = setTimeout(() => response.end('<form><div id="prompt-textarea" contenteditable="true"></div><button type="button">Send</button></form></div><img src="/slow.png"></main>'), 300);
   });
   let context;
@@ -85,6 +113,13 @@ test("cached dashboard controls and highlights mount before the host page finish
     page.on("pageerror", error => errors.push(error.message));
     // Never wait for load: the image response remains deliberately pending.
     await page.goto(`http://127.0.0.1:${server.address().port}/`, { waitUntil: "domcontentloaded" });
+    const widget = page.locator("#github-repositories-for-chatgpt");
+    await widget.getByText("Loading repositories…").waitFor({ state: "attached" });
+    await page.waitForFunction(() => startupFrames.some(frame => frame.top !== undefined));
+    const waitingFrames = await page.evaluate(() => startupFrames);
+    assert.ok(waitingFrames.every(frame => !frame.headerVisible && !frame.canvasVisible), JSON.stringify(waitingFrames));
+    await worker.evaluate(() => globalThis.releaseRepositories());
+    await widget.locator(".ghrc-repository").waitFor({ state: "visible" });
     await page.waitForFunction(() => document.querySelector(".ghrc-youtube-search") && document.querySelector("#ghrc-highlighted-pages"), { timeout: 2000 });
     const state = await page.evaluate(() => ({
       ready: document.readyState,
@@ -156,6 +191,9 @@ test("cached dashboard controls and highlights mount before the host page finish
 
     const frames = await page.evaluate(() => startupFrames);
     assert.ok(frames.some(frame => frame.top === undefined), 'sample before React adds the composer');
+    const firstVisible = frames.find(frame => frame.headerVisible || frame.canvasVisible);
+    assert.ok(firstVisible?.headerVisible && firstVisible.canvasVisible);
+    assert.equal(firstVisible.repositories, 1);
     assert.ok(frames.every(frame => !frame.welcomeVisible), JSON.stringify(frames));
     assert.ok(frames.filter(frame => frame.top !== undefined).every(frame => frame.top < 100), JSON.stringify(frames));
     const linkTitles = ".ghrc-repository-name, .ghrc-owner-name-link h3, .ghrc-pinned-issue strong";

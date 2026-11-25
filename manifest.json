@@ -74,6 +74,7 @@
         "https://chatgpt.com/*"
       ],
       "css": [
+        "css/dashboard/homepage-boot.css",
         "css/sidebar/loading-background.css",
         "css/chat/work-mode.css",
         "css/chat/disable-manual-web-search.css",
@@ -98,6 +99,7 @@
       ],
       "js": [
         "js/core/extension-context.js",
+        "js/dashboard/homepage-boot.js",
         "js/chat/flawless-corner.js",
         "js/chat/pony-error-page.js",
         "js/settings/web-commit-guidance-sync.js",
