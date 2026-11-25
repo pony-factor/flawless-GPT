@@ -96,11 +96,3 @@ test('all 27 Studio scenarios remain covered after removing the obsolete prototy
   assert.equal(fs.existsSync(path.join(root, 'tools/chat-dispatcher-prototype')), false,
     'the unused standalone Studio runtime must not be restored');
 });
-
-test('the preserved PDF Opener manifest is importable without a Studio runtime', () => {
-  const manifest = JSON.parse(fs.readFileSync(
-    path.join(root, 'tools/task-manifests/opener-tasks.json'), 'utf8'));
-  assert.equal(manifest.repository, 'PDF-magic/opener');
-  assert.ok(Array.isArray(manifest.tasks) && manifest.tasks.length > 0);
-  assert.ok(manifest.tasks.every(item => typeof item.task_id === 'string' && typeof item.prompt === 'string'));
-});

@@ -47,8 +47,6 @@ To reuse a ChatGPT window with pre-filled text, pause that dispatcher and enable
 
 The dispatcher is fully integrated into Flawless; the former standalone Brave extension, macOS launcher, and localhost GitHub verifier have been retired. No separate process, companion service, or local GitHub CLI is needed for dispatcher operation.
 
-For the prepared PDF Magic Opener checklist, import `tools/task-manifests/opener-tasks.json` from the paused Flawless dispatcher dashboard. The manifest has been preserved unchanged, including previously dispatched task statuses; those tasks will not be assigned again. Other Studio-format JSON task manifests can also be imported.
-
 If the separate Studio extension is still installed on your computer, disable it to prevent two dispatchers from controlling the same chats. Flawless uses separate storage and its existing GitHub connection, so it does not import the other extension's local session state automatically. Unavailable GitHub access blocks merge verification and task advancement.
 
 ## Tests
