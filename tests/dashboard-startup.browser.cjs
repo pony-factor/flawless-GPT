@@ -21,7 +21,7 @@ test("cached dashboard controls and highlights mount before the host page finish
     }
     entry.matches = ["http://127.0.0.1/*"];
   }
-  for (const file of ["artwork/calligraphy-initials.png", "artwork/spellcheck-only.jpg"]) {
+  for (const file of ["artwork/calligraphy-initials.png", "artwork/detective-zip.png", "artwork/spellcheck-only.jpg"]) {
     fs.mkdirSync(path.dirname(path.join(extension, file)), { recursive: true });
     fs.copyFileSync(path.join(root, file), path.join(extension, file));
   }
@@ -121,8 +121,22 @@ test("cached dashboard controls and highlights mount before the host page finish
     // Empty searches should focus the field instead of navigating.
     await iconSubmit.click();
     assert.equal(await wootenInput.evaluate(input => document.activeElement === input), true);
+    const searchSubmit = page.locator(".ghrc-wooten-link-submit");
+    await page.waitForFunction(() =>
+      document.querySelector(".ghrc-wooten-link-zipp-placeholder")?.naturalWidth > 0);
+    const desktop = page.viewportSize();
+    for (const viewport of [desktop, { width: 400, height: 800 }]) {
+      await page.setViewportSize(viewport);
+      const inputBounds = await wootenInput.boundingBox();
+      const submitBounds = await searchSubmit.boundingBox();
+      assert.ok(submitBounds.x >= inputBounds.x && submitBounds.y >= inputBounds.y);
+      assert.ok(submitBounds.x + submitBounds.width <= inputBounds.x + inputBounds.width);
+      assert.ok(submitBounds.y + submitBounds.height <= inputBounds.y + inputBounds.height);
+      assert.ok(inputBounds.x + inputBounds.width - submitBounds.x - submitBounds.width <= 2);
+    }
+    await page.setViewportSize(desktop);
     await wootenInput.fill("Sweetie Belle");
-    await iconSubmit.click();
+    await searchSubmit.click();
     let submittedUrl = null;
     for (let attempt = 0; attempt < 40; attempt++) {
       submittedUrl = await worker.evaluate(() => globalThis.wootenSearchUrl || null);
