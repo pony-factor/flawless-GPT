@@ -14,7 +14,7 @@ after(async () => { await browser?.close(); });
 async function fixture() {
   const p = await browser.newPage();
   await p.setContent('<textarea id="prompt-textarea"></textarea><div id="github-repositories-for-chatgpt"><footer class="ghrc-dashboard-footer"><nav class="ghrc-pagination"><button>Previous</button><button>Next</button></nav></footer></div>');
-  await p.addStyleTag({ content: read('css/2048.css') });
+  await p.addStyleTag({ content: read('css/games/2048.css') });
   await p.addScriptTag({ content: read('js/games/2048-keyboard.js') });
   await p.evaluate(() => {
     // A deterministic initial board: two adjacent twos in the first row.

@@ -43,7 +43,7 @@ async function fixture(disabled) {
     };
     window.__ghrcExtensionContext = { active: () => true, onStop: () => {} };
   }, disabled);
-  await page.addStyleTag({ content: read("css/disable-manual-web-search.css") });
+  await page.addStyleTag({ content: read("css/chat/disable-manual-web-search.css") });
   await page.addScriptTag({ content: read("js/chat/disable-manual-web-search.js") });
   return { page, errors };
 }

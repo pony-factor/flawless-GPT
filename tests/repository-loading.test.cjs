@@ -329,7 +329,7 @@ test("GitHub App interaction searches use explicit issue types and replace the o
 
 test("wide repository search results are anchored below the search field", () => {
   const stylesheet = fs.readFileSync(
-    require.resolve("../css/inline-toolbar-search.css"),
+    require.resolve("../css/dashboard/inline-toolbar-search.css"),
     "utf8",
   );
   const wideRule = stylesheet.match(

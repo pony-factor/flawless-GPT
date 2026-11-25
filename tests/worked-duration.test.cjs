@@ -5,7 +5,7 @@ const path = require("node:path");
 const vm = require("node:vm");
 
 const source = fs.readFileSync(path.join(__dirname, "../js/chat/worked-duration.js"), "utf8");
-const style = fs.readFileSync(path.join(__dirname, "../css/worked-duration.css"), "utf8");
+const style = fs.readFileSync(path.join(__dirname, "../css/chat/worked-duration.css"), "utf8");
 
 function fixture(text = "Worked for 8m 41s", { excluded = false, dotsEnabled = false, splitText = false, ariaLabel = null, portal = false } = {}) {
   const attributes = new Map();

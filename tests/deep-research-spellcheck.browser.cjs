@@ -75,7 +75,7 @@ async function fixture({ enabled = true, existingChat = false } = {}) {
       },
     };
   }, enabled);
-  for (const path of ["js/core/extension-context.js", "js/research/deep-research-spellcheck.js"])
+  for (const path of ["js/core/extension-context.js", "js/research/spellcheck.js"])
     await page.addScriptTag({ content: fs.readFileSync(path, "utf8") });
   return { page, errors };
 }

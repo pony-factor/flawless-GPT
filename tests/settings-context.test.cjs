@@ -21,7 +21,7 @@ for (const page of ["options.html", "popup.html"]) {
           ? { runtime: { id: "fixture" } }
           : { storage: { local: { get() { calls++; throw new Error("Unexpected storage access"); } }, onChanged: {} } };
         const scripts = [...window.document.querySelectorAll("script[src]")].map(node => node.getAttribute("src"));
-        assert.equal(scripts[0], "js/settings/settings-context.js");
+        assert.equal(scripts[0], "js/settings/context.js");
         for (const script of scripts) window.eval(read(script));
         await new Promise(resolve => setImmediate(resolve));
         assert.equal(calls, 0);
@@ -41,7 +41,7 @@ test("settings context stays active until reload and blocks later interactions",
   try {
     const { window } = dom;
     window.chrome = { runtime: { id: "fixture" }, storage: { local: {}, onChanged: {} } };
-    window.eval(read("js/settings/settings-context.js"));
+    window.eval(read("js/settings/context.js"));
     assert.equal(window.__ghrcSettingsContext.active(), true);
     assert.equal(window.document.getElementById("settings-context-notice"), null);
     const button = window.document.querySelector("button");
@@ -64,7 +64,7 @@ test("a pending invalidation rejection marks the settings page unavailable", () 
   try {
     const { window } = dom;
     window.chrome = { runtime: { id: "fixture" }, storage: { local: {}, onChanged: {} } };
-    window.eval(read("js/settings/settings-context.js"));
+    window.eval(read("js/settings/context.js"));
     window.__ghrcSettingsContext.report(new Error("Extension context invalidated."));
     assert.equal(window.__ghrcSettingsContext.active(), false);
     assert.ok(window.document.getElementById("settings-context-notice"));

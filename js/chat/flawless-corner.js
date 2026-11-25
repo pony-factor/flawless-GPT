@@ -62,8 +62,8 @@
     image.className = "ghrc-flawless-mascot-image";
     image.alt = "";
     image.draggable = false;
-    const stillSource = chrome.runtime.getURL("artwork/SB-icon.webp");
-    const animatedSource = chrome.runtime.getURL("artwork/SB-icon.gif");
+    const stillSource = chrome.runtime.getURL("artwork/SB-full.webp");
+    const animatedSource = chrome.runtime.getURL("artwork/SB-full.gif");
     image.src = stillSource;
     // Warm the GIF cache so the first hover does not flash an empty image.
     const animatedPreload = new Image();

@@ -47,7 +47,7 @@ async function fixture({ router = true, active = false, error = false, held = fa
     }
   }, { router, held });
   await p.addScriptTag({ content: source });
-  await p.addStyleTag({ content: fs.readFileSync(path.join(__dirname, '../css/refresh-view.css'), 'utf8') });
+  await p.addStyleTag({ content: fs.readFileSync(path.join(__dirname, '../css/chat/refresh-view.css'), 'utf8') });
   return { p, loads: () => loads };
 }
 

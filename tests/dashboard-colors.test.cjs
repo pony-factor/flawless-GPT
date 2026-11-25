@@ -5,8 +5,8 @@ const path = require("node:path");
 const vm = require("node:vm");
 
 const root = path.join(__dirname, "..");
-const source = fs.readFileSync(path.join(root, "js/dashboard/dashboard-colors.js"), "utf8");
-const styles = fs.readFileSync(path.join(root, "css/styles.css"), "utf8");
+const source = fs.readFileSync(path.join(root, "js/dashboard/colors.js"), "utf8");
+const styles = fs.readFileSync(path.join(root, "css/dashboard/styles.css"), "utf8");
 
 function element() {
   const listeners = new Map();
@@ -118,10 +118,10 @@ test("both settings surfaces expose HEX color controls and default theme colors"
     const html = fs.readFileSync(path.join(root, page), "utf8");
     assert.match(html, /id="dashboard-color-settings"/);
     assert.match(html, /id="dashboard-color-grid"/);
-    assert.match(html, /src="js\/dashboard\/dashboard-colors\.js"/);
+    assert.match(html, /src="js\/dashboard\/colors\.js"/);
   }
   const manifest = JSON.parse(fs.readFileSync(path.join(root, "manifest.json"), "utf8"));
-  assert.ok(manifest.content_scripts.some(entry => entry.js?.includes("js/dashboard/dashboard-colors.js")));
+  assert.ok(manifest.content_scripts.some(entry => entry.js?.includes("js/dashboard/colors.js")));
   assert.match(styles, /--ghrc-dashboard-accent-light, #0969da/);
   assert.match(styles, /--ghrc-dashboard-accent-dark, #4493f8/);
   assert.match(styles, /--ghrc-dashboard-link-light, var\(--ghrc-accent\)/);
