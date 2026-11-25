@@ -4,8 +4,8 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Flawless ChatGPT</title>
-    <link rel="stylesheet" href="css/options.css" />
-    <link rel="stylesheet" href="css/popup-adjustments.css" />
+    <link rel="stylesheet" href="css/settings/options.css" />
+    <link rel="stylesheet" href="css/settings/popup-adjustments.css" />
     <style>
       :root {
         accent-color: #a97dee;
@@ -46,7 +46,7 @@
       <header class="popup-header">
         <div class="brand">
           <img
-            src="artwork/flawless-headshot/SB-icon.webp"
+            src="artwork/flawless-headshot/SB-full.webp"
             alt="Wizard character artwork by Squeaky_Belle"
             width="64"
             height="64"
@@ -205,7 +205,7 @@
 
           <fieldset id="dashboard-color-settings" aria-label="Dashboard color settings">
             <legend>Dashboard colors</legend>
-            <p class="help">Set light and dark colors for dashboard accents and links to repositories, owners and pinned issues. Enter a six-digit hex value with or without #, or use the color picker. Default restores the theme color.</p>
+            <p class="help">Set dashboard accents and link colors separately for light and dark modes. Choose a swatch or enter any six-digit HEX value (with or without #). Repository and search-override links inherit the accent unless customized; owner names and pinned issue titles retain their native colors by default. Default restores the inherited color; changes apply to open dashboards.</p>
             <div id="dashboard-color-grid" class="composer-color-grid"></div>
             <button id="dashboard-color-reset" type="button" class="secondary">Restore dashboard colors</button>
           </fieldset>
@@ -675,7 +675,7 @@
         </div>
       </div>
     </template>
-    <script src="js/settings/settings-context.js"></script>
+    <script src="js/settings/context.js"></script>
     <script src="js/github/token-vault.js"></script>
     <script src="js/dashboard/repository-search-shortcut.js"></script>
     <script src="js/settings/options.js"></script>
@@ -686,7 +686,7 @@
     <script src="js/settings/research-publisher-options.js"></script>
     <script src="js/settings/owner-grid-options.js"></script>
     <script src="js/settings/popup.js"></script>
-    <script src="js/dashboard/dashboard-colors.js"></script>
+    <script src="js/dashboard/colors.js"></script>
     <script src="js/settings/autofocus-options.js"></script>
   </body>
 </html>
