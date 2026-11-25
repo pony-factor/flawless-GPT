@@ -35,6 +35,12 @@ The dashboard:
 - combines recent repository activity with locally tracked opening frequency to
   personalize the order.
 
+## Documentation
+
+- [Feature guide](docs/features.md) — dashboard, composer, links, research and troubleshooting.
+- [Development and architecture](docs/development.md) — runtime entry points, source layout, security boundaries and tests.
+- [Chat dispatcher](docs/chat-dispatcher.md) — task import, Start/Pause, completion checks and migration.
+
 ## Artwork ✨
 
 Extension icon and settings artwork by [Squeaky_Belle](https://disqus.com/by/Squeaky_Belle),
@@ -371,24 +377,15 @@ field is active. Browser-reserved keyboard combinations may be unavailable.
 
 ## Automated tests
 
-Pull requests and pushes to `main` require all Node.js unit tests and focused
-user-message / sidebar-icon browser regressions. The full external-link browser
-suite also runs as an advisory check while unrelated existing browser failures
-are addressed. On Linux browser checks use Playwright's Chromium; macOS uses
-Brave by default or `BRAVE_PATH` when set.
+The quality-gate and regression workflows run JavaScript syntax and manifest
+checks, Node.js unit tests, Python native-host tests, and focused Chromium
+regressions. Some broader browser suites are advisory. See the
+[development guide](docs/development.md#testing-locally) for dependency
+installation, executable selection, local commands and the CI breakdown.
 
-```sh
-node --test tests/*.test.cjs
-npm install --no-save --package-lock=false playwright@1.56.1
-npx playwright install chromium
-node --test tests/external-links.browser.cjs
-```
+## Source organization
 
-Other browser suites are not yet enforced by CI.
-
-## JavaScript organization
-
-Scripts live in feature folders under `js/`. The manifest and extension HTML
+Scripts and styles live in feature folders under `js/` and `css/`. The manifest and extension HTML
 pages declare their loading order; the background entry point is
 `js/core/background.js`. Keep that order when adding or moving scripts.
 
