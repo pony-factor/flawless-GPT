@@ -15,7 +15,7 @@ before(async () => {
 });
 after(async () => { await browser?.close(); });
 
-async function fixture({ stored = {}, maximize = false, slider = false, unresolved = false, delayed = false, delayStorage = false, compactModel = false } = {}) {
+async function fixture({ stored = {}, maximize = false, slider = false, unresolved = false, delayed = false, delayStorage = false, compactModel = false, unknownEffort = false } = {}) {
   const p = await browser.newPage();
   p.errors = [];
   p.on('pageerror', error => p.errors.push(error.message));
@@ -29,7 +29,7 @@ async function fixture({ stored = {}, maximize = false, slider = false, unresolv
     <div id="timestamp-separator" class="text-xs text-token-text-secondary">Today 3:17 PM</div>
     <div id="conversation-feedback"><span>Is this conversation helpful so far?</span><button type="button">Helpful</button><button type="button">Not helpful</button><button type="button">Close</button></div></div></main>` }));
   await p.goto('https://display.test/');
-  await p.evaluate(({ stored, slider, unresolved, delayed, delayStorage, compactModel }) => {
+  await p.evaluate(({ stored, slider, unresolved, delayed, delayStorage, compactModel, unknownEffort }) => {
     window.settings = structuredClone(stored);
     window.listeners = [];
     window.chrome = { runtime: { id: "fixture" }, storage: { local: {
@@ -55,6 +55,10 @@ async function fixture({ stored = {}, maximize = false, slider = false, unresolv
       document.getElementById('level').textContent = compactModel ? window.selectedLevel : window.selectedModel + ' ' + window.selectedLevel;
     };
     render();
+    if (unknownEffort) {
+      trigger.removeAttribute('data-selected-reasoning-effort');
+      document.getElementById('level').textContent = 'Thinking effort';
+    }
     document.getElementById('send').addEventListener('click', () => {
       window.sends.push([window.selectedModel, window.selectedLevel]);
       const turn = document.createElement('div'); turn.setAttribute('data-message-author-role', 'user');
@@ -141,7 +145,7 @@ async function fixture({ stored = {}, maximize = false, slider = false, unresolv
       requestAnimationFrame(frame);
     };
     requestAnimationFrame(frame);
-  }, { stored, slider, unresolved, delayed, delayStorage, compactModel });
+  }, { stored, slider, unresolved, delayed, delayStorage, compactModel, unknownEffort });
   await p.addStyleTag({ content: displayCss + compactCss });
   await p.addScriptTag({ content: read("js/core/extension-context.js") });
   await p.addScriptTag({ content: displaySource });
@@ -323,9 +327,38 @@ test('reasoning policy confirms the checked model in the compact composer before
     && !window.__ghrcReasoningPolicy.isSelecting());
   assert.equal(await p.locator('#level').textContent(), 'High');
   assert.equal(await p.locator('#prompt-textarea').inputValue(), 'Partial draft');
+  const before = await p.evaluate(() => opens);
   await p.locator('#send').click();
   await p.waitForFunction(() => window.sends.length === 1);
+  assert.equal(await p.evaluate(() => opens), before);
   assert.deepEqual(await p.evaluate(() => sends), [['6.10', 'High']]);
+  assert.deepEqual(p.errors, []);
+  await p.close();
+});
+
+test('reasoning policy reuses a fresh cache without opening menus for normal sends', async () => {
+  const p = await fixture({ maximize: true, unresolved: true, unknownEffort: true, stored: {
+    forceHighThinking: true,
+    forceHighThinkingConfirmedTargets: { model: [6, 10], effort: 'high', checkedAt: Date.now() },
+  } });
+  await p.waitForFunction(() => window.__ghrcReasoningPolicy);
+  await p.locator('#send').click();
+  await p.waitForFunction(() => window.sends.length === 1);
+  await p.locator('#prompt-textarea').fill('Second message');
+  await p.locator('#send').click();
+  await p.waitForFunction(() => window.sends.length === 2);
+  assert.equal(await p.evaluate(() => opens), 0);
+  assert.deepEqual(p.errors, []);
+  await p.close();
+});
+
+test('reasoning policy allows normal sends after an inconclusive initial check', async () => {
+  const p = await fixture({ maximize: true, unresolved: true, unknownEffort: true, stored: { forceHighThinking: true } });
+  await p.waitForFunction(() => opens > 0 && !window.__ghrcReasoningPolicy.isSelecting());
+  const before = await p.evaluate(() => opens);
+  await p.locator('#send').click();
+  await p.waitForFunction(() => window.sends.length === 1);
+  assert.equal(await p.evaluate(() => opens), before);
   assert.deepEqual(p.errors, []);
   await p.close();
 });

@@ -22,14 +22,21 @@
     if (!Object.hasOwn(ranks, current) || !Object.hasOwn(ranks, target)) return 0;
     return Math.sign(ranks[target] - ranks[current]);
   };
+  // Missing or generic labels are not evidence of a wrong setting.
+  function knownMismatch(current, expected, currentEffort) {
+    return Boolean((current && expected && compare(current, expected) < 0)
+      || ["instant", "light", "low", "standard", "medium", EXTRA].includes(currentEffort));
+  }
   if (typeof module !== "undefined" && module.exports) {
-    module.exports = { version, compare, newest, desired, matches, effort, sliderDirection };
+    module.exports = { version, compare, newest, desired, matches, effort, sliderDirection, knownMismatch };
     return;
   }
 
   const context = globalThis.__ghrcExtensionContext;
   if (!context?.active()) return;
   const SETTING = "forceHighThinking", EXTRA_SETTING = "showExtraHighSendButton";
+  const CACHE_KEY = "forceHighThinkingConfirmedTargets";
+  const CHECK_INTERVAL = 5 * 60 * 1000;
   const MENU_QUERY = '[role="menu"], [role="listbox"]';
   const OPTION_QUERY = '[role="menuitem"], [role="menuitemradio"], [role="option"], [role="radio"]';
   const CONTROL_QUERY = 'button[aria-haspopup], [role="button"][aria-haspopup], [role="combobox"], [data-codex-intelligence-trigger]';
@@ -83,10 +90,27 @@
   const action = input => queue()?.findActionButton?.(input) || nativeSend(input);
 
   let force = false, extraButton = false, loaded = false, epoch = 0, restoreRequired = false;
-  let active = null, permit = null, internalClick = false, menuSession = null;
+  let active = null, internalClick = false, menuSession = null;
+  let latestKnown = null, lastAttempt = 0, cached = null;
   let extraAvailable = false, warmControl = null, warmRoute = "", mountScheduled = false;
   let status = "", draftRevision = 0;
   const on = () => force || extraButton || restoreRequired;
+  const mismatch = () => knownMismatch(modelValue(modelControl()), latestKnown, level(effortControl()));
+  function readCache(value) {
+    if (!value || !Array.isArray(value.model) || value.model.length !== 2
+      || !value.model.every(n => Number.isSafeInteger(n) && n >= 0)
+      || !Number.isFinite(value.checkedAt) || value.checkedAt > Date.now()
+      || value.effort !== HIGH) return null;
+    return value;
+  }
+  function rememberHigh(model, probedExtra) {
+    cached = { model: model.version, effort: HIGH, checkedAt: Date.now(),
+      extraAvailable, probedExtra };
+    latestKnown = model.version;
+    void context.run(() => chrome.storage.local.set({ [CACHE_KEY]: cached }));
+  }
+  const cacheFresh = () => cached && Date.now() - cached.checkedAt < CHECK_INTERVAL
+    && (!extraButton || cached.probedExtra);
   function report(message) {
     status = message;
     scheduleMount();
@@ -174,6 +198,7 @@
   async function selectModel(valid) {
     return withModelChoices(valid, async models => {
       const candidate = newest(models);
+      latestKnown = candidate.version;
       const current = modelValue(modelControl());
       if (matches(current, candidate.version) || checkedModel(candidate)) return candidate.version;
       candidate.node.click();
@@ -235,11 +260,12 @@
 
   async function select(target, valid, probe = false) {
     if (!valid()) return null;
-    extraAvailable = false;
     const model = await selectModel(valid);
-    if (!model || !valid()) return null;
-    const beforeEffort = await confirmModel(model, valid);
-    if (!beforeEffort || !await selectEffort(target, valid, probe)) return null;
+    if (!valid()) return null;
+    // A failed model probe must not prevent a best-effort High selection.
+    // Extra High remains an explicitly confirmed, one-shot action.
+    if (target === EXTRA && (!model || !await confirmModel(model, valid))) return null;
+    if (!await selectEffort(target, valid, probe) || !model || !valid()) return null;
     const confirmedModel = await confirmModel(model, valid);
     return confirmedModel && confirmed(target, confirmedModel) ? confirmedModel : null;
   }
@@ -265,34 +291,35 @@
     return Boolean(control && (current ? matches(current, model.version) : control === model.control)
       && level(effortControl()) === target);
   }
-  async function prepareHigh(input = composer()) {
-    if (!loaded) return false;
-    if (!on()) return !active;
-    if (active?.kind === "warm") await active.promise;
-    if (active || !input || input !== composer()) return false;
+  async function refreshHigh(valid) {
+    lastAttempt = Date.now();
     const startRoute = route();
-    const operation = begin("high", async valid => {
-      permit = null;
-      const model = await select(HIGH, () => valid() && startRoute === route() && input === composer(), extraButton);
-      if (!model) {
-        report("Could not confirm the newest GPT at High. Message not sent.");
-        return false;
-      }
+    const selected = await select(HIGH, () => valid() && route() === startRoute, extraButton);
+    if (selected && valid() && route() === startRoute) {
       restoreRequired = false;
-      permit = { input, route: startRoute, model, expires: Date.now() + 1500 };
+      rememberHigh(selected, extraButton);
       report("");
-      return true;
-    });
-    return Boolean(await operation);
+    }
+    return Boolean(selected);
+  }
+  async function prepareHigh(input = composer()) {
+    if (!input || input !== composer()) return false;
+    const startRoute = route();
+    if (active?.kind === "warm") await active.promise;
+    if (active || input !== composer() || startRoute !== route()) return false;
+    if (!on() || !mismatch()) return true;
+    await begin("high", valid => refreshHigh(() => valid() && input === composer() && route() === startRoute));
+    if (input !== composer() || startRoute !== route()) return false;
+    if (on() && mismatch()) {
+      report("The current model or reasoning level is not High on the newest known GPT. Message not sent.");
+      return false;
+    }
+    report("");
+    return true;
   }
   function consumeHigh(button) {
     const input = composer();
-    if (!loaded || active || button !== readySend(input)) return false;
-    if (!on()) return true;
-    const prepared = permit;
-    permit = null;
-    return Boolean(prepared && prepared.input === input && prepared.route === route()
-      && Date.now() <= prepared.expires && confirmed(HIGH, prepared.model));
+    return Boolean(!active && button && button === readySend(input) && (!on() || !mismatch()));
   }
   function clickHigh(button) {
     if (!consumeHigh(button)) return false;
@@ -332,17 +359,15 @@
     const snapshot = draftSnapshot(input);
     if (!await prepareHigh(input)) return;
     if (!unchanged(snapshot) || !idleForManual(input)) {
-      permit = null;
       report("The draft or conversation changed. Try Send again.");
       return;
     }
-    if (!clickHigh(readySend(input))) report("High could not be reconfirmed. Nothing sent.");
+    if (!clickHigh(readySend(input))) report("The send control or reasoning selection changed. Nothing sent.");
   }
   async function sendExtra(input) {
     if (!extraButton || !extraAvailable || active || !idleForExtra(input)) return false;
     const snapshot = draftSnapshot(input);
     return begin("extra", async valid => {
-      permit = null;
       let submitted = false;
       restoreRequired = true;
       try {
@@ -362,31 +387,33 @@
       } finally {
         // Even an unacknowledged or cancelled attempt must not leave Extra High armed.
         const restored = await select(HIGH, () => context.active(), extraButton);
-        if (restored) restoreRequired = false;
-        else report("High could not be restored. Normal sends are blocked until confirmed.");
+        if (restored) {
+          restoreRequired = false;
+          rememberHigh(restored, extraButton);
+        } else report("High restoration could not be confirmed; normal sends only pause for a known mismatch.");
       }
     });
   }
 
   function deferEnter(event, input) {
-    if (loaded && !on() && !active) return false;
+    if (!active && (!on() || !mismatch())) return false;
     event.preventDefault();
     event.stopImmediatePropagation();
     if (!active || active.kind === "warm") void context.run(() => manualHigh(input));
     return true;
   }
   function captureClick(event) {
-    if (internalClick || (loaded && !on() && !active)) return;
+    if (internalClick || (!active && (!on() || !mismatch()))) return;
     const input = composer();
     const button = event.target?.closest?.("button");
     if (!button || button !== nativeSend(input)) return;
     event.preventDefault();
     event.stopImmediatePropagation();
     if (event.isTrusted && (!active || active.kind === "warm")) void context.run(() => manualHigh(input));
-    else report("Waiting for confirmed High reasoning. Message not sent.");
+    else report("Reasoning adjustment in progress or a known mismatch. Message not sent.");
   }
   function captureSubmit(event) {
-    if (internalClick || (loaded && !on() && !active)) return;
+    if (internalClick || (!active && (!on() || !mismatch()))) return;
     const input = composer();
     if (event.target !== form(input)) return;
     event.preventDefault();
@@ -428,15 +455,18 @@
       if (notice.textContent !== status) notice.textContent = status;
     }
     const control = modelControl();
-    if (loaded && on() && !active && control && (warmControl !== control || warmRoute !== route())) {
+    const state = queue()?.getDispatcherLifecycle?.();
+    const newSurface = warmControl !== control || warmRoute !== route();
+    const due = Date.now() - lastAttempt >= CHECK_INTERVAL && !cacheFresh();
+    if (loaded && on() && !active && control && !menus().length
+      && !state?.responseActive && !state?.submissionPending
+      && ((newSurface && (mismatch() || (!cacheFresh() && !lastAttempt))) || due)) {
       warmControl = control;
       warmRoute = route();
-      void begin("warm", async valid => {
-        const start = route();
-        const selected = await select(HIGH, () => valid() && route() === start, extraButton);
-        if (selected) { restoreRequired = false; report(""); }
-        return Boolean(selected);
-      });
+      void begin("warm", refreshHigh);
+    } else if (control && newSurface && cacheFresh() && !mismatch()) {
+      warmControl = control;
+      warmRoute = route();
     }
   }
   function scheduleMount() {
@@ -447,9 +477,9 @@
   }
   function apply(settings) {
     epoch++;
-    permit = null;
     warmControl = null;
-    extraAvailable = false;
+    lastAttempt = 0;
+    extraAvailable = Boolean(cached?.extraAvailable);
     force = Boolean(settings[SETTING]);
     extraButton = Boolean(settings[EXTRA_SETTING]);
     loaded = true;
@@ -470,12 +500,13 @@
     scheduleMount();
   }, true);
   window.addEventListener("ghrc:route-change", scheduleMount);
+  const refreshTimer = setInterval(scheduleMount, CHECK_INTERVAL);
   const observer = new MutationObserver(() => {
     if (menuSession) ownedMenus(menuSession);
     scheduleMount();
   });
   observer.observe(document, { subtree: true, childList: true, characterData: true, attributes: true,
-    attributeFilter: ["aria-expanded", "aria-disabled", "aria-selected", "aria-checked", "aria-valuenow", "data-selected-reasoning-effort", "disabled", "hidden", "data-state"] });
+    attributeFilter: ["aria-expanded", "aria-disabled", "aria-selected", "aria-checked", "aria-valuenow", "data-selected-reasoning-effort", "data-selected-model", "disabled", "hidden", "data-state"] });
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area === "local" && (changes[SETTING] || changes[EXTRA_SETTING])) {
       apply({ [SETTING]: changes[SETTING] ? changes[SETTING].newValue : force,
@@ -485,6 +516,7 @@
   context.onStop(() => {
     epoch++;
     observer.disconnect();
+    clearInterval(refreshTimer);
     window.removeEventListener("click", captureClick, true);
     window.removeEventListener("submit", captureSubmit, true);
     document.getElementById(BUTTON_ID)?.remove();
@@ -496,5 +528,10 @@
     style.remove();
     delete globalThis.__ghrcReasoningPolicy;
   });
-  void context.run(async () => apply(await chrome.storage.local.get({ [SETTING]: false, [EXTRA_SETTING]: false })));
+  void context.run(async () => {
+    const settings = await chrome.storage.local.get({ [SETTING]: false, [EXTRA_SETTING]: false, [CACHE_KEY]: {} });
+    cached = readCache(settings[CACHE_KEY]);
+    latestKnown = cached?.model || null;
+    apply(settings);
+  });
 })();
