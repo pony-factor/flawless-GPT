@@ -18,6 +18,13 @@ html[data-ghrc-new-chat][data-ghrc-compact-header]:not([data-ghrc-show-model-con
   --app-shell-main-content-frame-top-offset: 0px !important;
 }
 
+/* Keep the homepage grid's spacer rows from pushing the composer down. */
+html[data-ghrc-new-chat][data-ghrc-compact-header]
+  [class~="group/home-composer-layout"] :is(.home-composer-centered, [class~="sm:home-composer-centered"]) {
+  grid-template-rows: auto !important;
+  align-content: start !important;
+}
+
 /* If the toolbar is visible, keep its inset and place the composer below it. */
 html[data-ghrc-new-chat][data-ghrc-compact-header][data-ghrc-show-model-controls]
   [class~="group/home-composer-layout"] :is(.home-composer-centered, [class~="sm:home-composer-centered"]) {
