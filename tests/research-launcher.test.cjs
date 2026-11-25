@@ -63,7 +63,7 @@ function app({ enabled = true, connected = true } = {}) {
   const load = () => {
     listeners = [];
     const context = vm.createContext({ chrome, URL, TextEncoder, Date: { now: () => now }, crypto: { randomUUID: () => 'run-' + nextId }, console });
-    for (const file of ['research-report-origin.js', 'research-publisher-background.js', 'research-launcher-background.js'])
+    for (const file of ['report-origin.js', 'publisher-background.js', 'launcher-background.js'])
       vm.runInContext(fs.readFileSync('js/research/' + file, 'utf8'), context);
   };
   load();

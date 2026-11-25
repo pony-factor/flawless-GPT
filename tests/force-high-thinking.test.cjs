@@ -1,6 +1,6 @@
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
-const { version, newest, desired, matches, effort, sliderDirection } = require("../js/chat/force-high-thinking.js");
+const { version, newest, desired, matches, effort, sliderDirection, knownMismatch } = require("../js/chat/force-high-thinking.js");
 
 test("newest enabled numbered GPT version is ordered by components, not decimals", () => {
   const choices = ["6", "6.2 High", "GPT-6.10", "7", "GPT-5.6 Sol"].map((name, index) => ({
@@ -26,4 +26,16 @@ test("slider moves toward the explicit target instead of its maximum", () => {
   assert.equal(sliderDirection("high", "extra high"), 1);
   assert.equal(sliderDirection("unknown", "high"), 0);
   assert.equal(effort("6.2 Extra High"), "extra high");
+});
+
+test("only positive evidence of a wrong model or effort blocks a normal send", () => {
+  const latest = version("6.10");
+  assert.equal(knownMismatch(null, latest, ""), false);
+  assert.equal(knownMismatch(null, latest, "thinking"), false);
+  assert.equal(knownMismatch(version("6.10"), latest, ""), false);
+  assert.equal(knownMismatch(version("7"), latest, "high"), false);
+  assert.equal(knownMismatch(version("6.2"), latest, "high"), true);
+  assert.equal(knownMismatch(null, latest, "standard"), true);
+  assert.equal(knownMismatch(null, latest, "extra high"), true);
+  assert.equal(knownMismatch(null, null, "high"), false);
 });

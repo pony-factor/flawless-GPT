@@ -5,8 +5,8 @@ const path = require("node:path");
 const vm = require("node:vm");
 
 const read = (file) => fs.readFileSync(path.join(__dirname, "..", file), "utf8");
-const source = read("js/chat/chat-display.js");
-const css = read("css/refresh-view.css");
+const source = read("js/chat/display.js");
+const css = read("css/chat/refresh-view.css");
 
 function fixture(initial = {}) {
   const attributes = new Set();

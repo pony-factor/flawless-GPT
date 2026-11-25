@@ -28,7 +28,7 @@ async function fixture({ enabled = true, label = 'Work with ChatGPT', ignoreFirs
       composer.setAttribute('aria-label', 'Ask ChatGPT');
     };
   }, { enabled, label, ignoreFirstClick });
-  await page.addStyleTag({ content: fs.readFileSync(path.join(__dirname, '../css/work-mode.css'), 'utf8') });
+  await page.addStyleTag({ content: fs.readFileSync(path.join(__dirname, '../css/chat/work-mode.css'), 'utf8') });
   await page.addScriptTag({ content: fs.readFileSync(path.join(__dirname, '../js/chat/disable-work-mode.js'), 'utf8') });
   return page;
 }

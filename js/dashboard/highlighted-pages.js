@@ -34,9 +34,10 @@
   }
 
   function createCard(page) {
+    const isPdf = page.documentType === "pdf";
     const card = document.createElement("a");
     card.className = "ghrc-highlighted-page";
-    if (page.documentType === "pdf") card.classList.add("ghrc-highlighted-page-pdf");
+    if (isPdf) card.classList.add("ghrc-highlighted-page-pdf");
     card.href = page.url;
     card.target = "_self";
     card.rel = "noopener noreferrer";
@@ -58,11 +59,20 @@
     copy.className = "ghrc-highlighted-page-copy";
     const title = document.createElement("strong");
     title.textContent = page.customTitle || page.title || page.url;
+    const meta = document.createElement("span");
+    meta.className = "ghrc-highlighted-page-meta";
     const host = document.createElement("small");
     host.textContent = page.siteName || page.hostname || new URL(page.url).hostname;
-    copy.append(title, host);
+    meta.append(host);
+    if (isPdf) {
+      const tag = document.createElement("span");
+      tag.className = "ghrc-highlighted-page-pdf-tag";
+      tag.textContent = "PDF";
+      meta.append(tag);
+    }
+    copy.append(title, meta);
 
-    if (page.description) {
+    if (page.description && (!isPdf || page.description !== "PDF document")) {
       const description = document.createElement("span");
       description.className = "ghrc-highlighted-page-description";
       description.textContent = page.description;

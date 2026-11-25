@@ -27,7 +27,7 @@ function background(enabled, nativeResult = { ok: true, repository: 'research', 
     },
   };
   const context = vm.createContext({ chrome, URL, TextEncoder, Date, Error });
-  for (const file of ['research-report-origin.js', 'research-publisher-background.js'])
+  for (const file of ['report-origin.js', 'publisher-background.js'])
     vm.runInContext(fs.readFileSync('js/research/' + file, 'utf8'), context);
   const sender = { id: 'test-extension', url: 'https://connector-openai-deep-research.web-sandbox.oaiusercontent.com/', tab: { id: 1, url: 'https://chatgpt.com/c/example' } };
   return {
@@ -220,7 +220,7 @@ test('publisher options ignore pages without publisher controls', () => {
 });
 
 test('import launcher stays available while the enabled publisher is disconnected', () => {
-  const source = fs.readFileSync('js/research/research-publisher.js', 'utf8');
+  const source = fs.readFileSync('js/research/publisher.js', 'utf8');
   const boundary = source.indexOf('  chrome.storage.local.get');
   const context = { WeakSet, TextEncoder, URL };
   vm.createContext(context);
@@ -237,8 +237,8 @@ test('import launcher stays available while the enabled publisher is disconnecte
 });
 
 test('report monitors remain bounded and use the confirmed publication event', () => {
-  const publisher = fs.readFileSync('js/research/research-publisher.js', 'utf8');
-  const host = fs.readFileSync('js/research/research-report-host.js', 'utf8');
+  const publisher = fs.readFileSync('js/research/publisher.js', 'utf8');
+  const host = fs.readFileSync('js/research/report-host.js', 'utf8');
   assert.match(publisher, /function pollActiveImport\(active\)/);
   assert.match(publisher, /MAX_JOB_LOOKUP_RETRIES = 60/);
   assert.match(publisher, /function dispose\(\)/);

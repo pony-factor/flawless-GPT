@@ -16,7 +16,7 @@ before(async () => {
   for (const directory of ["js", "css", "vendor/pdfjs"]) {
     fs.mkdirSync(path.join(extension, directory), { recursive: true });
   }
-  for (const file of ["js/links/pdf-preview.mjs", "js/dashboard/highlighted-pages-worker.js", "js/settings/highlighted-pages-options.js", "js/dashboard/highlighted-pages.js", "css/highlighted-pages.css", "css/options.css", "css/styles.css", "vendor/html2canvas-pro.min.js"]) {
+  for (const file of ["js/links/pdf-preview.mjs", "js/dashboard/highlighted-pages-worker.js", "js/settings/highlighted-pages-options.js", "js/dashboard/highlighted-pages.js", "css/dashboard/highlighted-pages.css", "css/settings/options.css", "css/dashboard/styles.css", "vendor/html2canvas-pro.min.js"]) {
     fs.mkdirSync(path.dirname(path.join(extension, file)), { recursive: true });
     fs.copyFileSync(path.join(root, file), path.join(extension, file));
   }
@@ -30,7 +30,7 @@ before(async () => {
   const options = fs.readFileSync(path.join(root, "options.html"), "utf8");
   const section = options.match(/<fieldset id="highlighted-pages-settings">[\s\S]*?<\/fieldset>/)[0];
   const template = options.match(/<template id="highlighted-page-template">[\s\S]*?<\/template>/)[0];
-  fs.writeFileSync(path.join(extension, "fixture.html"), `<!doctype html><link rel="stylesheet" href="css/options.css"><link rel="stylesheet" href="css/styles.css"><link rel="stylesheet" href="css/highlighted-pages.css">${section}${template}<div id="github-repositories-for-chatgpt"><p>Repository dashboard</p></div><script src="js/settings/highlighted-pages-options.js"></script><script src="js/dashboard/highlighted-pages.js"></script>`);
+  fs.writeFileSync(path.join(extension, "fixture.html"), `<!doctype html><link rel="stylesheet" href="css/settings/options.css"><link rel="stylesheet" href="css/dashboard/styles.css"><link rel="stylesheet" href="css/dashboard/highlighted-pages.css">${section}${template}<div id="github-repositories-for-chatgpt"><p>Repository dashboard</p></div><script src="js/settings/highlighted-pages-options.js"></script><script src="js/dashboard/highlighted-pages.js"></script>`);
   const popup = fs.readFileSync(path.join(root, "popup.html"), "utf8");
   const popupSection = popup.match(/<fieldset id="highlighted-pages-settings">[\s\S]*?<\/fieldset>/)[0];
   const popupTemplate = popup.match(/<template id="highlighted-page-template">[\s\S]*?<\/template>/)[0];
@@ -114,7 +114,10 @@ test("adding and refreshing a PDF caches the complete first page, preserves link
   assert.equal(pixels.height, 560);
   assert.equal(pixels.width, 280);
   assert.ok(pixels.color[0] > 240 && pixels.color[2] < 20, "first page is red; second page is blue");
-  await page.locator(".ghrc-highlighted-page-pdf img").waitFor();
+  const card = page.locator(".ghrc-highlighted-page-pdf");
+  await card.locator("img").waitFor();
+  assert.deepEqual(await card.locator(".ghrc-highlighted-page-meta > *").allTextContents(), ["127.0.0.1", "PDF"]);
+  assert.equal(await card.locator(".ghrc-highlighted-page-description").count(), 0);
   const layout = await page.evaluate(() => {
     const widget = document.getElementById("github-repositories-for-chatgpt");
     const highlights = document.getElementById("ghrc-highlighted-pages");
