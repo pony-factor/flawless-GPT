@@ -118,7 +118,8 @@ for (const [route, width, legacy, enabled] of [
         return nativeGet(defaults);
       };
     `);
-    fs.writeFileSync(path.join(extension, 'background.js'), 'chrome.runtime.onInstalled.addListener(() => {});');
+    const workerScript = 'compact-startup-worker.js';
+    fs.writeFileSync(path.join(extension, workerScript), 'chrome.runtime.onInstalled.addListener(() => {});');
     // Exercise the real settings controls and save handler with an empty vault.
     // This isolated extension never loads the user's credentials or profile.
     for (const file of ['js/settings/options.js', 'js/settings/popup.js', 'js/settings/options-page.js', 'js/dashboard/repository-search-shortcut.js']) {
@@ -134,7 +135,7 @@ for (const [route, width, legacy, enabled] of [
     }
     fs.writeFileSync(path.join(extension, 'manifest.json'), JSON.stringify({
       manifest_version: 3, name: 'Compact first paint fixture', version: '1.0', permissions: ['storage'],
-      background: {service_worker: 'background.js'},
+      background: {service_worker: workerScript},
       content_scripts: [{matches:['http://127.0.0.1/*'], run_at:'document_start',
         css:['css/chat/compact-header.css'], js:['js/core/extension-context.js','delay-settings.js','js/chat/compact-header.js']}],
     }));
@@ -158,7 +159,21 @@ for (const [route, width, legacy, enabled] of [
         executablePath: process.env.BROWSER_EXECUTABLE || '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser',
         headless:true, viewport:{width,height:800}, args:[`--disable-extensions-except=${extension}`,`--load-extension=${extension}`],
       });
-      const worker = context.serviceWorkers()[0] || await context.waitForEvent('serviceworker');
+      // Persistent contexts can expose unrelated workers before the fixture starts.
+      const isCompactWorker = candidate => {
+        const url = new URL(candidate.url());
+        return url.protocol === 'chrome-extension:' && url.pathname === `/${workerScript}`;
+      };
+      const worker = context.serviceWorkers().find(isCompactWorker)
+        || await context.waitForEvent('serviceworker', { predicate: isCompactWorker, timeout: 10000 });
+      // The worker target can appear before Chromium installs the extension API bindings.
+      let storageReady = false;
+      for (let attempt = 0; attempt < 100; attempt++) {
+        storageReady = await worker.evaluate(() => Boolean(globalThis.chrome?.storage?.local));
+        if (storageReady) break;
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
+      assert.ok(storageReady, `Compact fixture storage unavailable in ${worker.url()}`);
       await worker.evaluate(enabled => chrome.storage.local.set({compactNewChatHeader:enabled}), enabled);
       const page = await context.newPage();
       const errors=[];
@@ -194,7 +209,7 @@ for (const [route, width, legacy, enabled] of [
         for (const file of ['popup.html', 'options.html']) {
           const settingsPage = await context.newPage();
           settingsPage.on('pageerror', error => errors.push(error.message));
-          await settingsPage.goto(worker.url().replace(/background\.js$/, file));
+          await settingsPage.goto(new URL(file, worker.url()).href);
           await settingsPage.waitForFunction(() => tokenStateLoaded);
           await settingsPage.getByRole('tab', { name: 'ChatGPT', exact: true }).click();
           const toggle = settingsPage.getByRole('checkbox', { name: /Hide new-chat composer bar/ });
