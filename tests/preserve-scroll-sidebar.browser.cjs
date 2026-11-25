@@ -15,7 +15,7 @@ before(async () => {
 });
 after(async () => { await browser?.close(); });
 
-async function fixture(withConversation) {
+async function fixture(withConversation, trackResizeWrites = false) {
   const page = await browser.newPage({ viewport: { width: 1000, height: 600 } });
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
@@ -43,18 +43,61 @@ async function fixture(withConversation) {
     `,
   }));
   await page.goto('https://chatgpt.com/c/sidebar-scroll-test');
-  await page.evaluate(() => {
+  await page.evaluate(trackResizeWrites => {
+    if (trackResizeWrites) {
+      const NativeResizeObserver = window.ResizeObserver;
+      let deliveringResize = false;
+      window.resizeScrollWrites = 0;
+      window.ResizeObserver = class extends NativeResizeObserver {
+        constructor(callback) {
+          super((entries, observer) => {
+            deliveringResize = true;
+            try { callback(entries, observer); }
+            finally { deliveringResize = false; }
+          });
+        }
+      };
+      const scrollTop = Object.getOwnPropertyDescriptor(Element.prototype, 'scrollTop');
+      Object.defineProperty(Element.prototype, 'scrollTop', {
+        ...scrollTop,
+        set(value) {
+          if (deliveringResize) window.resizeScrollWrites++;
+          scrollTop.set.call(this, value);
+        },
+      });
+    }
     window.chrome = {
       storage: {
         local: { async get(defaults) { return { ...defaults, preserveScrollPositionOnSend: true }; } },
         onChanged: { addListener() {} },
       },
     };
-  });
+  }, trackResizeWrites);
   await page.addScriptTag({ content: source });
   await page.waitForTimeout(25);
   return { page, errors };
 }
+
+test('response resizes preserve the reading position without scrolling during resize delivery', async () => {
+  const { page, errors } = await fixture(true, true);
+  await page.locator('#conversation-scroller').evaluate(el => { el.scrollTop = 400; });
+  await page.locator('[data-testid="send-button"]').click();
+  await page.waitForTimeout(400);
+  const anchor = page.locator('[data-testid="conversation-turn-4"]');
+  const before = await anchor.evaluate(el => el.getBoundingClientRect().top);
+  // A previously collapsed response expands above the visible reading block.
+  await page.evaluate(() => {
+    // A stylesheet update changes layout without waking the DOM observer first.
+    document.styleSheets[0].insertRule('[data-testid="conversation-turn-0"] { height: 220px; }');
+  });
+  await page.waitForFunction(top => {
+    const anchor = document.querySelector('[data-testid="conversation-turn-4"]');
+    return Math.abs(anchor.getBoundingClientRect().top - top) < 1;
+  }, before);
+  assert.equal(await page.evaluate(() => window.resizeScrollWrites), 0);
+  assert.deepEqual(errors, []);
+  await page.close();
+});
 
 for (const withConversation of [false, true]) {
   test(`chat history scrolls with ${withConversation ? 'active conversation guard' : 'empty chat fallback'}`, async () => {

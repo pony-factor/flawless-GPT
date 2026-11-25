@@ -18,6 +18,7 @@
   const ENABLE_CUSTOM_REPOSITORIES_KEY = "enableCustomRepositorySearch";
   const CUSTOM_REPOSITORIES_KEY = "customRepositorySearchOverrides";
   const SHOW_REPOSITORY_TOTAL_KEY = "showRepositoryTotal";
+  const SHOW_BULK_MERGE_BUTTON_KEY = "showBulkMergeButton";
   const PERSONAL_REPOSITORY_COLUMN_TITLE_KEY = "personalRepositoryColumnTitle";
   const SHOW_WOOTEN_LINK_SEARCH_KEY = "showWootenLinkSearch";
   const DEFAULT_OWNER_GROUPS_PER_PAGE = 6;
@@ -526,12 +527,11 @@
     pinnedRepositories,
     showRepositorySearch,
     showRepositoryTotal,
+    showBulkMergeButton,
     customRepositories,
     searchShortcut,
     enableCustomRepositorySearch,
   ) {
-    if (!showRepositorySearch && !showRepositoryTotal) return;
-
     const toolbar = document.createElement("header");
     toolbar.className = showRepositorySearch
       ? "ghrc-toolbar ghrc-toolbar-with-search"
@@ -552,15 +552,44 @@
       toolbar.append(identity);
     }
 
+    const actions = document.createElement("div");
+    actions.className = "ghrc-actions";
     if (mode === "public" && showRepositoryTotal) {
-      const actions = document.createElement("div");
-      actions.className = "ghrc-actions";
       const notice = document.createElement("span");
       notice.className = "ghrc-public-notice";
       notice.textContent = "Public repositories only";
       actions.append(notice);
-      toolbar.append(actions);
     }
+    if (showBulkMergeButton) {
+      const dispatcher = document.createElement("button");
+      dispatcher.type = "button";
+      dispatcher.className = "ghrc-chat-dispatcher";
+      dispatcher.setAttribute("aria-label", "Bulk merge");
+      dispatcher.title = "Open Chat Dispatcher in a new tab";
+
+      const icon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      icon.setAttribute("class", "ghrc-sort-icon");
+      icon.setAttribute("viewBox", "0 0 24 24");
+      icon.setAttribute("aria-hidden", "true");
+      for (const data of ["M4 6h10", "M4 12h7", "M4 18h4", "M18 5v14", "m14 15 4 4 4-4"]) {
+        const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+        path.setAttribute("d", data);
+        icon.append(path);
+      }
+      dispatcher.append(icon);
+      dispatcher.addEventListener("click", () => {
+        if (!context.active()) return;
+        try {
+          chrome.runtime.sendMessage({ type: "open-chat-dispatcher" }, () => {
+            void chrome.runtime.lastError;
+          });
+        } catch (error) {
+          context.handleError(error);
+        }
+      });
+      actions.append(dispatcher);
+    }
+    toolbar.append(actions);
     widget.append(toolbar);
 
     if (showRepositorySearch) {
@@ -863,13 +892,21 @@
     const form = document.createElement("form");
     form.className = "ghrc-wooten-link-search";
 
-    const label = document.createElement("label");
+    // Submit with the calligraphy mark as well as the existing search button.
+    // Keep the button outside the label so clicking it submits instead of
+    // merely focusing the text field.
+    const markSubmit = document.createElement("button");
+    markSubmit.type = "submit";
+    markSubmit.className = "ghrc-wooten-link-mark-submit";
+    markSubmit.setAttribute("aria-label", "Search WootenLink");
+    markSubmit.title = "Search WootenLink";
     const mark = document.createElement("img");
     mark.className = "ghrc-wooten-link-mark";
     mark.src = chrome.runtime.getURL("artwork/calligraphy-initials.png");
-    mark.alt = "wooten.link";
-    label.append(mark);
+    mark.alt = "";
+    markSubmit.append(mark);
 
+    const label = document.createElement("label");
     const input = document.createElement("input");
     input.type = "search";
     input.name = "q";
@@ -1010,7 +1047,7 @@
       });
     });
 
-    form.append(label, submit, results);
+    form.append(markSubmit, label, submit, results);
     void loadWootenLinkEntries();
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
@@ -1095,6 +1132,7 @@
     ownerGroupsPerPage,
     showRepositorySearch,
     showRepositoryTotal,
+    showBulkMergeButton,
     personalRepositoryColumnTitle,
     showWootenLinkSearch,
     customRepositories,
@@ -1123,6 +1161,7 @@
       pinnedRepositories,
       showRepositorySearch,
       showRepositoryTotal,
+      showBulkMergeButton,
       customRepositories,
       searchShortcut,
       enableCustomRepositorySearch,
@@ -1215,6 +1254,7 @@
           [CUSTOM_REPOSITORIES_KEY]: [],
           [ENABLE_CUSTOM_REPOSITORIES_KEY]: false,
           [SHOW_REPOSITORY_TOTAL_KEY]: true,
+          [SHOW_BULK_MERGE_BUTTON_KEY]: true,
           [PERSONAL_REPOSITORY_COLUMN_TITLE_KEY]: "Personal Repos",
           [SHOW_WOOTEN_LINK_SEARCH_KEY]: false,
         }),
@@ -1236,6 +1276,7 @@
           stored[OWNER_GROUPS_PER_PAGE_KEY],
           Boolean(stored[SHOW_REPOSITORY_SEARCH_KEY]),
           Boolean(stored[SHOW_REPOSITORY_TOTAL_KEY]),
+          stored[SHOW_BULK_MERGE_BUTTON_KEY] !== false,
           stored[PERSONAL_REPOSITORY_COLUMN_TITLE_KEY],
           Boolean(stored[SHOW_WOOTEN_LINK_SEARCH_KEY]),
           stored[CUSTOM_REPOSITORIES_KEY],
@@ -1363,6 +1404,7 @@
       || changes.customRepositorySearchOverrides
       || changes.showRepositorySearch
       || changes.showRepositoryTotal
+      || changes.showBulkMergeButton
       || changes.personalRepositoryColumnTitle
       || changes.showWootenLinkSearch
     ) {

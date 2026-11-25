@@ -59,9 +59,9 @@
     const dialog = doc.createElement('dialog');
     dialog.className = 'ghrc-report-import';
     dialog.innerHTML = '<form method="dialog"><h2></h2><p class="destination"></p><label>Category <input name="category" placeholder="Repository root, or choose a folder below" maxlength="240" autocomplete="off"></label><div class="ghrc-folder-actions"><button type="button" class="home" aria-label="Browse repository root">⌂</button><button type="button" class="up" aria-label="Up one folder">↑</button><span class="ghrc-folder-path" aria-live="polite"></span></div><div class="ghrc-folder-browser"><nav class="ghrc-folder-list" aria-label="Repository folders"></nav><div class="ghrc-folder-preview" aria-label="Folder contents" aria-live="polite"></div></div><p class="ghrc-folder-help">Click a folder to open it. Type a new category to create it.</p><div class="ghrc-folder-footer"><button type="button" class="root"></button><button value="cancel">Cancel</button><button value="import"></button></div></form>';
-    dialog.querySelector('h2').textContent = launch ? 'Research and import' : 'Import Deep Research';
-    dialog.querySelector('[value="import"]').textContent = launch ? 'Start research' : 'Import report';
-    dialog.querySelector('.root').textContent = launch ? 'Start at root' : 'Import to root';
+    dialog.querySelector('h2').textContent = launch === 'move' ? 'Research import destination' : launch ? 'Research and import' : 'Import Deep Research';
+    dialog.querySelector('[value="import"]').textContent = launch === 'move' ? 'Save destination' : launch ? 'Start research' : 'Import report';
+    dialog.querySelector('.root').textContent = launch === 'move' ? 'Save root' : launch ? 'Start at root' : 'Import to root';
     dialog.querySelector('.destination').textContent = `${connection.repository} (${connection.branch})`;
     const input = dialog.querySelector('input');
     const list = dialog.querySelector('.ghrc-folder-list');

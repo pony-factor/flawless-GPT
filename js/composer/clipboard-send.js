@@ -16,6 +16,21 @@
     return globalThis.__ghrcMessageQueue?.findComposerInput() || null;
   }
 
+  // Stay scoped to the active composer; ChatGPT may show other plus buttons
+  // in menus, sidebars, and inline editors.
+  function findComposerPlusButton(composer) {
+    const host = composer?.closest?.("form") || composer?.closest?.('[data-type="unified-composer"]');
+    return host?.querySelector([
+      'button[data-testid="composer-plus-btn"]',
+      'button[data-testid="composer-plus-button"]',
+      'button[data-testid="composer-attachment-button"]',
+      'button[aria-label="Add files and more" i]',
+      'button[aria-label^="Add photos" i]',
+      'button[aria-label^="Add files" i]',
+      'button[aria-label^="Attach files" i]',
+    ].join(", ")) || null;
+  }
+
   function isNewChatPage() {
     return window.location.pathname === "/";
   }
@@ -53,20 +68,142 @@
     }
   }
 
+
+  const APP_MENTION_ATTRIBUTES = [
+    "app-mention-name", "app-mention-display-name", "app-mention-path",
+    "app-mention-icon", "app-mention-brand-color",
+    "data-prompt-link-href", "data-prompt-link-label",
+  ];
+
+  function appMentionsFromMarkdown(text) {
+    // Some copied ChatGPT prompts expose the app as a Markdown app:// link
+    // instead of supplying a rich HTML clipboard flavor.
+    const pattern = /\[([^\]\r\n]+)\]\((app:\/\/[^\s)]+)\)/g;
+    let output = "";
+    let cursor = 0;
+    const mentions = [];
+    for (const match of text.matchAll(pattern)) {
+      output += text.slice(cursor, match.index);
+      const label = match[1];
+      const path = match[2];
+      const start = output.length;
+      output += label;
+      mentions.push({
+        start, end: output.length, label,
+        attributes: {
+          "app-mention-path": path,
+          "app-mention-display-name": label,
+          "data-prompt-link-href": path,
+        },
+      });
+      cursor = match.index + match[0].length;
+    }
+    return { text: output + text.slice(cursor), mentions };
+  }
+
+  function appMentionsFromHtml(text, html) {
+    if (!html) return [];
+    const documentFragment = new DOMParser().parseFromString(html, "text/html");
+    const selector = '[app-mention-path], [data-prompt-link-href], a[href^="app://"]';
+    const nodes = [...documentFragment.body.querySelectorAll(selector)];
+    let cursor = 0;
+    const mentions = [];
+    for (const node of nodes) {
+      if (node.parentElement?.closest(selector)) continue;
+      const path = node.getAttribute("app-mention-path")
+        || node.getAttribute("data-prompt-link-href") || node.getAttribute("href");
+      if (!path?.startsWith("app://")) continue;
+      const label = (node.textContent || "").trim();
+      const start = label ? text.indexOf(label, cursor) : -1;
+      // Never quietly flatten an app into plain text if its location cannot
+      // be recovered from the copied prompt.
+      if (start < 0) return null;
+      const attributes = Object.fromEntries(APP_MENTION_ATTRIBUTES
+        .filter(name => node.hasAttribute(name)).map(name => [name, node.getAttribute(name)]));
+      attributes["app-mention-path"] = path;
+      if (!attributes["data-prompt-link-href"]) attributes["data-prompt-link-href"] = path;
+      mentions.push({ start, end: start + label.length, label, attributes });
+      cursor = start + label.length;
+    }
+    return mentions;
+  }
+
+  async function readClipboardPrompt() {
+    let text = "";
+    let html = "";
+    // readText() discards the app metadata that native rich pastes preserve.
+    // Read both clipboard flavors when supported, then let the queue carry
+    // the app nodes through its existing ProseMirror restoration path.
+    if (typeof navigator.clipboard?.read === "function") {
+      try {
+        for (const item of await navigator.clipboard.read()) {
+          if (!item.types.includes("text/plain")) continue;
+          text = await (await item.getType("text/plain")).text();
+          if (item.types.includes("text/html")) {
+            try { html = await (await item.getType("text/html")).text(); } catch { /* plain text still works */ }
+          }
+          break;
+        }
+      } catch {
+        // Some browsers allow readText even if rich clipboard reads fail.
+      }
+    }
+    if (!text) text = await readClipboardText();
+    text = text.replace(/\r\n/g, "\n");
+    const markdown = appMentionsFromMarkdown(text);
+    if (markdown.mentions.length) return markdown;
+    const mentions = appMentionsFromHtml(text, html);
+    if (mentions === null) {
+      const error = new Error("Clipboard plugin could not be preserved; paste manually");
+      error.name = "ClipboardPluginError";
+      throw error;
+    }
+    return { text, mentions };
+  }
+
   function setButtonMessage(button, message) {
     button.title = message;
     button.setAttribute("aria-label", message);
   }
 
+
+  function parseClipboardUrl(text) {
+    const value = text.trim();
+    // Ignore punctuation copied with a citation, not surrounding prose.
+    const scheme = /(?:https?:\/\/|file:\/\/\/)\s*/i.exec(value);
+    if (!scheme || !/^[\s"'“”‘’(\[{,;:.!?—–-]*$/.test(value.slice(0, scheme.index))) return null;
+    const remainder = value.slice(scheme.index + scheme[0].length);
+    const token = /^[^\s<>"'“”‘’\x60]+/.exec(remainder);
+    if (!token || !/^[\s<>"'“”‘’\x60)\]},;:.!?—–-]*$/.test(remainder.slice(token[0].length))) return null;
+
+    let candidate = scheme[0].trimEnd() + token[0];
+    // Keep balanced closing brackets in genuine paths, but drop sentence punctuation.
+    while (/[.,;:!?)}\]]$/.test(candidate)) {
+      const last = candidate.at(-1);
+      if (last === ")" && (candidate.match(/\)/g) || []).length <= (candidate.match(/\(/g) || []).length) break;
+      if (last === "]" && (candidate.match(/\]/g) || []).length <= (candidate.match(/\[/g) || []).length) break;
+      if (last === "}" && (candidate.match(/\}/g) || []).length <= (candidate.match(/\{/g) || []).length) break;
+      candidate = candidate.slice(0, -1);
+    }
+    try { return new URL(candidate); } catch { return null; }
+  }
+
   async function openClipboardUrl(button) {
     setButtonBusy(button, true);
     try {
-      const text = (await readClipboardText()).trim();
-      let url;
-      try {
-        url = new URL(text);
-      } catch {
-        setButtonMessage(button, "Clipboard does not contain a valid URL");
+      const clipboardText = (await readClipboardText()).trim();
+      if (!clipboardText) {
+        setButtonMessage(button, "Clipboard has no text to open or search");
+        return;
+      }
+      const url = parseClipboardUrl(clipboardText);
+      if (!url) {
+        // Delegate to the extension worker so the browser's configured
+        // search engine is used instead of hard-coding a provider.
+        const result = await chrome.runtime.sendMessage({
+          type: "search-clipboard-text", text: clipboardText,
+        });
+        if (!result?.ok) setButtonMessage(button, result?.error || "Clipboard search could not be opened");
         return;
       }
 
@@ -101,16 +238,18 @@
     setButtonBusy(button, true);
 
     try {
-      const text = await readClipboardText();
+      const { text, mentions } = await readClipboardPrompt();
       if (!context.active()) return;
       if (!text.trim()) {
         setButtonMessage(button, "Clipboard has no text to queue");
         return;
       }
-      const submitted = await globalThis.__ghrcMessageQueue?.sendClipboardText(text);
+      const submitted = await globalThis.__ghrcMessageQueue?.sendClipboardText(text, mentions);
       setButtonMessage(button, submitted ? "Send clipboard or queue as prompt" : "Clipboard message could not be sent or queued; try again");
     } catch (error) {
-      if (["NotAllowedError", "SecurityError", "NotFoundError"].includes(error?.name)) {
+      if (error?.name === "ClipboardPluginError") {
+        setButtonMessage(button, error.message);
+      } else if (["NotAllowedError", "SecurityError", "NotFoundError"].includes(error?.name)) {
         setButtonMessage(button, "Clipboard access unavailable; paste into the composer to queue your message");
       } else {
         context.handleError(error);
@@ -127,8 +266,8 @@
     const button = document.createElement("button");
     button.id = URL_BUTTON_ID;
     button.type = "button";
-    button.title = "Open clipboard URL in this tab";
-    button.setAttribute("aria-label", "Open clipboard URL in this tab");
+    button.title = "Open clipboard URL or search with your default engine";
+    button.setAttribute("aria-label", "Open clipboard URL or search with your default engine");
     button.innerHTML = `
       <svg viewBox="0 0 24 24" aria-hidden="true">
         <path d="M10 13a5 5 0 0 0 7.1 0l2-2a5 5 0 0 0-7.1-7l-1.1 1.1M14 11a5 5 0 0 0-7.1 0l-2 2a5 5 0 0 0 7.1 7l1.1-1.1" />
@@ -184,8 +323,13 @@
     if (isNewChatPage()) {
       if (!urlButton) urlButton = createUrlButton();
       const launcher = document.getElementById("ghrc-spellcheck-gpt-launcher");
-      const urlAnchor = launcher?.parentElement ? launcher : anchor;
-      urlButton.toggleAttribute("data-ghrc-beside-spellcheck", Boolean(launcher?.parentElement));
+      const plus = window.matchMedia?.("(max-width: 700px)")?.matches
+        ? findComposerPlusButton(composer) : null;
+      const urlAnchor = plus
+        ? (launcher?.parentElement === plus.parentElement ? launcher : plus)
+        : (launcher?.parentElement ? launcher : anchor);
+      urlButton.toggleAttribute("data-ghrc-inline-before-plus", Boolean(plus));
+      urlButton.toggleAttribute("data-ghrc-beside-spellcheck", !plus && Boolean(launcher?.parentElement));
       if (urlButton.parentElement !== urlAnchor.parentElement || urlButton.nextElementSibling !== urlAnchor) {
         urlAnchor.before(urlButton);
       }
@@ -231,8 +375,11 @@
   });
 
   const observer = new MutationObserver(scheduleMount);
+  const narrowViewport = window.matchMedia?.("(max-width: 700px)");
+  narrowViewport?.addEventListener("change", scheduleMount);
   window.addEventListener(ROUTE_CHANGE_EVENT, scheduleMount);
   context.onStop(() => {
+    narrowViewport?.removeEventListener("change", scheduleMount);
     window.removeEventListener(ROUTE_CHANGE_EVENT, scheduleMount);
     observer.disconnect();
     removeButton();

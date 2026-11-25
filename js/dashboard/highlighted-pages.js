@@ -42,10 +42,12 @@
     card.rel = "noopener noreferrer";
     card.title = page.url;
 
-    if (page.imageDataUrl) {
+    const imageUrl = page.screenshotDataUrl || page.imageDataUrl;
+    if (page.screenshotDataUrl) card.classList.add("ghrc-highlighted-page-screenshot");
+    if (imageUrl) {
       const image = document.createElement("img");
       image.className = "ghrc-highlighted-page-image";
-      image.src = page.imageDataUrl;
+      image.src = imageUrl;
       image.alt = "";
       card.append(image);
     } else {
@@ -90,15 +92,13 @@
     section.className = "ghrc-highlighted-pages";
     section.setAttribute("aria-label", "Highlights");
 
-    const heading = document.createElement("h2");
-    heading.textContent = "Highlights";
     const row = document.createElement("div");
     row.className = "ghrc-highlighted-pages-row";
     row.append(...pages.map(createCard));
-    section.append(heading, row);
+    section.append(row);
 
     syncLayout(widget, section);
-    const anchor = document.getElementById("ghrc-pinned-issues") || document.getElementById('ghrc-deep-research-dashboard') || widget;
+    const anchor = document.getElementById("ghrc-pinned-issues") || widget;
     anchor.insertAdjacentElement("afterend", section);
   }
 
@@ -131,7 +131,7 @@
       section?.remove();
       return;
     }
-    const anchor = document.getElementById("ghrc-pinned-issues") || document.getElementById('ghrc-deep-research-dashboard') || widget;
+    const anchor = document.getElementById("ghrc-pinned-issues") || widget;
     if (section && anchor.nextElementSibling === section) {
       syncLayout(widget, section);
       return;

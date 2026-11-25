@@ -1,8 +1,11 @@
 (() => {
   function reportSender(sender) {
-    const host = new URL(sender.origin || sender.url).hostname;
-    return /^(connector-openai-deep-research|mcp-app-[a-f0-9]+)\.web-sandbox\.oaiusercontent\.com$/.test(host)
-      && new URL(sender.tab?.url).origin === 'https://chatgpt.com';
+    try {
+      return globalThis.__ghrcIsResearchReportOrigin(sender.origin || sender.url)
+        && new URL(sender.tab?.url).origin === 'https://chatgpt.com';
+    } catch {
+      return false;
+    }
   }
   const HOST = 'org.research.publisher';
   const CONNECTION_KEY = 'researchPublisherConnection';
@@ -85,19 +88,7 @@
         if (!reportSender(sender)) {
           throw new Error('Publish from a completed ChatGPT research report.');
         }
-        if (typeof message.title !== 'string' || !message.title.trim() || message.title.length > 500
-          || typeof message.markdown !== 'string' || !message.markdown.trim()
-          || new TextEncoder().encode(message.markdown).length > 4 * 1024 * 1024) throw new Error('Invalid or oversized report.');
-        const source = new URL(sender.tab.url);
-        payload = { action: 'publish', title: message.title, markdown: message.markdown, source: source.origin + source.pathname };
-        if (message.category !== undefined) {
-          if (typeof message.category !== 'string' || message.category.length > 240
-            || (message.category && message.category.split('/').some(part => !part || part.startsWith('.') || !/^[\p{L}\p{N} _-]+$/u.test(part)))) {
-            throw new Error('Choose a valid repository category.');
-          }
-          payload.category = message.category;
-        }
-        key = `${sender.tab.id}:${message.title}`;
+        key = `${sender.tab.id}:${typeof message.title === 'string' ? message.title.slice(0, 500) : ''}`;
         if (inFlight.has(key)) throw new Error('This report is already being added.');
         inFlight.add(key);
       }
@@ -107,7 +98,24 @@
             { type: 'research-launch-readiness', id: message.automationJobId }, { frameId: 0 });
           if (!readiness?.ready) throw new Error('Research is still running.');
           automaticJob = await globalThis.__ghrcResearchLaunch.beginImport(sender, message.automationJobId);
-          payload.category = automaticJob.category;
+        }
+        if (publishing) {
+          if (message.oversized === true || (typeof message.markdown === 'string'
+            && new TextEncoder().encode(message.markdown).length > 4 * 1024 * 1024))
+            throw new Error('This report is too large to publish through the extension.');
+          if (typeof message.title !== 'string' || !message.title.trim() || message.title.length > 500
+            || typeof message.markdown !== 'string' || !message.markdown.trim())
+            throw new Error('The report title or contents could not be imported.');
+          const source = new URL(sender.tab.url);
+          payload = { action: 'publish', title: message.title, markdown: message.markdown, source: source.origin + source.pathname };
+          const category = automaticJob ? automaticJob.category : message.category;
+          if (category !== undefined) {
+            if (typeof category !== 'string' || category.length > 240
+              || (category && category.split('/').some(part => !part || part.startsWith('.') || !/^[\p{L}\p{N} _-]+$/u.test(part)))) {
+              throw new Error('Choose a valid repository category.');
+            }
+            payload.category = category;
+          }
         }
         if (automaticJob) {
           const connection = await sendToNative({ action: 'status' }, false);

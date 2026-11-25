@@ -1,5 +1,6 @@
 (() => {
   "use strict";
+  if (globalThis.__ghrcSettingsContext?.active() === false) return;
 
   const STORAGE_KEY = "highlightedPages";
   const MAX_PAGES = 20;
@@ -48,7 +49,7 @@
   }
 
   function previewImage(page) {
-    return page.imageDataUrl || page.faviconDataUrl || "";
+    return page.screenshotDataUrl || page.imageDataUrl || page.faviconDataUrl || "";
   }
 
   async function save() {
@@ -77,7 +78,7 @@
     else list.insertBefore(sibling, row);
     reorderFromDom();
     updateControls();
-    void save();
+    void save().catch((globalThis.__ghrcSettingsContext?.report || console.error));
   }
 
   async function fetchPreview(urlValue) {
@@ -113,7 +114,13 @@
     try {
       const preview = await fetchPreview(page.url);
       const index = pages.findIndex((entry) => entry.id === page.id);
-      if (index >= 0) pages[index] = { ...preview, id: page.id, customTitle: pages[index].customTitle || "" };
+      if (index >= 0) {
+        const previous = pages[index];
+        if (preview.url === previous.url && preview.documentType !== "pdf" && !preview.screenshotDataUrl) {
+          preview.screenshotDataUrl = previous.screenshotDataUrl || "";
+        }
+        pages[index] = { ...preview, id: page.id, customTitle: previous.customTitle || "" };
+      }
       await save();
       render();
       showStatus("Cached preview refreshed.", "success");
@@ -130,6 +137,7 @@
     row.dataset.id = page.id;
     const image = previewImage(page);
     if (page.documentType === "pdf") row.classList.add("highlighted-page-setting-pdf");
+    if (page.screenshotDataUrl) row.classList.add("highlighted-page-setting-screenshot");
     if (image) {
       row.querySelector(".highlighted-page-setting-preview").style.backgroundImage = `url("${image}")`;
     }
@@ -156,10 +164,17 @@
     });
     row.querySelector(".refresh-highlight").addEventListener("click", () => void refreshPage(page, row));
     row.querySelector(".remove-highlight").addEventListener("click", async () => {
+      const previous = pages;
       pages = pages.filter((entry) => entry.id !== page.id);
-      await save();
-      render();
-      showStatus("Highlighted webpage removed.", "success");
+      try {
+        await save();
+        render();
+        showStatus("Highlighted webpage removed.", "success");
+      } catch (error) {
+        pages = previous;
+        (globalThis.__ghrcSettingsContext?.report || console.error)(error);
+        showStatus(error.message, "error");
+      }
     });
     return row;
   }
@@ -238,7 +253,7 @@
     draggedRow = null;
     reorderFromDom();
     updateControls();
-    void save();
+    void save().catch((globalThis.__ghrcSettingsContext?.report || console.error));
   });
 
   addButton.addEventListener("click", () => void addPage());
@@ -257,5 +272,5 @@
   chrome.storage.local.get({ [STORAGE_KEY]: [] }).then((stored) => {
     pages = normalizedPages(stored[STORAGE_KEY]);
     render();
-  });
+  }).catch((globalThis.__ghrcSettingsContext?.report || console.error));
 })();

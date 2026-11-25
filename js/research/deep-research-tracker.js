@@ -20,8 +20,53 @@
     return { remaining, full, reset };
   }
 
+  // ChatGPT doesn't always expose a quota maximum. Accept an explicit user
+  // preference or a server-provided total; otherwise approximate common
+  // 25/250 report allowances from the observed remaining count.
+  function usagePieTotal(remaining, reportedTotal = null, preferredTotal = null) {
+    if (!Number.isSafeInteger(remaining) || remaining < 0) return null;
+    if (Number.isSafeInteger(preferredTotal) && preferredTotal > 0)
+      return remaining <= preferredTotal ? preferredTotal : null;
+    if (Number.isSafeInteger(reportedTotal) && reportedTotal > 0)
+      return remaining <= reportedTotal ? reportedTotal : null;
+    if (remaining <= 25) return 25;
+    if (remaining <= 250) return 250;
+    return null;
+  }
+
+  // The server's deep_research bucket counts full research; deep_research_mini
+  // is a distinct lightweight pool. Never use combined counts as full counts.
+  function selectedResearchQuota(quota, mode = 'full') {
+    if (!quota || !Number.isSafeInteger(quota.remaining) || quota.remaining < 0) return null;
+    if (mode !== 'all') return { remaining: quota.remaining, total: quota.total ?? null };
+    if (!Number.isSafeInteger(quota.miniRemaining) || quota.miniRemaining < 0)
+      return { remaining: null, total: null };
+    const remaining = quota.remaining + quota.miniRemaining;
+    const total = Number.isSafeInteger(quota.total) && Number.isSafeInteger(quota.miniTotal)
+      ? quota.total + quota.miniTotal : null;
+    return { remaining, total };
+  }
+
+  // Scoped totals supersede the legacy single total, even when cleared.
+  function selectedResearchPieTotal(settings, mode = 'full') {
+    const selectedMode = mode === 'all' ? 'all' : 'full';
+    const scoped = settings?.deepResearchUsagePieTotals;
+    const preferred = scoped && typeof scoped === 'object' && !Array.isArray(scoped)
+      ? scoped[selectedMode]
+      : ((settings?.deepResearchAllowanceMode === 'all' ? 'all' : 'full') === selectedMode
+        ? settings.deepResearchUsagePieTotal : null);
+    return Number.isSafeInteger(preferred) && preferred > 0 && preferred <= 10000
+      ? preferred : null;
+  }
+
+  function usagePiePercent(remaining, total) {
+    if (!Number.isSafeInteger(remaining) || remaining < 0 ||
+        !Number.isSafeInteger(total) || total <= 0 || remaining > total) return null;
+    return Math.round(remaining * 100 / total);
+  }
+
   if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { parseAllowance };
+    module.exports = { parseAllowance, selectedResearchQuota, selectedResearchPieTotal, usagePieTotal, usagePiePercent };
     return;
   }
   const context = globalThis.__ghrcExtensionContext;
@@ -33,6 +78,12 @@
   const RESEARCH_MENTION = '[app-mention-path="app://connector_openai_deep_research"], [app-mention-path="app://connector_openai_deep_research_work"]';
   const USAGE_ATTRIBUTE = 'data-ghrc-deep-research-usage';
   const DAY_MS = 24 * 60 * 60_000;
+  const CACHE_MS = 8 * 60 * 60_000;
+  const NEAR_RESET_MS = DAY_MS;
+  const LIVE_REFRESH_MS = 5 * 60_000;
+  const CACHE_KEY = 'deepResearchQuotaStateV1';
+  const USER_TURNS = '[data-message-author-role="user"], [data-conversation-role="user"], [data-content-search-unit-key$=":user"]';
+  const RESEARCH_MENTION = '[data-prompt-link-href="app://connector_openai_deep_research"], [app-mention-path="app://connector_openai_deep_research"], [data-prompt-link-href="app://connector_openai_deep_research_work"], [app-mention-path="app://connector_openai_deep_research_work"]';
   const SETTINGS_DEFAULTS = Object.freeze({
     showResearchHomepageLauncher: true,
     showDeepResearchTracker: true,
@@ -42,6 +93,13 @@
     showDeepResearchHomepageReset: true,
     showDeepResearchComposerCount: true,
     showDeepResearchComposerReset: true,
+    // Inherit the prior shared pie preference until each location is saved.
+    showDeepResearchHomepagePie: null,
+    showDeepResearchComposerPie: null,
+    showDeepResearchUsagePie: false,
+    deepResearchUsagePieTotal: null, // Legacy single-mode preference.
+    deepResearchUsagePieTotals: null,
+    deepResearchAllowanceMode: 'full',
     deepResearchHomepageVisibility: 'near-reset',
     deepResearchHomepageWindowDays: 5,
   });
@@ -52,33 +110,77 @@
   let pending = false;
   let serverQuota = null;
   let launchingResearch = false;
+  let lastRawQuota = null;
+  let researchAttempt = null;
+  const cacheBridge = typeof globalThis.chrome?.runtime?.sendMessage === 'function';
+
+  async function quotaMessage(message) {
+    if (!cacheBridge) return;
+    try {
+      const result = await chrome.runtime.sendMessage(message);
+      if (result?.ok) {
+        serverQuota = result.quota;
+        schedule();
+      }
+      return result;
+    } catch { /* The cached observation remains available if the worker restarts. */ }
+  }
 
   function readServerQuota() {
+    const raw = document.documentElement.getAttribute(USAGE_ATTRIBUTE);
+    if (raw === lastRawQuota) return;
+    lastRawQuota = raw;
     try {
-      const value = JSON.parse(document.documentElement.getAttribute(USAGE_ATTRIBUTE));
-      serverQuota = value && Number.isSafeInteger(value.remaining) && value.remaining >= 0
+      const value = JSON.parse(raw);
+      if (!(value && Number.isSafeInteger(value.remaining) && value.remaining >= 0
         && Number.isFinite(value.observedAt) && value.observedAt <= Date.now()
-        && (value.resetAt === null || Number.isFinite(value.resetAt)) ? value : null;
-    } catch { serverQuota = null; }
+        && (value.resetAt === null || Number.isFinite(value.resetAt)))) return;
+      if (cacheBridge) void quotaMessage({ type: 'deep-research-quota-observed',
+        quota: { remaining: value.remaining, resetAt: value.resetAt, observedAt: value.observedAt,
+          ...(Number.isSafeInteger(value.total) && value.total >= value.remaining && value.total > 0
+            ? { total: value.total } : {}),
+          ...(Number.isSafeInteger(value.miniRemaining) && value.miniRemaining >= 0
+            ? { miniRemaining: value.miniRemaining } : {}),
+          ...(Number.isSafeInteger(value.miniTotal) && value.miniTotal > 0
+            && value.miniTotal >= value.miniRemaining
+            ? { miniTotal: value.miniTotal } : {}) },
+        force: value.force === true });
+      else serverQuota = value;
+    } catch { /* Keep the last valid observation. */ }
+  }
+
+  function nearReset() {
+    return serverQuota && Number.isFinite(serverQuota.resetAt)
+      && serverQuota.resetAt - Date.now() <= NEAR_RESET_MS;
+  }
+
+  function quotaRefreshInterval() {
+    return nearReset() ? LIVE_REFRESH_MS : CACHE_MS;
+  }
+
+  function withinResetWindow() {
+    if (!serverQuota || serverQuota.resetAt === null) return false;
+    const remainingMs = serverQuota.resetAt - Date.now();
+    return remainingMs <= preferences.deepResearchHomepageWindowDays * DAY_MS;
   }
 
   function dashboardVisible() {
-    if (preferences.deepResearchHomepageVisibility === 'always') return true;
-    if (!serverQuota || serverQuota.resetAt === null) return false;
-    const remainingMs = serverQuota.resetAt - Date.now();
-    return remainingMs >= 0 && remainingMs <= preferences.deepResearchHomepageWindowDays * DAY_MS;
+    return preferences.deepResearchHomepageVisibility === 'always' || withinResetWindow();
   }
 
   function serverText(includeCount, includeReset) {
     if (!serverQuota) return null;
-    const stale = Date.now() - serverQuota.observedAt > 10 * 60_000
-      || (serverQuota.resetAt !== null && serverQuota.resetAt <= Date.now());
-    const count = stale ? `${serverQuota.remaining} last checked · Refresh allowance`
-      : `${serverQuota.remaining} left`;
+    const stale = Date.now() - serverQuota.observedAt >= quotaRefreshInterval();
+    const quota = selectedResearchQuota(serverQuota, preferences.deepResearchAllowanceMode);
+    const amount = quota?.remaining;
+    const count = amount === null || amount === undefined
+      ? 'full + lightweight balance unavailable'
+      : stale ? `${amount} last checked · Refresh allowance`
+      : `${amount} left`;
     const remainingMs = serverQuota.resetAt === null ? null : serverQuota.resetAt - Date.now();
     let reset = 'reset unknown';
     if (remainingMs !== null) {
-      if (remainingMs <= 0) reset = 'reset due';
+      if (remainingMs <= 0) reset = 'reset expected · awaiting confirmation';
       else {
         const days = remainingMs > 36 * 60 * 60_000;
         const hours = remainingMs >= 60 * 60_000;
@@ -123,7 +225,7 @@
   }
 
   function checkAllowance() {
-    window.dispatchEvent(new Event('ghrc-refresh-deep-research-usage'));
+    window.dispatchEvent(new CustomEvent('ghrc-refresh-deep-research-usage', { detail: { manual: true } }));
     if (serverQuota) return;
     const research = [...document.querySelectorAll('[role="menuitem"], [role="option"], button[data-list-navigation-item]')]
       .find(element => visible(element) && /\bdeep research\b/i.test(element.innerText));
@@ -232,9 +334,13 @@
       icon.src = globalThis.chrome?.runtime?.getURL?.('artwork/research-telescope.png') || 'artwork/research-telescope.png';
       icon.alt = '';
       icon.setAttribute('aria-hidden', 'true');
+      const pie = document.createElement('span');
+      pie.className = 'ghrc-research-usage-pie';
+      pie.setAttribute('aria-hidden', 'true');
+      pie.hidden = true;
       const label = document.createElement('span');
       label.className = 'ghrc-research-allowance';
-      widget.append(icon, label);
+      widget.append(icon, pie, label);
       widget.addEventListener('click', () => {
         if (id === ID && location.pathname === '/' && preferences.showResearchHomepageLauncher !== false) {
           void context.run(launchResearchWithSpellcheck);
@@ -243,33 +349,111 @@
     }
     // An old observation is not a live balance; require another native check.
     const fresh = Date.now() - observedAt < 5 * 60_000;
-    const count = fresh && allowance.remaining !== null
-      ? `${allowance.remaining} left`
-      : 'Check allowance';
+    // Native unlabeled counts may combine pools. Do not present them as full.
+    const count = fresh && allowance.remaining !== null && allowance.full
+      && preferences.deepResearchAllowanceMode === 'full'
+      ? `${allowance.remaining} left` : 'Check allowance';
     const reset = fresh && allowance.reset ? allowance.reset : 'Reset unknown';
     const homepage = id === ID;
-    const includeCount = homepage
-      ? preferences.showDeepResearchHomepageCount !== false
+    const nearReset = homepage && withinResetWindow();
+    if (widget.classList.contains('ghrc-research-near-reset') !== nearReset) {
+      widget.classList.toggle('ghrc-research-near-reset', nearReset);
+    }
+    const includeCount = homepage ? preferences.showDeepResearchHomepageCount !== false
       : preferences.showDeepResearchComposerCount !== false;
-    const includeReset = homepage
-      ? preferences.showDeepResearchHomepageReset !== false
+    const includeReset = homepage ? preferences.showDeepResearchHomepageReset !== false
       : preferences.showDeepResearchComposerReset !== false;
+    const pieChoice = homepage ? preferences.showDeepResearchHomepagePie
+      : preferences.showDeepResearchComposerPie;
+    const showPiePreference = pieChoice == null
+      ? preferences.showDeepResearchUsagePie === true : pieChoice === true;
     const text = serverText(includeCount, includeReset)
       || ['Deep Research', ...(includeCount ? [count] : []), ...(includeReset ? [reset] : [])].join(' · ');
+    const pie = widget.querySelector('.ghrc-research-usage-pie');
+    // Match the cache's eight-hour or near-reset five-minute lifetime.
+    const freshServer = serverQuota && Date.now() - serverQuota.observedAt < quotaRefreshInterval()
+      && (serverQuota.resetAt === null || serverQuota.resetAt > Date.now());
+    const selected = freshServer ? selectedResearchQuota(serverQuota, preferences.deepResearchAllowanceMode) : null;
+    const pieRemaining = serverQuota ? selected?.remaining : (
+      fresh && allowance.full && preferences.deepResearchAllowanceMode === 'full'
+        ? allowance.remaining : null);
+    const preferredTotal = selectedResearchPieTotal(preferences, preferences.deepResearchAllowanceMode);
+    const reportedTotal = selected?.total ?? null;
+    // A missing maximum must not silently disable an enabled pie. Use the
+    // estimated scale in either mode and identify it in the tooltip; the
+    // selected remaining count still excludes other pools in full-only mode.
+    const total = usagePieTotal(pieRemaining, reportedTotal, preferredTotal);
+    const percent = showPiePreference && includeCount
+      ? usagePiePercent(pieRemaining, total) : null;
+    const showPie = percent !== null;
+    if (pie.hidden !== !showPie) pie.hidden = !showPie;
+    if (showPie) {
+      // The existing Chat bar color preferences update root variables live;
+      // CSS variable resolution handles them without remounting the widget.
+      const regular = 'var(--ghrc-research-pie-color, var(--ghrc-composer-toolbar-icon, var(--ghrc-composer-text, currentColor)))';
+      const warning = 'var(--ghrc-research-pie-accent, var(--ghrc-composer-send-hover, var(--ghrc-composer-focus-ring, var(--theme-submit-btn-bg, #ffb900))))';
+      const foreground = percent <= 10 ? warning : regular;
+      const degrees = (100 - percent) * 3.6;
+      // Retain Sweetiebot's 12 o'clock origin and muted consumed segment.
+      const background = `conic-gradient(from 0deg, color-mix(in srgb, ${regular} 20%, transparent) 0 ${degrees}deg, ${foreground} ${degrees}deg 360deg)`;
+      if (pie.dataset.pieBackground !== background) {
+        pie.style.background = background;
+        pie.dataset.pieBackground = background;
+      }
+    }
+    // Keep the exact remaining count in the button's accessible label. Only
+    // replace the visible number when a valid scale can be determined.
+    const visibleParts = text.split(' · ').slice(1);
+    if (showPie) visibleParts.shift();
+    const visibleText = visibleParts.join(' · ');
     const label = widget.querySelector('.ghrc-research-allowance');
-    const visibleText = text === 'Deep Research' ? '' : text.replace(/^Deep Research · /, '');
     if (label.textContent !== visibleText) label.textContent = visibleText;
     if (widget.getAttribute('aria-label') !== text) widget.setAttribute('aria-label', text);
+    const combined = preferences.deepResearchAllowanceMode === 'all';
+    const autoEstimate = showPie && preferredTotal == null && reportedTotal == null;
     widget.title = homepage && location.pathname === '/' && preferences.showResearchHomepageLauncher !== false
       ? 'Prepare Deep Research and open Spellcheck Only in split view'
-      : 'Deep Research allowance. Click to refresh or open the native tools menu. Lightweight allowances are excluded.';
+      : showPie
+        ? `Deep Research: ${pieRemaining} of ${total} ${combined ? 'full + lightweight' : 'full'} reports remaining${autoEstimate ? ' (estimated allowance)' : ''}. Click to refresh.`
+        : combined ? 'Combined full + lightweight allowance; requires both quotas from ChatGPT. Click to refresh.'
+          : 'Full Deep Research only; lightweight requests excluded. Click to refresh.';
     return widget;
+  }
+
+  function checkResearchAttempt() {
+    if (!researchAttempt) return;
+    const now = Date.now();
+    if (now - researchAttempt.started > 15_000) {
+      researchAttempt = null;
+      return;
+    }
+    const turns = document.querySelectorAll(USER_TURNS).length;
+    if (turns <= researchAttempt.turns
+      && !(location.pathname !== researchAttempt.path && turns > 0)) return;
+    const id = researchAttempt.id;
+    researchAttempt = null;
+    void quotaMessage({ type: 'deep-research-quota-spent', id });
+  }
+
+  function watchResearchSend(event) {
+    if (researchAttempt || event.defaultPrevented) return;
+    if (event.type === 'keydown') {
+      if (event.key !== 'Enter' || event.shiftKey || event.isComposing || event.ctrlKey || event.metaKey || event.altKey
+        || !event.target.closest?.('#prompt-textarea, [data-composer-markdown][contenteditable="true"]')) return;
+    } else if (event.type === 'click') {
+      if (!event.target.closest?.('button[data-testid="send-button"], button[data-testid="composer-submit-button"], button#composer-submit-button, button[aria-label^="Send" i], button[type="submit"]')) return;
+    }
+    const composer = event.target.closest?.('form, [data-type="unified-composer"]');
+    if (!composer?.querySelector(RESEARCH_MENTION)) return;
+    researchAttempt = { turns: document.querySelectorAll(USER_TURNS).length,
+      path: location.pathname, started: Date.now(), id: globalThis.crypto?.randomUUID?.() || `${Date.now()}:${Math.random()}` };
   }
 
   function update() {
     pending = false;
     if (!context.active()) return;
     readServerQuota();
+    checkResearchAttempt();
     readAllowance();
     const homeComposer = [...document.querySelectorAll('#prompt-textarea, [data-composer-markdown][contenteditable="true"]')]
       .find(visible)?.closest('form, [data-type="unified-composer"]');
@@ -278,29 +462,31 @@
     } else document.getElementById(HOME_LAUNCHER_ID)?.remove();
 
     const repositories = document.getElementById('github-repositories-for-chatgpt');
-    if (enabled && preferences.showDeepResearchHomepage !== false && repositories && visible(repositories) && dashboardVisible()) {
+    const footer = repositories?.querySelector('.ghrc-dashboard-footer');
+    const homepageRowVisible = enabled && preferences.showDeepResearchHomepage !== false
+      && footer && visible(repositories) && dashboardVisible();
+    if (homepageRowVisible) {
       let row = document.getElementById(DASHBOARD_ID);
       if (!row) {
         row = document.createElement('div');
         row.id = DASHBOARD_ID;
         row.append(renderWidget(ID));
       } else renderWidget(ID);
-      for (const property of ['--ghrc-available-width', '--ghrc-center-offset']) {
-        const value = repositories.style.getPropertyValue(property);
-        if (row.style.getPropertyValue(property) === value) continue;
-        if (value) row.style.setProperty(property, value);
-        else row.style.removeProperty(property);
+      let actions = footer.querySelector('.ghrc-2048-footer-left');
+      if (!actions) {
+        actions = document.createElement('div');
+        actions.className = 'ghrc-2048-footer-left';
+        footer.append(actions);
       }
-      if (repositories.nextElementSibling !== row) repositories.after(row);
+      if (row.parentElement !== actions || actions.firstElementChild !== row) actions.prepend(row);
     } else document.getElementById(DASHBOARD_ID)?.remove();
 
     const prompts = [...document.querySelectorAll('#prompt-textarea, [data-composer-markdown][contenteditable="true"]')].filter(visible);
-    const researchPrompt = prompts.find(prompt => prompt.querySelector([
-      '[data-prompt-link-href="app://connector_openai_deep_research"]',
-      '[data-prompt-link-href="app://connector_openai_deep_research_work"]',
-      '[data-prompt-link-label="$deep-research"]',
-    ].join(',')));
+    // Match both current and legacy research mention representations.
+    const researchPrompt = prompts.find(prompt => prompt.querySelector(RESEARCH_MENTION)
+      || prompt.querySelector('[data-prompt-link-label="$deep-research"]'));
     const composer = researchPrompt?.closest('form, [data-type="unified-composer"]');
+    // The in-chat tracker is independent of the homepage; both can display.
     if (enabled && preferences.showDeepResearchComposer !== false && composer?.parentElement) {
       const widget = renderWidget(COMPOSER_ID);
       if (widget.nextElementSibling !== composer) composer.before(widget);
@@ -312,11 +498,49 @@
     pending = true;
     requestAnimationFrame(update);
   }
-  const observer = new MutationObserver(schedule);
-  observer.observe(document.documentElement, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['aria-describedby', 'aria-label', 'data-state', 'data-prompt-link-href', 'data-prompt-link-label', 'style', USAGE_ATTRIBUTE] });
-  document.addEventListener('pointerover', schedule);
-  document.addEventListener('focusin', schedule);
+  // ChatGPT has no documented native Deep Research activation webhook.
+  // Native interactions and quota updates trigger the tracker; a filtered
+  // mutation fallback handles asynchronous React composer/portal changes.
+  const TRACKER_HOST = 'form, [data-type="unified-composer"], #github-repositories-for-chatgpt, [role="menu"], [role="listbox"], [role="tooltip"]';
+  const WATCHED_MOUNTS = TRACKER_HOST + ', [data-message-author-role="user"], [data-conversation-role="user"], [data-content-search-unit-key$=":user"]';
+  function relevantMount(node) {
+    return node.nodeType === 1
+      && (node.matches(WATCHED_MOUNTS) || Boolean(node.querySelector(WATCHED_MOUNTS)));
+  }
+  function onMutations(mutations) {
+    if (!context.active() || (!enabled && !researchAttempt)) return;
+    for (const mutation of mutations) {
+      if (mutation.type === 'attributes') {
+        if (mutation.target === document.documentElement || mutation.target.closest?.(TRACKER_HOST)) {
+          schedule();
+          return;
+        }
+        continue;
+      }
+      if (mutation.target.closest?.(TRACKER_HOST)
+        || (researchAttempt && mutation.target.closest?.('[data-testid^="conversation-turn-"], article'))
+        || [...mutation.addedNodes, ...mutation.removedNodes].some(relevantMount)) {
+        schedule();
+        return;
+      }
+    }
+  }
+  const observer = new MutationObserver(onMutations);
+  observer.observe(document.documentElement, {
+    childList: true, subtree: true, attributes: true,
+    // Do not observe streaming response text or unrelated style/ARIA changes.
+    attributeFilter: ['aria-describedby', 'data-prompt-link-href', 'app-mention-path',
+      'data-prompt-link-label', 'data-ghrc-hide-repository-dashboard', USAGE_ATTRIBUTE],
+  });
+  function onResearchInteraction(event) {
+    if (event.target.closest?.(TRACKER_HOST)) schedule();
+  }
+  document.addEventListener('click', onResearchInteraction, true);
+  document.addEventListener('pointerover', onResearchInteraction, true);
+  document.addEventListener('focusin', onResearchInteraction, true);
   window.addEventListener('resize', schedule);
+  window.addEventListener('ghrc:route-change', schedule);
+  window.addEventListener('popstate', schedule);
   function applySettings(next) {
     preferences = { ...SETTINGS_DEFAULTS, ...next };
     if (preferences.deepResearchHomepageVisibility !== 'always') {
@@ -325,12 +549,17 @@
     const days = preferences.deepResearchHomepageWindowDays;
     preferences.deepResearchHomepageWindowDays =
       Number.isInteger(days) && days >= 1 && days <= 365 ? days : 5;
+    preferences.deepResearchAllowanceMode = preferences.deepResearchAllowanceMode === 'all' ? 'all' : 'full';
     enabled = preferences.showDeepResearchTracker !== false;
     schedule();
   }
 
   function settingsChanged(changes, area) {
     if (area !== 'local') return;
+    if (cacheBridge && changes[CACHE_KEY]) {
+      serverQuota = changes[CACHE_KEY].newValue?.quota || null;
+      schedule();
+    }
     const keys = Object.keys(SETTINGS_DEFAULTS).filter(key => changes[key]);
     if (!keys.length) return;
     const next = { ...preferences };
@@ -342,18 +571,30 @@
     void chrome.storage.local.get(SETTINGS_DEFAULTS).then(applySettings)
       .catch(error => context.handleError?.(error));
   }
+  // One initial cache read per tab; all later changes propagate via storage.
+  void quotaMessage({ type: 'deep-research-quota-read' });
+  // Redraw local time labels only; no automatic quota refresh request.
+  // Preserve the independent tracker visibility controls from main.
   const timer = setInterval(() => {
-    if (enabled && document.visibilityState === 'visible' && serverQuota && Date.now() - serverQuota.observedAt > 5 * 60_000) {
-      window.dispatchEvent(new Event('ghrc-refresh-deep-research-usage'));
-    }
-    schedule();
+    if (document.visibilityState === 'visible' && enabled
+      && (preferences.showDeepResearchHomepage !== false
+        || preferences.showDeepResearchComposer !== false)) schedule();
   }, 30_000);
+  document.addEventListener('click', watchResearchSend, true);
+  document.addEventListener('submit', watchResearchSend, true);
+  document.addEventListener('keydown', watchResearchSend, true);
   context.onStop(() => {
     observer.disconnect();
     clearInterval(timer);
-    document.removeEventListener('pointerover', schedule);
-    document.removeEventListener('focusin', schedule);
+    document.removeEventListener('click', watchResearchSend, true);
+    document.removeEventListener('submit', watchResearchSend, true);
+    document.removeEventListener('keydown', watchResearchSend, true);
+    document.removeEventListener('click', onResearchInteraction, true);
+    document.removeEventListener('pointerover', onResearchInteraction, true);
+    document.removeEventListener('focusin', onResearchInteraction, true);
     window.removeEventListener('resize', schedule);
+    window.removeEventListener('ghrc:route-change', schedule);
+    window.removeEventListener('popstate', schedule);
     globalThis.chrome?.storage?.onChanged?.removeListener(settingsChanged);
     document.getElementById(DASHBOARD_ID)?.remove();
     document.getElementById(COMPOSER_ID)?.remove();

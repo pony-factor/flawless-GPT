@@ -48,7 +48,7 @@ test("composer color overrides validate, update live and clean up", async () => 
 
 test("all independent composer colors have corresponding scoped CSS selectors", () => {
   const swatches = [...source.matchAll(/\["([a-z-]+)","[^"]+","#[0-9a-f]{6}"\]/g)].map(match => match[1]);
-  assert.equal(swatches.length, 25);
+  assert.equal(swatches.length, 31);
   for (const name of swatches) assert.ok(css.includes(`html[data-ghrc-color-${name}]`));
   assert.ok(css.includes("form:has(#prompt-textarea)"));
   for (const key of ["selection-background", "selection-text"]) {
@@ -106,7 +106,7 @@ test("HEX or picker edits enable individual colors immediately without checkboxe
     },
   });
   await Promise.resolve();
-  assert.equal(grid.children.length, 25);
+  assert.equal(grid.children.length, 31);
   const [label, controls] = grid.children[0].children;
   const [picker, hex, clear] = controls.children;
   assert.equal(label.children.length, 0, "no redundant enable checkbox");
@@ -126,7 +126,7 @@ test("HEX or picker edits enable individual colors immediately without checkboxe
   const plusRow = grid.children[16];
   const plusMarker = plusRow.children[0].children[0];
   const [plusPicker, plusHex, plusClear] = plusRow.children[1].children;
-  assert.equal(grid.children.length, 25);
+  assert.equal(grid.children.length, 31);
   assert.equal(plusPicker.value, "#203040");
   assert.equal(plusHex.value, "#203040");
   assert.equal(plusClear.hidden, true);
@@ -314,4 +314,83 @@ test("stop preview imports native ChatGPT colors without sampling an extension o
   timers[0]();
   assert.equal(saves.at(-1)["selection-background"], "#0a141e");
   cleanup();
+});
+
+test("inline message edit action colors are scoped, independent, and removable", async () => {
+  for (const action of ["cancel", "send"]) {
+    for (const kind of ["background", "text", "hover"]) {
+      const key = `edit-${action}-${kind}`;
+      const rule = css.split(`html[data-ghrc-color-${key}]`)[1]?.split("\n")[0];
+      assert.ok(rule?.includes(`button[data-ghrc-message-edit-action="${action}"]`), key);
+      assert.ok(rule.includes("!important"), key);
+      assert.equal(rule.includes(":hover"), kind === "hover", key);
+    }
+  }
+
+  const attr = "data-ghrc-message-edit-action";
+  const makeButton = (label, parent) => ({
+    textContent: label, parentElement: parent, attributes: {},
+    getAttribute(name) { return this.attributes[name] ?? null; },
+    setAttribute(name, value) { this.attributes[name] = value; },
+    removeAttribute(name) { delete this.attributes[name]; },
+  });
+  const actionRow = {};
+  const cancel = makeButton("Cancel", actionRow);
+  const send = makeButton("Send", actionRow);
+  const unrelated = makeButton("Send", {});
+  let editing = true;
+  let active = true;
+  let observer, cleanup = [], scheduled = [];
+  const document = {
+    documentElement: { style: {setProperty() {}, removeProperty() {}}, setAttribute() {}, removeAttribute() {} },
+    getElementById: () => null,
+    querySelectorAll(selector) {
+      if (selector.startsWith("[data-message-author-role")) return [userTurn, assistantTurn];
+      if (selector === `[${attr}]`) return [cancel, send, unrelated].filter(button => button.getAttribute(attr));
+      return [];
+    },
+  };
+  const userTurn = {
+    querySelector: () => editing ? {} : null,
+    querySelectorAll: () => [cancel, send],
+  };
+  const assistantTurn = {
+    querySelector: () => ({}),
+    querySelectorAll: () => [unrelated],
+  };
+  class Observer {
+    constructor(callback) { this.callback = callback; observer = this; }
+    observe() {}
+    disconnect() { this.disconnected = true; }
+  }
+  const chrome = { storage: {
+    local: { get: async () => ({composerColors: {}}) },
+    onChanged: { addListener() {}, removeListener() {} },
+  }};
+  vm.runInNewContext(source, {
+    chrome, document, MutationObserver: Observer,
+    setTimeout: callback => { scheduled.push(callback); return scheduled.length; },
+    clearTimeout() {},
+    globalThis: { __ghrcExtensionContext: {
+      active: () => active,
+      run: callback => callback(),
+      onStop: callback => cleanup.push(callback),
+    }},
+  });
+  scheduled.shift()();
+  assert.equal(cancel.getAttribute(attr), "cancel");
+  assert.equal(send.getAttribute(attr), "send");
+  assert.equal(unrelated.getAttribute(attr), null, "unrelated Send is not marked");
+  editing = false;
+  observer.callback();
+  scheduled.shift()();
+  assert.equal(cancel.getAttribute(attr), null, "cancel loses tag when editing ends");
+  assert.equal(send.getAttribute(attr), null, "send loses tag when editing ends");
+  editing = true;
+  observer.callback();
+  scheduled.shift()();
+  active = false;
+  cleanup.forEach(fn => fn());
+  assert.equal(cancel.getAttribute(attr), null, "cleanup removes attributes");
+  assert.equal(observer.disconnected, true);
 });

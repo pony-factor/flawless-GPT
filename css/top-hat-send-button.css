@@ -4,6 +4,10 @@ form :is(
   button#composer-submit-button:not([data-testid="stop-button"]):not([aria-label*="Stop" i]):not([aria-label*="voice" i]),
   button[aria-label^="Send" i]:not([id^="ghrc-"]):not([data-testid="stop-button"])
 ) {
+  /* Keep the hat's neutral palette when Temporary Chat changes the native
+     send accent. Explicit composer color settings can still override it. */
+  background-color: var(--text-primary, #111827);
+  color: var(--main-surface-primary, #ffffff);
   position: relative;
 }
 

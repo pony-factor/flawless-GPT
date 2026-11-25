@@ -1,12 +1,27 @@
+/* Hide the editor surface, preserving its nodes, draft, and dashboard siblings. */
+html[data-ghrc-new-chat][data-ghrc-hide-new-chat-composer]
+  :is(form:has(#prompt-textarea, [data-composer-markdown]),
+    [data-type="unified-composer"]:not(:has(form)):has(#prompt-textarea, [data-composer-markdown]),
+    #ghrc-spellcheck-gpt-launcher, #ghrc-clipboard-open-url-button) {
+  display: none !important;
+}
+
 /* The compact homepage no longer needs the native header's top inset. */
 html[data-ghrc-new-chat][data-ghrc-compact-header] main {
   padding-top: 0 !important;
 }
 
-/* The current app shell reserves toolbar space even with model controls hidden. */
+/* The frame can redeclare the toolbar inset instead of inheriting it from the layout. */
 html[data-ghrc-new-chat][data-ghrc-compact-header]:not([data-ghrc-show-model-controls])
-  [data-app-shell-main-content-layout] {
+  :is([data-app-shell-main-content-layout], [data-app-shell-thread-edge-divider],
+    [data-app-shell-main-content-layout] > [class~="@container/app-shell-main-content"]) {
   --app-shell-main-content-frame-top-offset: 0px !important;
+}
+
+/* If the toolbar is visible, keep its inset and place the composer below it. */
+html[data-ghrc-new-chat][data-ghrc-compact-header][data-ghrc-show-model-controls]
+  [class~="group/home-composer-layout"] :is(.home-composer-centered, [class~="sm:home-composer-centered"]) {
+  margin-top: 0 !important;
 }
 
 html[data-ghrc-new-chat][data-ghrc-compact-header] .home-composer-anchor,

@@ -54,6 +54,11 @@
   }
 
   async function writeInstructions(value) {
+    const guidance = String(value ?? "");
+    const length = Array.from(guidance).length;
+    if (length > 5000) {
+      throw new Error(`ChatGPT Custom Instructions allow at most 5,000 characters; guidance has ${length.toLocaleString("en-US")}. Shorten it by ${(length - 5000).toLocaleString("en-US")} characters to sync.`);
+    }
     const current = await readInstructions();
     const body = {};
     for (const key of WRITABLE_FIELDS) {
@@ -61,7 +66,7 @@
         body[key] = current.payload[key];
       }
     }
-    body.about_model_message = String(value ?? "");
+    body.about_model_message = guidance;
 
     const auth = await headers();
     const response = await fetch("/backend-api/user_system_messages", {

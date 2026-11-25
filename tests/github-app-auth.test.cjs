@@ -4,7 +4,7 @@ const { createHash, webcrypto } = require("node:crypto");
 const fs = require("node:fs");
 const vm = require("node:vm");
 const http = require("node:http");
-const { createAuthServer, CLIENT_ID } = require("../auth/server.cjs");
+const { createAuthServer, CLIENT_ID, APP_SLUG } = require("../auth/server.cjs");
 const { localExtensionId } = require("../auth/extension-identity.cjs");
 const EXTENSION = "gbokjelbjnifepoeklddjcjoljnfaofk";
 const ORIGIN = `chrome-extension://${EXTENSION}`;
@@ -49,6 +49,20 @@ async function fixture(t, { detectIdentity = false } = {}) {
   };
   return { request, post, login, exchanges, advance: (ms) => { clock += ms; } };
 }
+
+test("renamed GitHub App slug stays consistent across the service and settings pages", async (t) => {
+  assert.equal(APP_SLUG, "flawless-pony");
+  for (const page of ["js/settings/popup.js", "js/settings/options-page.js"]) {
+    const source = fs.readFileSync(require.resolve(`../${page}`), "utf8");
+    assert.match(source, /appSlug:\s*"flawless-pony"/);
+  }
+  const f = await fixture(t);
+  const health = await f.request("/health");
+  assert.equal(health.status, 200);
+  const config = await health.json();
+  assert.equal(config.appSlug, "flawless-pony");
+  assert.equal(config.clientId, CLIENT_ID);
+});
 
 test("default service accepts this checkout automatically and rejects other extensions", async (t) => {
   const f = await fixture(t, { detectIdentity: true });
@@ -118,7 +132,7 @@ test("extension rejects callback state mismatches before redeeming a login", asy
     },
     chrome: {
       runtime: { id: EXTENSION },
-      storage: { local: { get: async () => ({ githubAppClientId: CLIENT_ID, githubAppSlug: "flawless-chatgpt" }) } },
+      storage: { local: { get: async () => ({ githubAppClientId: CLIENT_ID, githubAppSlug: "flawless-pony" }) } },
       identity: {
         getRedirectURL: () => `https://${EXTENSION}.chromiumapp.org/github`,
         launchWebAuthFlow: async () => `https://${EXTENSION}.chromiumapp.org/github?state=wrong&login_code=test`,

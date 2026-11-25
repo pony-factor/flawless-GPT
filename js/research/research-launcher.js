@@ -4,6 +4,20 @@
   const BUTTON = 'ghrc-research-writing-block';
   const VISIBILITY_KEY = 'showResearchWritingBlockLauncher';
   let launcherVisible = false;
+  const BUTTON_SETTING = 'showWritingResearchButton';
+  let showResearchButton = false;
+  function updateResearchButton(enabled) {
+    showResearchButton = enabled !== false;
+    document.querySelectorAll(`.${BUTTON}`).forEach(button => {
+      button.style.display = showResearchButton ? '' : 'none';
+    });
+  }
+  if (chrome.storage.local.get) {
+    chrome.storage.local.get({ [BUTTON_SETTING]: true }).then(settings => updateResearchButton(settings[BUTTON_SETTING])).catch(() => {});
+  } else showResearchButton = true;
+  chrome.storage.onChanged?.addListener((changes, area) => {
+    if (area === 'local' && changes[BUTTON_SETTING]) updateResearchButton(changes[BUTTON_SETTING].newValue);
+  });
   const runs = new Map();
   let mounting = false;
   let polling = false;
@@ -38,9 +52,10 @@
     if (!job) return 'Research window closed before import finished.';
     if (job.state === 'complete') return `Imported: ${job.result.repository} / ${job.result.path} (${job.result.branch}).`;
     if (job.state === 'import-retry') return 'Import interrupted. Retrying automatically…';
+    if (job.state === 'import-error') return 'Import failed. ' + (job.error || 'Open the report to try again.');
     if (job.error) return job.error;
     return ({ pending: 'Opening research…', preparing: 'Preparing Deep Research…', sending: 'Submitting research…',
-      submitted: 'Research running. Answer any follow-up questions in the research window.', importing: 'Importing completed report…' })[job.state] || 'Research needs attention in its window.';
+      submitted: `Research running · import queued to ${job.category ? '/' + job.category : 'repository root'}.`, importing: 'Importing completed report…' })[job.state] || 'Research needs attention in its window.';
   }
   function windowStatus(job) {
     let banner = document.getElementById('ghrc-research-run-status');
@@ -48,17 +63,46 @@
       banner = document.createElement('div');
       banner.id = 'ghrc-research-run-status';
       banner.setAttribute('role', 'status');
+      const label = document.createElement('span');
+      label.className = 'ghrc-run-label';
+      const move = document.createElement('button');
+      move.type = 'button';
+      move.textContent = 'Move…';
+      move.setAttribute('aria-label', 'Change research import folder');
+      move.addEventListener('click', event => {
+        if (!event.isTrusted || move.disabled || !activeRun) return;
+        void context.run(async () => {
+          move.disabled = true;
+          try {
+            const connection = await request({ type: 'research-publisher-status' });
+            if (connection.repository !== activeRun.repository || connection.branch !== activeRun.branch)
+              throw new Error('The linked repository changed during research.');
+            const category = await globalThis.__ghrcChooseResearchCategory(document, connection, 'move');
+            if (category === null) return;
+            const updated = await request({ type: 'set-research-launch-category', id: activeRun.id, category });
+            activeRun = updated.job;
+            windowStatus(updated.job);
+          } catch (error) { setStatus(label, error.message); }
+          finally { move.disabled = false; }
+        });
+      });
+      banner.append(label, move);
       document.body.append(banner);
     }
-    if (job?.state === 'complete') globalThis.__ghrcResearchImportStatus(banner, job.result);
-    else setStatus(banner, statusFor(job));
+    const label = banner.querySelector('.ghrc-run-label');
+    if (job?.state === 'complete') globalThis.__ghrcResearchImportStatus(label, job.result);
+    else setStatus(label, statusFor(job));
+    banner.querySelector('button').hidden = !job?.id || !['submitted', 'import-retry'].includes(job.state);
+    const form = composer()?.closest('form') || document.querySelector('[data-type="unified-composer"]');
+    const top = form?.getBoundingClientRect().top;
+    banner.style.bottom = top > 0 && top < innerHeight ? Math.max(12, Math.ceil(innerHeight - top + 8)) + 'px' : '88px';
   }
   function mount() {
     if (!context.active() || !document.body) return;
     if (!document.getElementById('ghrc-research-launch-style')) {
       const style = document.createElement('style');
       style.id = 'ghrc-research-launch-style';
-      style.textContent = `.${BUTTON}{display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;padding:8px;border:0;border-radius:50%;background:transparent;color:inherit;cursor:pointer}.${BUTTON}:hover{background:color-mix(in srgb,currentColor 10%,transparent)}.${BUTTON}:disabled{opacity:.5;cursor:default}.${BUTTON}[hidden]{display:none}.${BUTTON}:focus-visible{outline:2px solid currentColor;outline-offset:2px}.ghrc-research-launch-status{font:12px/1.4 system-ui;margin:0 12px 8px;overflow-wrap:anywhere}.ghrc-research-launch-status:empty{display:none}#ghrc-research-run-status{position:fixed;z-index:9999;top:0;left:0;right:0;padding:8px 12px;background:light-dark(#fff,#202123);color:light-dark(#111,#fff);border-bottom:1px solid #888;font:12px/1.4 system-ui;pointer-events:none}.ghrc-report-import{color:inherit;background:light-dark(#fff,#202123);border:1px solid #888;border-radius:12px;padding:24px;max-width:420px;width:calc(100% - 64px);color-scheme:light dark}.ghrc-report-import::backdrop{background:#0008}.ghrc-report-import h2{margin-top:0;font-size:20px}.ghrc-report-import p{font-size:13px}.ghrc-report-import input{display:block;box-sizing:border-box;width:100%;padding:10px;margin-top:8px}.ghrc-report-import form>div{display:flex;justify-content:flex-end;gap:12px;margin-top:20px}.ghrc-report-import button{padding:8px 12px;cursor:pointer}`;
+      style.textContent = `.${BUTTON}{display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;padding:8px;border:0;border-radius:50%;background:transparent;color:inherit;cursor:pointer}.${BUTTON}:hover{background:color-mix(in srgb,currentColor 10%,transparent)}.${BUTTON}:disabled{opacity:.5;cursor:default}.${BUTTON}[hidden]{display:none}.${BUTTON}:focus-visible{outline:2px solid currentColor;outline-offset:2px}.ghrc-research-launch-status{font:12px/1.4 system-ui;margin:0 12px 8px;overflow-wrap:anywhere}.ghrc-research-launch-status:empty{display:none}#ghrc-research-run-status{position:fixed;z-index:9999;right:16px;bottom:88px;max-width:min(420px,calc(100vw - 32px));padding:9px 12px;background:light-dark(#fff,#202123);color:light-dark(#111,#fff);border:1px solid #8886;border-radius:10px;box-shadow:0 3px 16px #0002;font:12px/1.4 system-ui;overflow-wrap:anywhere}#ghrc-research-run-status button{border:1px solid #8886;border-radius:6px;background:transparent;color:inherit;padding:5px 8px;cursor:pointer;margin-left:10px}#ghrc-research-run-status button[hidden]{display:none}.ghrc-report-import{color:inherit;background:light-dark(#fff,#202123);border:1px solid #888;border-radius:12px;padding:24px;max-width:420px;width:calc(100% - 64px);color-scheme:light dark}.ghrc-report-import::backdrop{background:#0008}.ghrc-report-import h2{margin-top:0;font-size:20px}.ghrc-report-import p{font-size:13px}.ghrc-report-import input{display:block;box-sizing:border-box;width:100%;padding:10px;margin-top:8px}.ghrc-report-import form>div{display:flex;justify-content:flex-end;gap:12px;margin-top:20px}.ghrc-report-import button{padding:8px 12px;cursor:pointer}`;
       document.head.append(style);
     }
     document.querySelectorAll('.' + BUTTON).forEach(button => { button.hidden = !launcherVisible; });
@@ -70,6 +114,7 @@
       const button = document.createElement('button');
       button.type = 'button';
       button.className = BUTTON;
+      button.style.display = showResearchButton ? '' : 'none';
       button.title = 'Run Deep Research and import the finished report';
       button.setAttribute('aria-label', 'Research and import');
       const icon = document.createElement('img');
@@ -95,9 +140,8 @@
             if (!prompt?.trim()) throw new Error('This writing block has no research prompt yet.');
             setStatus(status, 'Checking repository connection…');
             const connection = await request({ type: 'research-publisher-status' });
-            setStatus(status, '');
-            const category = await globalThis.__ghrcChooseResearchCategory(document, connection, true);
-            if (category === null) return;
+            setStatus(status, 'Starting research · import destination: repository root…');
+            const category = '';
             const title = header.querySelector('button[aria-label="Add to Library"]')?.textContent.trim()
               || header.textContent.trim() || 'Deep Research';
             const { job } = await request({ type: 'start-research-launch', prompt, title: title.slice(0, 500), category,
@@ -196,8 +240,8 @@
       if (!handoffChecked || activeRun) {
         const { job } = await request({ type: 'research-launch-job' });
         handoffChecked = true;
-        activeRun = job;
-        if (job) {
+        activeRun = job?.manual ? null : job;
+        if (job && !job.manual) {
           windowStatus(job);
           if (job.state === 'pending' && !handoffStarted) {
             handoffStarted = true;
@@ -218,7 +262,8 @@
   }
   chrome.runtime.onMessage.addListener((message, sender, respond) => {
     if (message?.type !== 'research-launch-readiness') return false;
-    respond({ ready: Boolean(activeRun && activeRun.id === message.id && userTurns() > 0 && !stopped()) });
+    respond({ ready: Boolean(userTurns() > 0 && !stopped()
+      && ((activeRun && activeRun.id === message.id) || document.getElementById('ghrc-manual-research-import-status'))) });
     return false;
   });
   const settingsChanged = (changes, area) => {

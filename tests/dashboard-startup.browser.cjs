@@ -21,20 +21,25 @@ test("cached dashboard controls and highlights mount before the host page finish
     }
     entry.matches = ["http://127.0.0.1/*"];
   }
-  for (const file of ["artwork/calligraphy-initials.png", "artwork/spellcheck-only.png"]) {
+  for (const file of ["artwork/calligraphy-initials.png", "artwork/spellcheck-only.jpg"]) {
     fs.mkdirSync(path.dirname(path.join(extension, file)), { recursive: true });
     fs.copyFileSync(path.join(root, file), path.join(extension, file));
   }
+  const workerScript = "dashboard-startup-worker.js";
   fs.writeFileSync(path.join(extension, "manifest.json"), JSON.stringify({
     manifest_version: 3, name: "Dashboard startup fixture", version: "1.0",
-    permissions: ["storage"], background: { service_worker: "background.js" },
+    permissions: ["storage"], background: { service_worker: workerScript },
     content_scripts: scripts,
     web_accessible_resources: [{ resources: ["artwork/*"], matches: ["http://127.0.0.1/*"] }],
   }));
-  fs.writeFileSync(path.join(extension, "background.js"), `
+  fs.writeFileSync(path.join(extension, workerScript), `
     chrome.runtime.onMessage.addListener((message, sender, reply) => {
       if (message.type === "load-repositories") reply({ok:true,mode:"public",ownerOrder:["octo"],repositories:[{name:"example",fullName:"octo/example",url:"https://github.com/octo/example",pushedAt:new Date().toISOString(),owner:{login:"octo",type:"User",displayName:"Octo",avatarUrl:""}}]});
-      else reply({ok:true});
+      else {
+        if (message.type === "open-wooten-link") globalThis.wootenSearchUrl = message.url;
+        if (message.type === "open-chat-dispatcher") globalThis.openedDispatcher = true;
+        reply({ok:true});
+      }
     });
   `);
   let stalledResponse;
@@ -52,12 +57,30 @@ test("cached dashboard controls and highlights mount before the host page finish
       executablePath: process.env.BROWSER_EXECUTABLE || "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser",
       headless: true, args: [`--disable-extensions-except=${extension}`, `--load-extension=${extension}`],
     });
-    const worker = context.serviceWorkers()[0] || await context.waitForEvent("serviceworker");
+    // Chromium can expose unrelated service workers in a persistent context.
+    // Select this fixture explicitly before touching extension-only APIs.
+    const isDashboardWorker = candidate => {
+      const url = new URL(candidate.url());
+      return url.protocol === "chrome-extension:" && url.pathname === `/${workerScript}`;
+    };
+    const worker = context.serviceWorkers().find(isDashboardWorker)
+      || await context.waitForEvent("serviceworker", { predicate: isDashboardWorker, timeout: 10000 });
+    // A worker target can be reported before its extension API bindings are ready.
+    let storageReady = false;
+    for (let attempt = 0; attempt < 100; attempt++) {
+      storageReady = await worker.evaluate(() => Boolean(globalThis.chrome?.storage?.local));
+      if (storageReady) break;
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+    assert.ok(storageReady, `Dashboard fixture storage unavailable in ${worker.url()}`);
     await worker.evaluate(() => chrome.storage.local.set({
       showWootenLinkSearch: true, compactNewChatHeader: true, show2048Launcher: true,
       highlightedPages: [{ id: "saved", url: "https://example.com/", title: "Saved highlight" }],
     }));
     const page = await context.newPage();
+    await page.route("https://wooten.link/404.html", route => route.fulfill({
+      status: 200, contentType: "text/html", body: "<html></html>",
+    }));
     const errors = [];
     page.on("pageerror", error => errors.push(error.message));
     // Never wait for load: the image response remains deliberately pending.
@@ -77,6 +100,39 @@ test("cached dashboard controls and highlights mount before the host page finish
     assert.equal(state.styled, "flex");
     assert.ok(state.imageHeight > 0 && state.imageHeight < 50);
     assert.equal(state.launcher, true);
+    const bulkMerge = page.locator(".ghrc-chat-dispatcher");
+    assert.equal(await bulkMerge.count(), 1, "bulk merge stays enabled for existing users");
+    assert.equal(await bulkMerge.getAttribute("aria-label"), "Bulk merge");
+    assert.equal(await bulkMerge.getAttribute("title"), "Open Chat Dispatcher in a new tab");
+    assert.equal(await bulkMerge.locator("svg.ghrc-sort-icon path").count(), 5);
+    assert.equal(await bulkMerge.innerText(), "", "button is icon-only");
+    await bulkMerge.click();
+    assert.equal(await worker.evaluate(() => globalThis.openedDispatcher), true);
+    await worker.evaluate(() => chrome.storage.local.set({ showBulkMergeButton: false }));
+    await bulkMerge.waitFor({ state: "detached" });
+    assert.equal(await bulkMerge.count(), 0, "hiding the shortcut does not remove the dashboard");
+    await worker.evaluate(() => chrome.storage.local.set({ showBulkMergeButton: true }));
+    await bulkMerge.waitFor({ state: "visible" });
+    const iconSubmit = page.locator(".ghrc-wooten-link-mark-submit");
+    const wootenInput = page.locator(".ghrc-wooten-link-search input");
+    assert.equal(await iconSubmit.getAttribute("type"), "submit");
+    assert.equal(await iconSubmit.getAttribute("aria-label"), "Search WootenLink");
+    assert.equal(await iconSubmit.locator("img.ghrc-wooten-link-mark").count(), 1);
+    // Empty searches should focus the field instead of navigating.
+    await iconSubmit.click();
+    assert.equal(await wootenInput.evaluate(input => document.activeElement === input), true);
+    await wootenInput.fill("Sweetie Belle");
+    await iconSubmit.click();
+    let submittedUrl = null;
+    for (let attempt = 0; attempt < 40; attempt++) {
+      submittedUrl = await worker.evaluate(() => globalThis.wootenSearchUrl || null);
+      if (submittedUrl) break;
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+    assert.ok(submittedUrl, "icon click submitted the search");
+    assert.equal(new URL(submittedUrl).origin, "https://wooten.link");
+    assert.equal(new URL(submittedUrl).searchParams.get("q"), "Sweetie Belle");
+
     const frames = await page.evaluate(() => startupFrames);
     assert.ok(frames.some(frame => frame.top === undefined), 'sample before React adds the composer');
     assert.ok(frames.every(frame => !frame.welcomeVisible), JSON.stringify(frames));

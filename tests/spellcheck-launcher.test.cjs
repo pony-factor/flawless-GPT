@@ -6,7 +6,7 @@ const path = require('node:path');
 
 const source = fs.readFileSync(path.join(__dirname, '../js/launchers/spellcheck-launcher.js'), 'utf8');
 
-function fixture({ clipboard = 'clipboard text', draft = '', suggestionAvailable = true, adjacentDescription = false, externalAppChip = false, rejectInlineInsertion = false } = {}) {
+function fixture({ clipboard = 'clipboard text', draft = '', suggestionAvailable = true, adjacentDescription = false, externalAppChip = false, nativeSendWithoutTestId = false, rejectInlineInsertion = false } = {}) {
   let now = 0;
   let suggestionOpen = false;
   let pluginSelected = false;
@@ -24,6 +24,9 @@ function fixture({ clipboard = 'clipboard text', draft = '', suggestionAvailable
 
   const send = makeAction('Send', () => { send.clicks++; });
   send.clicks = 0;
+  const clipboardSend = makeAction('Send clipboard or queue as prompt', () => { clipboardSend.clicks++; });
+  clipboardSend.id = 'ghrc-clipboard-send-button';
+  clipboardSend.clicks = 0;
 
   const mention = {
     textContent: 'Spellcheck Only',
@@ -66,7 +69,8 @@ function fixture({ clipboard = 'clipboard text', draft = '', suggestionAvailable
       if (selector.includes('[app-mention-path]') || selector.includes('[app-mention-display-name]')) {
         return externalAppChip && pluginSelected ? [mention] : [];
       }
-      if (/send-button|aria-label\^="Send"|composer-submit-button/.test(selector)) return [send];
+      if (selector.includes('aria-label^="Send"')) return [clipboardSend, send];
+      if (/send-button|composer-submit-button/.test(selector)) return nativeSendWithoutTestId ? [] : [send];
       return [];
     },
   };
@@ -135,11 +139,11 @@ function fixture({ clipboard = 'clipboard text', draft = '', suggestionAvailable
   vm.createContext(context);
   const prefix = source.slice(0, source.indexOf('  chrome.storage.onChanged'));
   vm.runInContext(prefix + `
-    globalThis.api = { launchSpellcheck, activateSpellcheckPlugin, appendSpellcheckText, submitWhenReady };
+    globalThis.api = { launchSpellcheck, activateSpellcheckPlugin, appendSpellcheckText, submitWhenReady, createLauncher, setIconSource };
   })();`, context);
 
   return {
-    context, composer, send, api: context.api,
+    context, composer, send, clipboardSend, api: context.api,
     get pluginSelected() { return pluginSelected; },
     get pluginSuggestionClicks() { return pluginSuggestionClicks; },
     get pickerLookups() { return pickerLookups; },
@@ -163,6 +167,16 @@ test('resolves a suggestion whose adjacent description has no text separator', a
   await new Promise((resolve) => setImmediate(resolve));
   assert.equal(f.pluginSelected, true);
   assert.equal(f.send.clicks, 1);
+});
+
+test('native Send without a test ID wins over the clipboard button and preserves the plugin', async () => {
+  const f = fixture({ nativeSendWithoutTestId: true });
+  await f.api.launchSpellcheck();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(f.clipboardSend.clicks, 0);
+  assert.equal(f.send.clicks, 1);
+  assert.equal(f.pluginSelected, true);
+  assert.equal(f.composer.innerText, 'Spellcheck Only\nclipboard text');
 });
 
 test('replaces an existing homepage draft before resolving the plugin mention', async () => {
@@ -213,4 +227,35 @@ test('spellcheck launcher shows artwork without a CSS border or shadow ring', ()
   const css = fs.readFileSync(path.join(__dirname, '../css/spellcheck-launcher.css'), 'utf8');
   assert.match(css, /#ghrc-spellcheck-gpt-launcher\s*\{[^}]*border:\s*0;/s);
   assert.match(css, /#ghrc-spellcheck-gpt-launcher\s*\{[^}]*box-shadow:\s*none;/s);
+});
+
+test('Spellcheck Only artwork references the bundled JPG', () => {
+  const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, '../manifest.json'), 'utf8'));
+  const asset = 'artwork/spellcheck-only.jpg';
+  assert.ok(fs.existsSync(path.join(__dirname, '..', asset)));
+  assert.match(source, /const ICON_PATH = "artwork\/spellcheck-only\.jpg";/);
+  assert.ok(manifest.web_accessible_resources.some(entry => entry.resources?.includes(asset)));
+  assert.ok(!manifest.web_accessible_resources.some(entry => entry.resources?.includes('artwork/spellcheck-only.png')));
+});
+
+
+test('launcher artwork switches to a local custom image and rejects unsafe formats', () => {
+  const f = fixture();
+  const image = { src: '', addEventListener() {}, setAttribute() {} };
+  const button = {
+    append(child) { this.image = child; },
+    addEventListener() {},
+    setAttribute() {},
+    querySelector(selector) { return selector === 'img' ? this.image : null; },
+  };
+  f.context.document.createElement = (tag) => tag === 'img' ? image : button;
+  f.context.document.getElementById = () => button;
+  f.api.createLauncher();
+  assert.equal(image.src, 'artwork/spellcheck-only.jpg');
+  f.api.setIconSource('data:image/png;base64,aGVsbG8=');
+  assert.equal(image.src, 'data:image/png;base64,aGVsbG8=');
+  f.api.setIconSource('data:image/svg+xml;base64,aGVsbG8=');
+  assert.equal(image.src, 'artwork/spellcheck-only.jpg');
+  f.api.setIconSource(undefined);
+  assert.equal(image.src, 'artwork/spellcheck-only.jpg');
 });

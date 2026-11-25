@@ -149,6 +149,71 @@ async function fixture({ active = false, voice = false, editable = true, stored 
   return page;
 }
 
+test('queue height tracks the viewport and scrolling preserves editors', async () => {
+  const queued = Array.from({ length: 14 }, (_, index) => ({
+    id: `viewport-item-${index}`,
+    text: `Queued message ${index}: ${'long text '.repeat(5)}`,
+    createdAt: index + 1,
+  }));
+  const p = await fixture({
+    active: true,
+    stored: {
+      messageQueueMaxHeightPercent: 45,
+      queuedChatMessages: { 'conversation:test': queued },
+    },
+  });
+  await p.setViewportSize({ width: 820, height: 600 });
+  await p.waitForFunction(() => document.querySelectorAll('.ghrc-message-queue-item').length === 14);
+
+  const initial = await p.evaluate(() => {
+    const panel = document.getElementById('ghrc-message-queue');
+    return {
+      height: panel.getBoundingClientRect().height,
+      maxHeight: getComputedStyle(panel).maxHeight,
+      canScroll: panel.scrollHeight > panel.clientHeight,
+      rowCount: panel.querySelectorAll('.ghrc-message-queue-item').length,
+    };
+  });
+  assert.ok(initial.height <= 271, 'queue must not exceed 45% of viewport height');
+  assert.equal(initial.maxHeight, '270px');
+  assert.equal(initial.canScroll, true);
+  assert.equal(initial.rowCount, 14);
+
+  await p.evaluate(() => {
+    const first = document.querySelector('.ghrc-message-queue-editor');
+    window.firstQueueEditor = first;
+    first.focus();
+    first.setSelectionRange(5, 5);
+  });
+  await p.evaluate(async () => chrome.storage.local.set({ messageQueueMaxHeightPercent: 25 }));
+  await p.waitForFunction(() =>
+    document.getElementById('ghrc-message-queue')?.style.getPropertyValue('--ghrc-queue-max-height') === '25dvh');
+  const changed = await p.evaluate(() => {
+    const panel = document.getElementById('ghrc-message-queue');
+    panel.scrollTop = 100;
+    return {
+      height: panel.getBoundingClientRect().height,
+      maxHeight: getComputedStyle(panel).maxHeight,
+      scrollTop: panel.scrollTop,
+      sameEditor: panel.querySelector('.ghrc-message-queue-editor') === window.firstQueueEditor,
+      focused: document.activeElement === window.firstQueueEditor,
+      selectionStart: window.firstQueueEditor.selectionStart,
+    };
+  });
+  assert.ok(changed.height <= 151, 'queue must honor updated 25% limit');
+  assert.equal(changed.maxHeight, '150px');
+  assert.ok(changed.scrollTop > 0, 'entire queue must scroll');
+  assert.equal(changed.sameEditor, true);
+  assert.equal(changed.focused, true);
+  assert.equal(changed.selectionStart, 5);
+
+  await p.setViewportSize({ width: 820, height: 400 });
+  const resizedHeight = await p.locator('#ghrc-message-queue').evaluate(element => element.getBoundingClientRect().height);
+  assert.ok(resizedHeight <= 101, 'queue cap must follow viewport resizing');
+  assert.deepEqual(p.errors, []);
+  await p.close();
+});
+
 test('queue stays inside the composer and viewport as the chat column narrows', async () => {
   const p = await fixture({ active: true });
   await enqueue(p, 'Keep this queued draft visible in a compact window');
@@ -256,6 +321,49 @@ async function enqueue(page, text, enter = false) {
 async function sentCount(page, count) {
   await page.waitForFunction(n => sent.length === n, count, { timeout: 10000 });
 }
+
+for (const liveMarkup of [false, true]) {
+  for (const assistantRole of [false, true]) test(`queue resumes after stopped thinking (${liveMarkup ? 'grouped' : 'article'}, assistant role=${assistantRole})`, async () => {
+    const p = await fixture({ active: true, liveMarkup });
+    await enqueue(p, 'Continue after cancellation');
+    await p.locator('[data-composer-markdown]').fill('Keep my draft');
+    await p.evaluate(assistantRole => {
+      const assistant = document.querySelector('[data-message-author-role="assistant"], [data-content-search-unit-key$=":assistant"]');
+      const turn = assistant.parentElement;
+      if (!assistantRole) assistant.remove();
+      turn.insertAdjacentHTML('beforeend', '<button aria-label="Stopped thinking">Stopped thinking</button>');
+    }, assistantRole);
+    // The marker cannot override a native Stop control while work is active.
+    await p.waitForTimeout(1800);
+    assert.deepEqual(await p.evaluate(() => sent), []);
+    await p.evaluate(() => { window.active = false; update(); });
+    await sentCount(p, 1);
+    await p.waitForFunction(() => read() === 'Keep my draft' && !document.querySelector('.ghrc-message-queue-editor'));
+    assert.deepEqual(await p.evaluate(() => sent), ['Continue after cancellation']);
+    assert.equal(await p.locator('.ghrc-message-queue-editor').count(), 0);
+    assert.deepEqual(p.errors, []);
+    await p.close();
+  });
+}
+
+test('old, hidden, and side-panel stopped-thinking controls cannot release a newer unanswered turn', async () => {
+  const p = await fixture({ liveMarkup: true });
+  await p.evaluate(() => {
+    document.getElementById('turns').setAttribute('aria-label', 'Conversation');
+    addTurn('user'); addTurn('assistant');
+    document.querySelector('[data-fixture-turn]').insertAdjacentHTML('beforeend', '<button>Stopped thinking</button>');
+    addTurn('user');
+    document.querySelector('[data-fixture-turn]:last-child').insertAdjacentHTML('beforeend', '<button hidden>Stopped thinking</button>');
+    document.body.insertAdjacentHTML('beforeend', '<aside><button>Stopped thinking</button></aside>');
+  });
+  await enqueue(p, 'Wait for the current reply');
+  await p.waitForTimeout(2000);
+  assert.deepEqual(await p.evaluate(() => sent), []);
+  await p.evaluate(() => addTurn('assistant', true));
+  await sentCount(p, 1);
+  assert.deepEqual(p.errors, []);
+  await p.close();
+});
 
 for (const liveMarkup of [false, true]) test(`queue follows the latest reply after unanswered earlier messages (${liveMarkup ? 'grouped' : 'article'} turns)`, async () => {
   const p = await fixture({ liveMarkup });
@@ -472,8 +580,8 @@ test('distinct Enter requests save in FIFO order while the first save is pending
   await p.close();
 });
 
-test('Enter during delayed native submission queues without sending another message', async () => {
-  const p = await fixture({ route: '/' });
+for (const route of ['/', '/?temporary-chat=true']) test(`Enter during delayed native submission queues without sending another message on ${route}`, async () => {
+  const p = await fixture({ route });
   await p.evaluate(() => {
     window.delayedNativeSends = 0;
     document.addEventListener('keydown', event => {
@@ -803,6 +911,22 @@ for (const route of ['/', '/?temporary-chat=true']) {
   });
 }
 
+test('temporary chat queues through an incomplete response even if the Stop control disappears', async () => {
+  const p = await fixture({ route: '/?temporary-chat=true', active: true });
+  await p.evaluate(() => {
+    window.active = false;
+    update();
+  });
+  await enqueue(p, 'Wait for the temporary reply', true);
+  assert.deepEqual(await p.evaluate(() => sent), []);
+  assert.equal(await p.evaluate(() => stops), 0);
+  await p.evaluate(() => finish());
+  await sentCount(p, 1);
+  assert.deepEqual(await p.evaluate(() => sent), ['Wait for the temporary reply']);
+  assert.deepEqual(p.errors, []);
+  await p.close();
+});
+
 test('new-chat Enter stays native when homepage shell has incomplete turn markup', async () => {
   const p = await fixture({ route: '/' });
   await p.evaluate(() => {
@@ -966,6 +1090,26 @@ test('an empty disabled hat remains visible with voice hidden and yields to nati
   await p.evaluate(() => document.documentElement.removeAttribute('data-ghrc-hide-dictation'));
   await p.waitForFunction(() => !document.getElementById('ghrc-message-interrupt-button'));
   assert.equal(await p.getByRole('button', { name: 'Start Voice', exact: true }).isVisible(), true);
+  assert.deepEqual(p.errors, []);
+  await p.close();
+});
+
+test('extension invalidation removes its empty hat before native Send appears', async () => {
+  const p = await fixture({ voice: true, liveMarkup: true, queueButton: false });
+  await p.addStyleTag({ content: fs.readFileSync(path.join(__dirname, '../css/hide-dictation.css'), 'utf8') });
+  await p.evaluate(() => document.documentElement.setAttribute('data-ghrc-hide-dictation', ''));
+  await p.getByRole('button', { name: 'Send message', exact: true }).waitFor();
+  // Reloading an unpacked extension invalidates scripts in already-open tabs.
+  // React can still turn Voice into Send after those scripts stop observing.
+  await p.evaluate(() => {
+    delete chrome.runtime.id;
+    window.__ghrcExtensionContext.active();
+  });
+  await p.locator('[data-composer-markdown]').fill('Keep this draft');
+  assert.equal(await p.locator('#ghrc-message-interrupt-button').count(), 0);
+  assert.equal(await p.getByRole('button', { name: 'Send', exact: true }).count(), 1);
+  assert.equal(await p.evaluate(() => read()), 'Keep this draft');
+  assert.deepEqual(await p.evaluate(() => sent), []);
   assert.deepEqual(p.errors, []);
   await p.close();
 });
@@ -1361,6 +1505,114 @@ async function attachmentFixture(page, { images = false, portalInput = false, ge
     }
   }, { images, portalInput, genericRemove });
 }
+
+
+test('queued attachment info cards coexist with image thumbnails and survive editing and reorder', async () => {
+  const p = await fixture({ active: true, stored: {
+    queuedChatMessages: { 'conversation:test': [
+      { id: 'mixed-files', text: 'Review these attachments', attachments: [
+        { name: 'brief.pdf', type: 'application/pdf', dataUrl: 'data:application/pdf;base64,SGVsbG8=' },
+        { name: 'picture.png', type: 'image/png', dataUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j1ioAAAAASUVORK5CYII=' },
+        { name: 'results.csv', type: 'text/csv', dataUrl: 'data:text/csv;base64,YWJj' },
+      ] },
+      { id: 'second-file', text: 'Later prompt', attachments: [
+        { name: 'draft.txt', type: 'text/plain', dataUrl: 'data:text/plain;base64,SGk=' },
+      ] },
+    ] },
+    queuedChatMessagesPaused: { 'conversation:test': true },
+  } });
+  const first = p.locator('[data-queue-id="mixed-files"]');
+  await first.waitFor();
+  assert.equal(await first.locator('.ghrc-message-queue-thumbnails img').count(), 1);
+  assert.equal(await first.locator('.ghrc-message-queue-thumbnails img').first().getAttribute('alt'), 'picture.png');
+  assert.deepEqual(await first.locator('.ghrc-message-queue-file-name').allTextContents(), ['brief.pdf', 'results.csv']);
+  assert.deepEqual(await first.locator('.ghrc-message-queue-file-meta').allTextContents(), ['PDF · 5 B', 'CSV · 3 B']);
+  assert.equal(await first.locator('.ghrc-message-queue-file-card').first().getAttribute('title'), 'brief.pdf (application/pdf, 5 B)');
+  const position = await first.evaluate(row => {
+    const index = row.querySelector('.ghrc-message-queue-index').getBoundingClientRect();
+    const rail = row.querySelector('.ghrc-message-queue-attachments').getBoundingClientRect();
+    const editor = row.querySelector('.ghrc-message-queue-editor').getBoundingClientRect();
+    return {
+      order: [...row.children].map(child => child.className),
+      indexRight: index.right,
+      railLeft: rail.left,
+      railRight: rail.right,
+      editorLeft: editor.left,
+      imageInRail: Boolean(row.querySelector('.ghrc-message-queue-attachments .ghrc-message-queue-thumbnails')),
+      filesInRail: Boolean(row.querySelector('.ghrc-message-queue-attachments .ghrc-message-queue-files')),
+    };
+  });
+  assert.deepEqual(position.order, [
+    'ghrc-message-queue-index', 'ghrc-message-queue-attachments',
+    'ghrc-message-queue-editor', 'ghrc-message-queue-controls',
+  ]);
+  assert.ok(position.indexRight <= position.railLeft + 1, 'attachments follow queue order number');
+  assert.ok(position.railRight <= position.editorLeft + 1, 'attachments stay to the left of prompt text');
+  assert.equal(position.imageInRail, true);
+  assert.equal(position.filesInRail, true);
+  await p.evaluate(() => {
+    window.savedFileCard = document.querySelector('[data-queue-id="mixed-files"] .ghrc-message-queue-file-card');
+  });
+  await first.locator('.ghrc-message-queue-editor').fill('Updated text');
+  await first.getByRole('button', { name: 'Move queued message later' }).click();
+  assert.equal(await p.evaluate(() => window.savedFileCard ===
+    document.querySelector('[data-queue-id="mixed-files"] .ghrc-message-queue-file-card')), true);
+  assert.equal(await p.locator('[data-queue-id="second-file"] .ghrc-message-queue-file-meta').textContent(), 'TXT · 2 B');
+  await p.setViewportSize({ width: 355, height: 720 });
+  const narrow = await first.evaluate(row => {
+    const index = row.querySelector('.ghrc-message-queue-index').getBoundingClientRect();
+    const rail = row.querySelector('.ghrc-message-queue-attachments').getBoundingClientRect();
+    const editor = row.querySelector('.ghrc-message-queue-editor').getBoundingClientRect();
+    const card = row.querySelector('.ghrc-message-queue-file-card').getBoundingClientRect();
+    const controls = row.querySelector('.ghrc-message-queue-controls').getBoundingClientRect();
+    return {
+      indexRight: index.right, railLeft: rail.left, railRight: rail.right,
+      editorLeft: editor.left, editorRight: editor.right, cardRight: card.right,
+      controlsTop: controls.top, editorBottom: editor.bottom,
+    };
+  });
+  assert.ok(narrow.indexRight <= narrow.railLeft + 1, 'narrow queue keeps order before attachments');
+  assert.ok(narrow.railRight <= narrow.editorLeft + 1, 'narrow queue keeps attachments left of text');
+  assert.ok(narrow.cardRight <= narrow.railRight + 1, 'file card fits inside its rail');
+  assert.ok(narrow.controlsTop >= narrow.editorBottom - 1, 'narrow queue puts controls beneath prompt');
+  assert.deepEqual(p.errors, []);
+  await p.close();
+});
+
+test('queued file cards update when stored attachments change and disappear when cleared', async () => {
+  const p = await fixture({ active: true, stored: {
+    queuedChatMessages: { 'conversation:test': [
+      { id: 'update-files', text: 'Read attachment', attachments: [
+        { name: 'file.txt', type: 'text/plain', dataUrl: 'data:text/plain;base64,YWJj' },
+        { name: 'scan.png', type: 'image/png', dataUrl: 'data:image/png;base64,YWJj' },
+      ] },
+    ] },
+    queuedChatMessagesPaused: { 'conversation:test': true },
+  } });
+  const row = p.locator('[data-queue-id="update-files"]');
+  await row.waitFor();
+  assert.equal(await row.locator('.ghrc-message-queue-file-card').count(), 1);
+  await p.evaluate(async () => {
+    const next = structuredClone(storage.queuedChatMessages);
+    next['conversation:test'][0].attachments = next['conversation:test'][0].attachments.slice(1);
+    await chrome.storage.local.set({ queuedChatMessages: next });
+  });
+  await p.waitForFunction(() => document.querySelector('[data-queue-id="update-files"]')
+    && !document.querySelector('[data-queue-id="update-files"] .ghrc-message-queue-files'));
+  assert.equal(await row.locator('.ghrc-message-queue-thumbnails img').count(), 1);
+  assert.equal(await row.locator('.ghrc-message-queue-attachments').count(), 1);
+  assert.equal(await row.evaluate(el => el.classList.contains('ghrc-message-queue-has-files')), false);
+  await p.evaluate(async () => {
+    const next = structuredClone(storage.queuedChatMessages);
+    next['conversation:test'][0].attachments = [];
+    await chrome.storage.local.set({ queuedChatMessages: next });
+  });
+  await p.waitForFunction(() => !document.querySelector('[data-queue-id="update-files"] .ghrc-message-queue-thumbnails'));
+  assert.equal(await row.evaluate(el => el.classList.contains('ghrc-message-queue-has-images')), false);
+  assert.equal(await row.locator('.ghrc-message-queue-attachments').count(), 0);
+  assert.deepEqual(p.errors, []);
+  await p.close();
+});
 
 test('a portal-mounted upload input and generic remove control queue the real file bytes', async () => {
   const p = await fixture({ active: true });
@@ -2093,6 +2345,80 @@ async function enableAppMentions(page) {
   });
 }
 
+
+for (const active of [false, true]) {
+  test(`clipboard rich app mention keeps plugin identity (${active ? 'queued' : 'immediate'})`, async () => {
+    const p = await fixture({ active, clipboard: true });
+    await enableAppMentions(p);
+    await p.evaluate(() => {
+      const plain = 'Review with CourtListener, then summarize';
+      const html = '<p>Review with <span app-mention-path="app://plugin_courtlistener" app-mention-name="courtlistener" app-mention-display-name="CourtListener" data-prompt-link-href="app://plugin_courtlistener" contenteditable="false">CourtListener</span>, then summarize</p>';
+      Object.defineProperty(navigator, 'clipboard', { configurable: true, value: {
+        async read() {
+          return [{ types: ['text/plain', 'text/html'], async getType(type) {
+            return new Blob([type === 'text/plain' ? plain : html], { type });
+          } }];
+        },
+        async readText() { throw Error('rich clipboard path must be used'); },
+      } });
+      if (!window.active) window.rejectQueueSave = true;
+    });
+    await p.locator('[data-composer-markdown]').fill('Keep existing draft');
+    await p.locator('#ghrc-clipboard-send-button').click();
+    if (active) {
+      await p.locator('.ghrc-message-queue-editor').waitFor();
+      const saved = await p.evaluate(() => structuredClone(storage));
+      const entry = saved.queuedChatMessages['conversation:test'][0];
+      assert.equal(entry.mentions[0].attributes['app-mention-path'], 'app://plugin_courtlistener');
+      assert.equal(entry.text, 'Review with CourtListener, then summarize');
+      assert.equal(await p.evaluate(() => read()), 'Keep existing draft');
+      await p.evaluate(() => finish());
+    }
+    await sentCount(p, 1);
+    assert.deepEqual(await p.evaluate(() => sentApps), [['app://plugin_courtlistener']]);
+    await p.waitForFunction(() => read() === 'Keep existing draft');
+    assert.deepEqual(p.errors, []);
+    await p.close();
+  });
+}
+
+test('clipboard-only Markdown app links are sent as app mentions', async () => {
+  const p = await fixture({ active: false, clipboard: true });
+  await enableAppMentions(p);
+  await p.evaluate(() => {
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: {
+      readText: async () => 'Use [CourtListener](app://plugin_courtlistener) for this research',
+    } });
+  });
+  await p.locator('#ghrc-clipboard-send-button').click();
+  await sentCount(p, 1);
+  assert.deepEqual(await p.evaluate(() => sent), ['Use CourtListener for this research']);
+  assert.deepEqual(await p.evaluate(() => sentApps), [['app://plugin_courtlistener']]);
+  assert.deepEqual(p.errors, []);
+  await p.close();
+});
+
+test('clipboard refuses to flatten rich plugins when their positions cannot be mapped', async () => {
+  const p = await fixture({ clipboard: true });
+  await p.evaluate(() => {
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: {
+      async read() {
+        return [{ types: ['text/plain', 'text/html'], async getType(type) {
+          return new Blob([type === 'text/plain' ? 'A different prompt' : '<p><span app-mention-path="app://plugin_courtlistener">CourtListener</span></p>'], { type });
+        } }];
+      },
+    } });
+  });
+  await p.locator('[data-composer-markdown]').fill('Keep existing draft');
+  await p.locator('#ghrc-clipboard-send-button').click();
+  await p.getByRole('button', { name: 'Clipboard plugin could not be preserved; paste manually' }).waitFor();
+  assert.deepEqual(await p.evaluate(() => sent), []);
+  assert.equal(await p.evaluate(() => read()), 'Keep existing draft');
+  assert.equal(await p.locator('.ghrc-message-queue-editor').count(), 0);
+  assert.deepEqual(p.errors, []);
+  await p.close();
+});
+
 for (const [label, connector] of [['Deep research', 'connector_openai_deep_research'], ['CourtListener', 'courtlistener']]) {
   test(`queued ${label} preserves app identity through storage and prompt edits`, async () => {
     let p = await fixture({ active: true });
@@ -2128,6 +2454,45 @@ for (const [label, connector] of [['Deep research', 'connector_openai_deep_resea
     await p.close();
   });
 }
+
+test('standalone app chip without text queues and sends with plugin identity', async () => {
+  const p = await fixture({ active: true });
+  await enableAppMentions(p);
+  await p.evaluate(() => {
+    const chip = document.createElement('span');
+    chip.innerHTML = '<span app-mention-path="app://connector_openai_deep_research" app-mention-name="connector_openai_deep_research" app-mention-display-name="Deep research">Deep research</span><button type="button" aria-label="Remove Deep research">×</button>';
+    chip.querySelector('button').addEventListener('click', () => chip.remove());
+    document.querySelector('form').prepend(chip);
+  });
+  await p.locator('#ghrc-message-queue-button').click();
+  await p.locator('.ghrc-message-queue-editor').waitFor();
+  const saved = await p.evaluate(() => storage.queuedChatMessages['conversation:test'][0]);
+  assert.equal(saved.text, 'Deep research');
+  assert.equal(saved.mentions[0].attributes['app-mention-path'], 'app://connector_openai_deep_research');
+  assert.equal(await p.locator('form [app-mention-path]').count(), 0);
+  await p.evaluate(() => finish());
+  await sentCount(p, 1);
+  assert.deepEqual(await p.evaluate(() => sentApps), [['app://connector_openai_deep_research']]);
+  assert.deepEqual(p.errors, []);
+  await p.close();
+});
+
+test('inline plugin alone queues by Enter without a prompt', async () => {
+  const p = await fixture({ active: true });
+  await enableAppMentions(p);
+  await p.evaluate(() => {
+    editor.innerHTML = '<p><span app-mention-path="app://courtlistener" app-mention-name="courtlistener" contenteditable="false">CourtListener</span></p>';
+    editor.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await p.locator('[data-composer-markdown]').press('Enter');
+  await p.locator('.ghrc-message-queue-editor').waitFor();
+  assert.equal(await p.locator('.ghrc-message-queue-editor').inputValue(), 'CourtListener');
+  await p.evaluate(() => finish());
+  await sentCount(p, 1);
+  assert.deepEqual(await p.evaluate(() => sentApps), [['app://courtlistener']]);
+  assert.deepEqual(p.errors, []);
+  await p.close();
+});
 
 test('app restoration failure keeps the message queued and pauses instead of sending plain text', async () => {
   const p = await fixture({ active: true });
@@ -2227,11 +2592,11 @@ test('queued sends preserve typing in an independent draft overlay', async () =>
       if (window.active) return;
       event.stopImmediatePropagation();
       const payload = read().trim();
-      window.setTimeout(() => {
+      window.acknowledgeQueuedSend = () => {
         sent.push(payload);
         addTurn('user'); addTurn('assistant');
         clear(); window.active = true; update();
-      }, 800);
+      };
     }, true);
     finish();
   });
@@ -2240,12 +2605,40 @@ test('queued sends preserve typing in an independent draft overlay', async () =>
   await overlay.waitFor({ timeout: 7000 });
   assert.equal(await overlay.inputValue(), 'Unsent draft');
   assert.equal(await overlay.evaluate(el => document.activeElement === el), true);
+  const initialHeight = (await overlay.boundingBox()).height;
+  await overlay.fill(Array.from({ length: 8 }, (_, index) => `Draft line ${index + 1}`).join('\n'));
+  const expandedHeight = (await overlay.boundingBox()).height;
+  assert.ok(expandedHeight > initialHeight, 'the overlay grows with the draft');
+  assert.equal((await composer.boundingBox()).height, expandedHeight, 'the composer reserves the same space');
+  await overlay.fill('Short draft');
+  assert.equal((await overlay.boundingBox()).height, initialHeight, 'deleting text shrinks the overlay');
+  await overlay.fill('A wrapping draft with enough words to span several lines in a narrow composer. '.repeat(4));
+  const wideHeight = (await overlay.boundingBox()).height;
+  await composer.evaluate(el => { el.style.width = '180px'; });
+  await p.waitForFunction(() => {
+    const draft = document.querySelector('.ghrc-queue-live-draft');
+    return Math.abs(draft.getBoundingClientRect().width - editor.getBoundingClientRect().width) < 1;
+  });
+  assert.ok((await overlay.boundingBox()).height > wideHeight, 'width changes reflow the draft');
+  const scrollTop = await overlay.evaluate(async el => {
+    el.scrollTop = 30;
+    const expected = el.scrollTop;
+    el.dispatchEvent(new Event('scroll'));
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    return expected;
+  });
+  assert.ok(scrollTop > 0);
+  assert.equal(await overlay.evaluate(el => el.scrollTop), scrollTop, 'resizing preserves draft scrolling');
   await overlay.fill('This remains an independent draft while sending');
+  await p.evaluate(() => acknowledgeQueuedSend());
   await sentCount(p, 1);
   await p.waitForFunction(() => read() === 'This remains an independent draft while sending');
+  await overlay.waitFor({ state: 'detached' });
   assert.deepEqual(await p.evaluate(() => sent), ['Send queued payload']);
   assert.equal(await overlay.count(), 0);
   assert.equal(await composer.evaluate(el => document.activeElement === el), true);
+  assert.equal(await composer.evaluate(el => el.style.height), '', 'temporary height is cleared');
+  assert.equal(await composer.evaluate(el => el.style.minHeight), '', 'temporary minimum height is cleared');
   assert.deepEqual(p.errors, []);
   await p.close();
 });
@@ -2296,6 +2689,7 @@ test('Enter during queued delivery queues the overlay text without losing newer 
   await overlay.fill('New unfinished draft');
   await sentCount(p, 1);
   await p.waitForFunction(() => read() === 'New unfinished draft');
+  await overlay.waitFor({ state: 'detached' });
   await p.waitForFunction(() => storage.queuedChatMessages?.['conversation:test']?.some(item => item.text === 'Queue me second'));
   assert.deepEqual(await p.evaluate(() => sent), ['Send first']);
   assert.equal(await p.locator('.ghrc-message-queue-editor').inputValue(), 'Queue me second');

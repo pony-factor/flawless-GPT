@@ -32,7 +32,7 @@
     const row=document.createElement("div");row.className="ghrc-pinned-issues-row";
     row.append(...issues.map(makeLink));section.append(title,row);
     sync(widget,section);
-    (document.getElementById("ghrc-deep-research-dashboard")||widget).insertAdjacentElement("afterend",section);
+    widget.insertAdjacentElement("afterend",section);
   }
   function schedule() {
     if(scheduled||context?.active()===false)return;
@@ -46,7 +46,7 @@
   const observer=new MutationObserver(mutations=>{
     const widget=document.getElementById(WIDGET_ID),section=document.getElementById(ID);
     if(!widget){section?.remove();return;}
-    const anchor=document.getElementById("ghrc-deep-research-dashboard")||widget;
+    const anchor=widget;
     if(section&&anchor.nextElementSibling===section){sync(widget,section);return;}
     if(mutations.some(m=>m.target===widget||
       [...m.addedNodes,...m.removedNodes].some(node=>node instanceof Element&&(

@@ -48,8 +48,12 @@
   const normalize = value => (value || "").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
 
   function sourceImages(html, base) {
-    // Keep source markup inert, including lazy-loaded image addresses.
-    const inert = html.replace(/(\s)(src|srcset)\s*=/gi, '$1data-ghrc-$2=');
+    // Inline SVG handlers in fetched HTML can trigger the host page's CSP.
+    // Demote SVG tags and event attributes before the browser parses the markup.
+    // Keep image addresses as inert metadata for source matching.
+    const inert = html.replace(/(<\/?)svg(?=[\s/>])/gi, "$1ghrc-inert-svg")
+      .replace(/(\s)(src|srcset|on[a-z][\w:-]*)\s*=/gi,
+        (_, space, attribute) => space + "data-ghrc-" + attribute.toLowerCase() + "=");
     const doc = new DOMParser().parseFromString(inert, "text/html");
     const result = [];
     for (const img of doc.querySelectorAll("img")) {

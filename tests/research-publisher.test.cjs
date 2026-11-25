@@ -26,7 +26,9 @@ function background(enabled, nativeResult = { ok: true, repository: 'research', 
       },
     },
   };
-  vm.runInNewContext(fs.readFileSync('js/research/research-publisher-background.js', 'utf8'), { chrome, URL, TextEncoder, Date, Error });
+  const context = vm.createContext({ chrome, URL, TextEncoder, Date, Error });
+  for (const file of ['research-report-origin.js', 'research-publisher-background.js'])
+    vm.runInContext(fs.readFileSync('js/research/' + file, 'utf8'), context);
   const sender = { id: 'test-extension', url: 'https://connector-openai-deep-research.web-sandbox.oaiusercontent.com/', tab: { id: 1, url: 'https://chatgpt.com/c/example' } };
   return {
     calls,
@@ -98,6 +100,22 @@ test('current MCP report origin forwards the selected category', async () => {
   assert.equal(app.calls.length, 1);
 });
 
+test('connector ID report origins can publish only from a ChatGPT tab', async () => {
+  const app = background(true);
+  const origin = 'https://connector-id-0123456789abcdef0123456789abcdef.web-sandbox.oaiusercontent.com';
+  const sender = { id: 'test-extension', origin, url: 'about:blank', tab: { id: 1, url: 'https://chatgpt.com/c/report' } };
+  assert.equal((await app.send(undefined, sender)).ok, true);
+  for (const candidate of [
+    { ...sender, origin: origin + '.example.com' },
+    { ...sender, origin: origin.replace('https:', 'http:') },
+    { ...sender, origin: origin.replace('0123456789abcdef0123456789abcdef', 'unrelated') },
+    { ...sender, tab: { id: 1, url: 'https://example.com/' } },
+  ]) {
+    assert.equal((await app.send(undefined, candidate)).ok, false);
+  }
+  assert.equal(app.calls.length, 1);
+});
+
 test('report links open without a publishing connection and reject unsafe destinations', async () => {
   const app = background(false);
   assert.equal((await app.send({ type: 'open-research-link', url: 'https://example.org/source' })).ok, true);
@@ -107,9 +125,12 @@ test('report links open without a publishing connection and reject unsafe destin
   assert.equal(app.calls.length, 0);
 });
 
-test('settings default off, confirm on enable, and recheck on click', async () => {
+for (const page of ['popup.html', 'options.html']) {
+test(`${page} publisher settings default off, confirm on enable, and recheck on click`, async () => {
   const elements = new Map();
-  for (const id of ['research-publisher-enabled', 'research-publisher-controls', 'check-research-publisher', 'research-publisher-status']) {
+  const html = fs.readFileSync(page, 'utf8');
+  for (const id of ['show-writing-research-button', 'research-publisher-enabled', 'research-publisher-controls', 'check-research-publisher', 'research-publisher-status']) {
+    assert.ok(html.includes(`id="${id}"`), `${page} must supply ${id}`);
     elements.set(id, { listeners: {}, addEventListener(type, fn) { this.listeners[type] = fn; } });
   }
   const checkbox = elements.get('research-publisher-enabled');
@@ -130,6 +151,12 @@ test('settings default off, confirm on enable, and recheck on click', async () =
     chrome, document: { getElementById: (id) => elements.get(id) },
   });
   await new Promise(setImmediate);
+  const researchButton = elements.get('show-writing-research-button');
+  assert.equal(researchButton.checked, true);
+  assert.equal(researchButton.disabled, false);
+  researchButton.checked = false;
+  await researchButton.listeners.change();
+  assert.equal(saved.showWritingResearchButton, false);
   assert.equal(checkbox.checked, false);
   assert.equal(controls.hidden, true);
   assert.equal(sends, 0);
@@ -147,6 +174,50 @@ test('settings default off, confirm on enable, and recheck on click', async () =
   assert.equal(controls.hidden, true);
   assert.equal(launch.disabled, true);
 });
+}
+
+
+test('publisher settings remain usable when an older popup lacks the telescope checkbox', async () => {
+  const elements = new Map();
+  for (const id of ['research-publisher-enabled', 'research-publisher-controls', 'check-research-publisher', 'research-publisher-status']) {
+    elements.set(id, { listeners: {}, addEventListener(type, fn) { this.listeners[type] = fn; } });
+  }
+  const saved = {};
+  let sends = 0;
+  let onChange;
+  const chrome = {
+    storage: {
+      local: { get: async defaults => defaults, set: async values => Object.assign(saved, values) },
+      onChanged: { addListener(fn) { onChange = fn; } },
+    },
+    runtime: { sendMessage: async () => { sends++; return { ok: true, repository: 'research', branch: 'main' }; } },
+  };
+  vm.runInNewContext(fs.readFileSync('js/settings/research-publisher-options.js', 'utf8'), {
+    chrome, document: { getElementById: id => elements.get(id) || null },
+  });
+  await new Promise(setImmediate);
+  const checkbox = elements.get('research-publisher-enabled');
+  const controls = elements.get('research-publisher-controls');
+  assert.equal(checkbox.disabled, false);
+  assert.equal(checkbox.checked, false);
+  assert.equal(controls.hidden, true);
+
+  checkbox.checked = true;
+  await checkbox.listeners.change();
+  assert.equal(saved.researchPublisherEnabled, true);
+  assert.equal(sends, 1);
+  assert.match(elements.get('research-publisher-status').textContent, /Add to repo is available/);
+  onChange({ showWritingResearchButton: { newValue: false } }, 'local');
+  await elements.get('check-research-publisher').listeners.click();
+  assert.equal(sends, 2);
+});
+
+test('publisher options ignore pages without publisher controls', () => {
+  assert.doesNotThrow(() => vm.runInNewContext(
+    fs.readFileSync('js/settings/research-publisher-options.js', 'utf8'),
+    { document: { getElementById: () => null } },
+  ));
+});
 
 test('import launcher stays available while the enabled publisher is disconnected', () => {
   const source = fs.readFileSync('js/research/research-publisher.js', 'utf8');
@@ -163,4 +234,17 @@ test('import launcher stays available while the enabled publisher is disconnecte
   assert.equal(context.available(true, false), true);
   assert.equal(context.available(false, true), false);
   assert.equal(context.available(true, true), true);
+});
+
+test('report monitors remain bounded and use the confirmed publication event', () => {
+  const publisher = fs.readFileSync('js/research/research-publisher.js', 'utf8');
+  const host = fs.readFileSync('js/research/research-report-host.js', 'utf8');
+  assert.match(publisher, /function pollActiveImport\(active\)/);
+  assert.match(publisher, /MAX_JOB_LOOKUP_RETRIES = 60/);
+  assert.match(publisher, /function dispose\(\)/);
+  assert.match(publisher, /observers\.clear\(\)/);
+  assert.doesNotMatch(publisher, /if \(enabled\) frameTimer = setInterval\(schedule, 1000\)/);
+  assert.match(host, /if \(!reports\.size\) stopObserving\(\)/);
+  assert.match(host, /'ghrc-research-report-finalized'/);
+  assert.match(host, /context\?\.onStop\?\.\(dispose\)/);
 });

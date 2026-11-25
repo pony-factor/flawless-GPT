@@ -1,7 +1,8 @@
 (() => {
+  if (globalThis.__ghrcSettingsContext?.active() === false) return;
   const GITHUB_APP_CONFIG = Object.freeze({
     clientId: "Iv23liukJaqMAIiIIfOz",
-    appSlug: "flawless-chatgpt",
+    appSlug: "flawless-pony",
   });
 
   const settingsTabs = [...document.querySelectorAll(".standalone-settings-tab")];
@@ -63,8 +64,13 @@
   const authScript = document.createElement("script");
   authScript.src = chrome.runtime.getURL("js/github/github-app-auth.js");
   authScript.addEventListener("load", async () => {
-    await globalThis.GitHubAppAuth?.saveConfig(GITHUB_APP_CONFIG);
-    await globalThis.GitHubAppAuth?.mountSettingsUi({ popup: false });
+    if (globalThis.__ghrcSettingsContext?.active() === false) return;
+    try {
+      await globalThis.GitHubAppAuth?.saveConfig(GITHUB_APP_CONFIG);
+      await globalThis.GitHubAppAuth?.mountSettingsUi({ popup: false });
+    } catch (error) {
+      (globalThis.__ghrcSettingsContext?.report || console.error)(error);
+    }
   });
   document.head.append(authScript);
 })();

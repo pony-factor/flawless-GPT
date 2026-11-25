@@ -63,8 +63,8 @@ function app({ enabled = true, connected = true } = {}) {
   const load = () => {
     listeners = [];
     const context = vm.createContext({ chrome, URL, TextEncoder, Date: { now: () => now }, crypto: { randomUUID: () => 'run-' + nextId }, console });
-    for (const file of ['js/research/research-publisher-background.js', 'js/research/research-launcher-background.js'])
-      vm.runInContext(fs.readFileSync(file, 'utf8'), context);
+    for (const file of ['research-report-origin.js', 'research-publisher-background.js', 'research-launcher-background.js'])
+      vm.runInContext(fs.readFileSync('js/research/' + file, 'utf8'), context);
   };
   load();
   const source = { id: 'extension', frameId: 0, url: 'https://chatgpt.com/c/source', tab: { id: 1, url: 'https://chatgpt.com/c/source' } };
@@ -89,6 +89,19 @@ async function submitted(a) {
 function publish(job) {
   return { type: 'publish-research-report', title: 'Finished report', markdown: '# Finished report\nEvidence', automationJobId: job.id, category: 'Ignored' };
 }
+
+test('connector ID report frames can recover and finish automatic imports', async () => {
+  const a = app();
+  const job = await submitted(a);
+  const sender = {
+    ...a.report(job.tabId),
+    origin: 'https://connector-id-0123456789abcdef0123456789abcdef.web-sandbox.oaiusercontent.com',
+  };
+  const lookup = await a.send({ type: 'research-launch-job' }, sender);
+  assert.equal(lookup.job.state, 'submitted');
+  assert.equal((await a.send(publish(job), sender)).ok, true);
+  assert.equal((await a.send({ type: 'research-launch-job' }, sender)).job.state, 'complete');
+});
 
 test('launcher checks the connection before opening a small window and retains the exact prompt', async () => {
   const a = app();
@@ -176,6 +189,27 @@ test('destination changes stop imports while transient native failures wait for 
     assert.equal(a.session['researchLaunch:' + job.tabId].state, changed ? 'import-error' : 'import-retry');
     assert.equal((await a.send(publish(job), a.report(job.tabId))).ok, false);
     assert.equal(a.calls.filter(x => x[1]?.action === 'publish').length, changed ? 0 : 1);
+  }
+});
+
+test('unpublishable reports persist an import failure visible to the source tab', async () => {
+  for (const [fields, reason] of [
+    [{ markdown: undefined, oversized: true }, /too large/],
+    [{ title: 'x'.repeat(501) }, /title or contents/],
+  ]) {
+    const a = app();
+    const job = await submitted(a);
+    const attempt = { ...publish(job), ...fields };
+    assert.equal((await a.send(attempt, a.report(999))).ok, false);
+    assert.equal(a.session['researchLaunch:' + job.tabId].state, 'submitted');
+    assert.match((await a.send(attempt, a.report(job.tabId))).error, reason);
+    delete a.session['researchLaunch:' + job.tabId];
+    a.restart();
+    const status = await a.send({ type: 'research-launch-status', tabId: job.tabId, id: job.id });
+    assert.equal(status.job.state, 'import-error');
+    assert.match(status.job.error, reason);
+    assert.equal((await a.send(attempt, a.report(job.tabId))).ok, false);
+    assert.equal(a.calls.filter(call => call[1]?.action === 'publish').length, 0);
   }
 });
 
@@ -354,4 +388,51 @@ test('legacy jobs pinned to temporary routes recover with and without session st
     a.tabs.get(job.tabId).url = 'https://chatgpt.com/c/unrelated';
     assert.equal((await a.send({ type: 'research-launch-job' }, a.report(job.tabId))).job, null);
   }
+});
+
+test('manual first-turn research queues at root, changes folders before import, and survives restart', async () => {
+  const a = app();
+  const sender = { ...a.source, url: 'https://chatgpt.com/c/research',
+    tab: { id: 42, url: 'https://chatgpt.com/c/research', windowId: 7 } };
+  a.tabs.set(42, { id: 42, url: 'https://chatgpt.com/c/research', windowId: 7 });
+  const first = await a.send({ type: 'start-manual-research', title: 'Investigate filing dates' }, sender);
+  assert.equal(first.ok, true);
+  assert.equal(first.job.manual, true);
+  assert.equal(first.job.category, '');
+  assert.equal(a.windows.length, 0);
+  const duplicate = await a.send({ type: 'start-manual-research', title: 'Duplicate' }, sender);
+  assert.equal(duplicate.job.id, first.job.id);
+  const changed = await a.send({ type: 'set-research-launch-category', id: first.job.id, category: 'Markets' }, sender);
+  assert.equal(changed.job.category, 'Markets');
+  delete a.session['researchLaunch:42'];
+  a.restart();
+  assert.equal((await a.send({ type: 'research-launch-job' }, sender)).job.category, 'Markets');
+  assert.equal((await a.send(publish(first.job), a.report(42))).ok, true);
+  const publishes = a.calls.filter(call => call[1]?.action === 'publish');
+  assert.equal(publishes.length, 1);
+  assert.equal(publishes[0][1].category, 'Markets');
+  assert.equal((await a.send({ type: 'set-research-launch-category', id: first.job.id, category: '' }, sender)).ok, false);
+  assert.equal((await a.send(publish(first.job), a.report(42))).ok, false);
+});
+
+test('manual research root import and destination changes use original repository safeguards', async () => {
+  const a = app();
+  const sender = { ...a.source, url: 'https://chatgpt.com/c/research',
+    tab: { id: 43, url: 'https://chatgpt.com/c/research', windowId: 9 } };
+  a.tabs.set(43, { id: 43, url: 'https://chatgpt.com/c/research', windowId: 9 });
+  assert.equal((await a.send({ type: 'start-manual-research', title: '' }, sender)).ok, false);
+  assert.equal((await a.send({ type: 'start-manual-research', title: 'Research' }, { ...sender, frameId: 1 })).ok, false);
+  const { job } = await a.send({ type: 'start-manual-research', title: 'Research' }, sender);
+  assert.equal(job.category, '');
+  assert.equal((await a.send(publish(job), a.report(43))).ok, true);
+  assert.equal(a.calls.find(call => call[1]?.action === 'publish')[1].category, '');
+
+  const changed = app();
+  changed.tabs.set(43, { id: 43, url: 'https://chatgpt.com/c/research', windowId: 9 });
+  const run = await changed.send({ type: 'start-manual-research', title: 'Research' }, sender);
+  changed.changeDestination({ repository: 'other', branch: 'main' });
+  assert.equal((await changed.send({ type: 'set-research-launch-category', id: run.job.id, category: 'Markets' }, sender)).ok, false);
+  assert.equal((await changed.send(publish(run.job), changed.report(43))).ok, false);
+  const disabled = app({ enabled: false });
+  assert.equal((await disabled.send({ type: 'start-manual-research', title: 'Research' }, sender)).ok, false);
 });

@@ -62,3 +62,13 @@
     left: 44px;
   }
 }
+
+/* Do not float the clipboard link above the chatbox when it fits before +. */
+@media (max-width: 700px) {
+  #ghrc-clipboard-open-url-button[data-ghrc-inline-before-plus] {
+    position: static;
+    flex: 0 0 32px;
+    margin: 0;
+    z-index: auto;
+  }
+}
