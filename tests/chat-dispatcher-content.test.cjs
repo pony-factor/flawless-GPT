@@ -121,8 +121,9 @@ test('a fresh background chat can prepare a multiline prompt after native insert
   Object.defineProperty(input, 'isContentEditable', { value: true });
   w.document.querySelector('textarea').replaceWith(input);
   w.document.execCommand = () => false;
-  w.DataTransfer = Map;
-  w.DataTransfer.prototype.setData = Map.prototype.set;
+  w.DataTransfer = class extends Map {
+    setData(type, value) { this.set(type, value); }
+  };
   w.ClipboardEvent = class extends w.Event {
     constructor(type, options) {
       super(type, options);
