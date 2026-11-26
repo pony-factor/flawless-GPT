@@ -4,10 +4,6 @@ const pageUrl = new URL(location.href);
 const suppliedId = pageUrl.searchParams.get('session');
 const sessionId = /^(?:legacy|[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})$/i.test(suppliedId || '')
   ? suppliedId : crypto.randomUUID();
-if (suppliedId !== sessionId) {
-  pageUrl.searchParams.set('session', sessionId);
-  history.replaceState(null, '', pageUrl);
-}
 let state = { paused: true, tasks: [], workers: [], events: [] };
 let sessions = [];
 let renderedRepository;
@@ -35,8 +31,6 @@ function formatEventTime(value, now = Date.now()) {
 function refreshEventTimes() {
   for (const time of $('events').querySelectorAll('time[datetime]')) time.textContent = formatEventTime(time.dateTime);
 }
-setInterval(refreshEventTimes, 30000);
-document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshEventTimes(); });
 
 function render() {
   $('session-name').textContent = sessionId === 'legacy' ? 'Previous dispatcher' : `Dispatcher ${sessionId.slice(0, 8)}`;
@@ -113,47 +107,61 @@ async function refresh() {
   render();
 }
 
-$('manifest').addEventListener('change', async event => {
-  try {
-    const file = event.target.files[0];
-    if (!file) return;
-    if (file.size > 20 * 1024 * 1024) throw Error('Choose a task manifest under 20 MB.');
-    const manifest = JSON.parse(await file.text());
-    await action({ type: 'import', manifest, repository: $('repository').value.trim() });
-  } catch (error) { notice(error.message); }
-  event.target.value = '';
-});
-$('import-checklist').addEventListener('click', async () => {
-  try {
-    const manifest = globalThis.__ghrcDispatcherCore.checklistManifest($('checklist-text').value);
-    await request({ type: 'import', manifest, repository: $('repository').value.trim() });
-    $('checklist-text').value = '';
-    await refresh();
-    notice('Imported ' + manifest.tasks.length + ' incomplete checklist items. Start when ready.');
-  } catch (error) { notice(error.message); }
-});
-$('start').addEventListener('click', () => action({ type: 'start' }));
-$('pause').addEventListener('click', () => action({ type: 'pause' }));
-$('prefer-codex-pony').addEventListener('change', () => action({ type: 'preferences', preferCodexPony: $('prefer-codex-pony').checked }));
-$('replace-existing-drafts').addEventListener('change', () => action({ type: 'preferences', replaceExistingDrafts: $('replace-existing-drafts').checked }));
-$('reset').addEventListener('click', () => action({ type: 'reset-pool' }));
-$('export').addEventListener('click', () => {
-  const url = URL.createObjectURL(new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' }));
-  const link = el('a'); link.href = url; link.download = 'chat-dispatcher-session.json'; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
-});
+function initialize() {
+  if (connected && suppliedId !== sessionId) {
+    pageUrl.searchParams.set('session', sessionId);
+    // Chromium uses the loaded document URL for runtime message senders.
+    location.replace(pageUrl.href);
+    return;
+  }
 
-if (connected) {
-  chrome.storage.onChanged.addListener((changes, area) => {
-    if (area !== 'local') return;
-    const currentKey = sessionId === 'legacy' ? 'chatDispatcherState' : `chatDispatcherState:${sessionId}`;
-    const currentPauseKey = sessionId === 'legacy' ? 'chatDispatcherPaused' : `chatDispatcherPaused:${sessionId}`;
-    if (changes[currentKey]) { state = changes[currentKey].newValue; render(); }
-    if (changes[currentPauseKey] || changes.chatDispatcherSessionIds || Object.keys(changes).some(key =>
-      key.startsWith('chatDispatcherState:') || key === 'chatDispatcherState')) {
-      refresh().catch(error => notice(error.message));
-    }
+  setInterval(refreshEventTimes, 30000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshEventTimes(); });
+
+  $('manifest').addEventListener('change', async event => {
+    try {
+      const file = event.target.files[0];
+      if (!file) return;
+      if (file.size > 20 * 1024 * 1024) throw Error('Choose a task manifest under 20 MB.');
+      const manifest = JSON.parse(await file.text());
+      await action({ type: 'import', manifest, repository: $('repository').value.trim() });
+    } catch (error) { notice(error.message); }
+    event.target.value = '';
   });
-} else {
-  notice('Open the dispatcher from Flawless ChatGPT to bind chats and run it.');
+  $('import-checklist').addEventListener('click', async () => {
+    try {
+      const manifest = globalThis.__ghrcDispatcherCore.checklistManifest($('checklist-text').value);
+      await request({ type: 'import', manifest, repository: $('repository').value.trim() });
+      $('checklist-text').value = '';
+      await refresh();
+      notice('Imported ' + manifest.tasks.length + ' incomplete checklist items. Start when ready.');
+    } catch (error) { notice(error.message); }
+  });
+  $('start').addEventListener('click', () => action({ type: 'start' }));
+  $('pause').addEventListener('click', () => action({ type: 'pause' }));
+  $('prefer-codex-pony').addEventListener('change', () => action({ type: 'preferences', preferCodexPony: $('prefer-codex-pony').checked }));
+  $('replace-existing-drafts').addEventListener('change', () => action({ type: 'preferences', replaceExistingDrafts: $('replace-existing-drafts').checked }));
+  $('reset').addEventListener('click', () => action({ type: 'reset-pool' }));
+  $('export').addEventListener('click', () => {
+    const url = URL.createObjectURL(new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' }));
+    const link = el('a'); link.href = url; link.download = 'chat-dispatcher-session.json'; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+  });
+
+  if (connected) {
+    chrome.storage.onChanged.addListener((changes, area) => {
+      if (area !== 'local') return;
+      const currentKey = sessionId === 'legacy' ? 'chatDispatcherState' : `chatDispatcherState:${sessionId}`;
+      const currentPauseKey = sessionId === 'legacy' ? 'chatDispatcherPaused' : `chatDispatcherPaused:${sessionId}`;
+      if (changes[currentKey]) { state = changes[currentKey].newValue; render(); }
+      if (changes[currentPauseKey] || changes.chatDispatcherSessionIds || Object.keys(changes).some(key =>
+        key.startsWith('chatDispatcherState:') || key === 'chatDispatcherState')) {
+        refresh().catch(error => notice(error.message));
+      }
+    });
+  } else {
+    notice('Open the dispatcher from Flawless ChatGPT to bind chats and run it.');
+  }
+  refresh().catch(error => notice(error.message));
 }
-refresh().catch(error => notice(error.message));
+
+initialize();
