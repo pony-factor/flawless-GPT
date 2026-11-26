@@ -106,18 +106,10 @@ test("cached dashboard controls and highlights mount before the host page finish
       highlightedPages: [{ id: "saved", url: "https://example.com/", title: "Saved highlight" }],
     }));
     const page = await context.newPage();
-    await page.route("https://wooten.link/search", route => route.fulfill({
+    await page.route("https://wooten.link/search-index.json", route => route.fulfill({
       status: 200,
-      contentType: "text/html",
       headers: { "access-control-allow-origin": "*" },
-      body: `<script id="redirect-registry">
-const redirects = {
-  "sweetie": "https://example.com/pony"
-};
-const redirectComments = {
-  "sweetie": "Sweetie Belle"
-};
-</script>`,
+      json: [{ key: "sweetie", href: "https://example.com/pony", comment: "Sweetie Belle" }],
     }));
     const errors = [];
     page.on("pageerror", error => errors.push(error.message));
