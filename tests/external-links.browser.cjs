@@ -773,8 +773,31 @@ test('preview waits for its navigation watch without mounting a same-origin blan
   await page.close();
 });
 
+// Playwright suppresses requests whose URL ends in /favicon.ico, even when
+// an <img> explicitly loads one. Add a query only in the browser fixture so
+// real image decoding and network failure can be tested without changing the
+// production favicon URL or making any external network requests.
+const previewFaviconUrl = 'https://example.org/favicon.ico';
+const routedFaviconUrl = previewFaviconUrl + '?ghrc-test=1';
+async function enablePreviewFaviconRouting(page) {
+  await page.evaluate(({ original, routed }) => {
+    const descriptor = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, 'src');
+    Object.defineProperty(HTMLImageElement.prototype, 'src', {
+      ...descriptor,
+      set(value) {
+        if (value === original && this.classList.contains('ghrc-preview-favicon')) {
+          this.dataset.testOriginalSrc = value;
+          value = routed;
+        }
+        descriptor.set.call(this, value);
+      },
+    });
+  }, { original: previewFaviconUrl, routed: routedFaviconUrl });
+}
+
 test('left-side preview moves the panel, keeps controls ordered, and resizes from its right edge', async () => {
   const page = await fixture({ openExternalLinksInSplitView: true, openExternalLinksInSplitViewOnLeft: true });
+  await enablePreviewFaviconRouting(page);
   const actions = page.locator('.ghrc-link-actions');
   await actions.waitFor();
   await actions.locator('.ghrc-link-sidebar-button').click();
@@ -792,7 +815,8 @@ test('left-side preview moves the panel, keeps controls ordered, and resizes fro
   const destination = page.locator('#ghrc-link-preview .ghrc-preview-destination');
   assert.equal(await destination.getAttribute('href'), 'https://example.org/source?keep=1#section');
   const icon = destination.locator('img');
-  assert.equal(await icon.getAttribute('src', { timeout: 5000 }), 'https://example.org/favicon.ico');
+  assert.equal(await icon.getAttribute('data-test-original-src', { timeout: 5000 }), previewFaviconUrl);
+  assert.equal(await icon.getAttribute('src'), routedFaviconUrl);
   assert.deepEqual(await icon.evaluate(async image => {
     await image.decode();
     return [image.naturalWidth, image.naturalHeight];
@@ -811,9 +835,10 @@ test('left-side preview moves the panel, keeps controls ordered, and resizes fro
 test('preview retains the destination and controls when the favicon fails to load', async () => {
   const page = await fixture({ openExternalLinksInSplitView: true });
   try {
-    await page.route('https://example.org/favicon.ico', route => route.abort('failed'));
+    await enablePreviewFaviconRouting(page);
+    await page.route(routedFaviconUrl, route => route.abort('failed'));
     const failedIcon = page.waitForEvent('requestfailed', {
-      predicate: request => request.url() === 'https://example.org/favicon.ico',
+      predicate: request => request.url() === routedFaviconUrl && request.resourceType() === 'image',
     });
     await page.locator('.ghrc-link-sidebar-button').click();
     await failedIcon;
