@@ -2211,7 +2211,7 @@ for (const reverse of [false, true]) for (const singleParagraph of [false, true]
         }));
       }
       window.streamTicks = 0;
-      window.streamTimer = setInterval(() => {
+      window.startStreaming = () => { window.streamTimer = setInterval(() => {
         if (singleParagraph) reply.firstChild.firstChild.appendData(sentence.repeat(4));
         else {
           const paragraph = document.createElement('p');
@@ -2220,7 +2220,7 @@ for (const reverse of [false, true]) for (const singleParagraph of [false, true]
         }
         streamTicks++;
         scroller.scrollTop = reverse ? 0 : scroller.scrollHeight;
-      }, 30);
+      }, 30); };
     }, { reverse, singleParagraph });
     await p.waitForTimeout(100);
     const bounds = await p.locator('#conversation-scroller').boundingBox();
@@ -2229,7 +2229,15 @@ for (const reverse of [false, true]) for (const singleParagraph of [false, true]
       const range = scroller.scrollHeight - scroller.clientHeight;
       return (reverse ? -range / 2 : range / 2) - scroller.scrollTop;
     }, { reverse });
+    // Establish the starting position before native streaming can race the
+    // separate read of scrollTop and delivery of this large initial wheel.
     await p.mouse.wheel(0, toMiddle);
+    await p.waitForFunction(() => {
+      const range = scroller.scrollHeight - scroller.clientHeight;
+      return Math.abs(scroller.scrollTop) > range / 3
+        && Math.abs(scroller.scrollTop) < range * 2 / 3;
+    });
+    await p.evaluate(() => startStreaming());
     await p.waitForTimeout(100);
     assert.ok(await p.evaluate(() => reply.textContent.length > 150000 && active));
     assert.equal(await p.evaluate(() => scroller.querySelectorAll('img,pre').length), 0);

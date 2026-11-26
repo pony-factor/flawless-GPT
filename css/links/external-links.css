@@ -3,7 +3,7 @@ html[data-ghrc-hide-external-link-arrows] [data-ghrc-external-link-arrow] {
 }
 
 html[data-ghrc-link-preview] {
-  --ghrc-preview-width: min(48vw, 800px);
+  --ghrc-preview-width: min(100vw, clamp(260px, 48vw, 800px));
   width: calc(100% - var(--ghrc-preview-width));
 }
 
@@ -77,7 +77,7 @@ a[data-testid="chatgpt-citation"] + .ghrc-link-with-actions {
 
 .ghrc-link-with-actions {
   /* Occupy the link's trailing padding so the button follows its final line. */
-  margin-inline: -27px 1px;
+  margin-inline: -28px 2px;
 }
 
 a:has(+ .ghrc-link-has-punctuation) {

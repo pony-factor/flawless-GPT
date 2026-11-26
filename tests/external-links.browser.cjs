@@ -776,7 +776,7 @@ test('left-side preview moves the panel, keeps controls ordered, and resizes fro
   const headerChildren = await page.locator('#ghrc-link-preview header').evaluate(
     header => [...header.children].map(child => child.getAttribute('aria-label') || child.className),
   );
-  assert.deepEqual(headerChildren, ['ghrc-preview-destination', 'Copy link', 'Open in new tab', 'Close website preview']);
+  assert.deepEqual(headerChildren, ['Close website preview', 'Copy link', 'Open in new tab', 'ghrc-preview-destination']);
 
   const destination = page.locator('#ghrc-link-preview .ghrc-preview-destination');
   assert.equal(await destination.getAttribute('href'), 'https://example.org/source?keep=1#section');
@@ -800,7 +800,7 @@ test('current-tab mode keeps only the separate sidebar action', async () => {
   await page.close();
 });
 
-test('GitHub embeds the website first and uses the API only after the active frame is blocked', async () => {
+test('GitHub uses the API immediately instead of attempting a blocked website frame', async () => {
   const page = await fixture({ openExternalLinksInSplitView: true }, {
     ok: true,
     subtitle: 'owner/repo #42',
@@ -809,29 +809,17 @@ test('GitHub embeds the website first and uses the API only after the active fra
     body: '<img src=x onerror="window.injected=true">',
     files: [{ filename: 'example.js', additions: 2, deletions: 1, patch: '+safe change' }],
   });
-  await page.route('https://github.com/**', route => route.fulfill({ contentType: 'text/html', body: '<h1>Full GitHub website</h1>' }));
-  await page.locator('#source').evaluate(link => { link.href = 'https://github.com/owner/repo/pull/42'; });
+  const githubUrl = 'https://github.com/owner/repo/pull/42';
+  await page.locator('#source').evaluate((link, href) => { link.href = href; }, githubUrl);
+  await page.waitForFunction(href => document.querySelector('.ghrc-link-sidebar-button')?.dataset.href === href, githubUrl);
   await page.locator('.ghrc-link-sidebar-button').click();
-  await page.frameLocator('#ghrc-link-preview iframe').frameLocator('iframe').locator('h1').waitFor();
-  assert.equal((await page.evaluate(() => previewRequests)).some(message => message.type === 'load-github-link-preview'), false);
-  const watch = (await page.evaluate(() => previewRequests)).find(message => message.type === 'watch-link-preview');
-  await page.evaluate(watch => runtimeListeners.forEach(fn => fn({
-    type: 'link-preview-navigation-error', previewId: 'stale', url: watch.url, error: 'net::ERR_BLOCKED_BY_RESPONSE',
-  })), watch);
-  await page.evaluate(watch => runtimeListeners.forEach(fn => fn({
-    type: 'link-preview-navigation-error', previewId: watch.previewId, url: watch.url, error: 'net::ERR_INTERNET_DISCONNECTED',
-  })), watch);
-  assert.equal((await page.evaluate(() => previewRequests)).some(message => message.type === 'load-github-link-preview'), false);
-  assert.equal(await page.locator('#ghrc-link-preview iframe').count(), 1);
-  await page.evaluate(watch => runtimeListeners.forEach(fn => fn({
-    type: 'link-preview-navigation-error', previewId: watch.previewId, url: watch.url, error: 'net::ERR_BLOCKED_BY_RESPONSE',
-  })), watch);
+  assert.equal((await page.evaluate(() => previewRequests)).some(message => message.type === 'watch-link-preview'), false);
   await page.locator('#ghrc-link-preview h2').waitFor();
   assert.equal(await page.locator('#ghrc-link-preview h2').textContent(), 'A useful PR');
   assert.equal(await page.locator('#ghrc-link-preview iframe').count(), 0);
   assert.equal(await page.locator('#ghrc-link-preview .ghrc-preview-body img').count(), 0);
   assert.match(await page.locator('#ghrc-link-preview details').textContent(), /safe change/);
-  assert.ok((await page.evaluate(() => previewRequests)).some(message => message.type === 'load-github-link-preview'));
+  assert.equal((await page.evaluate(() => previewRequests)).filter(message => message.type === 'load-github-link-preview').length, 1);
   await page.close();
 });
 
