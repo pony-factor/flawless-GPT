@@ -770,72 +770,23 @@
   }
 
   function parseWootenLinkEntries(html) {
-    const entries = [];
-    const redirects = html.match(/<script id="all-redirects">([\s\S]*?)<\/script>/)?.[1] || "";
-    const constants = new Map();
-    const constantPattern = /const\s+([A-Z0-9_]+)\s*=\s*("(?:\\.|[^"\\])*");/g;
-    let constantMatch;
-    while ((constantMatch = constantPattern.exec(redirects))) {
-      try {
-        constants.set(constantMatch[1], JSON.parse(constantMatch[2]));
-      } catch {
-        // Ignore malformed constants and fall back to their short links.
-      }
-    }
+    const registry = html.match(/<script id="redirect-registry">([\s\S]*?)<\/script>/)?.[1] || "";
+    const redirects = registry.match(/^const redirects = (\{[\s\S]*?^\});/m)?.[1];
+    const comments = registry.match(/^const redirectComments = (\{[\s\S]*?^\});/m)?.[1];
+    if (!redirects) throw new Error("wooten.link index is missing");
 
-    const entryPattern = /^\s*("(?:\\.|[^"\\])+")\s*:\s*("(?:\\.|[^"\\])*"|[A-Z0-9_]+)\s*,?\s*(?:\/\/\s*(.*))?$/gm;
-    let entryMatch;
-    while ((entryMatch = entryPattern.exec(redirects))) {
-      try {
-        const key = JSON.parse(entryMatch[1]);
-        const rawHref = entryMatch[2];
-        const href = constants.get(rawHref)
-          || (/^"/.test(rawHref) ? JSON.parse(rawHref) : "")
-          || `https://wooten.link/${encodeURIComponent(key)}`;
-        entries.push(createWootenLinkEntry(key, href, entryMatch[3] || ""));
-      } catch {
-        // Ignore malformed entries from the public index.
-      }
-    }
-
-    const lawRedirects = html.match(
-      /<script type="text\/plain" id="law-redirects">([\s\S]*?)<\/script>/,
-    )?.[1] || "";
-    let delimiter = null;
-    for (const line of lawRedirects.split(/\r?\n/)) {
-      const section = line.match(/^\s*\[redirects\.("(?:\\.|[^"\\])*")\]/);
-      if (section) {
-        try {
-          delimiter = JSON.parse(section[1]);
-        } catch {
-          delimiter = null;
-        }
-        continue;
-      }
-      if (/^\s*\[/.test(line)) {
-        delimiter = null;
-        continue;
-      }
-      if (delimiter === null) continue;
-
-      const entry = line.match(/^\s*("(?:\\.|[^"\\])*")\s*=/);
-      if (!entry) continue;
-      try {
-        const hrefMatch = line.match(
-          /^\s*("(?:\\.|[^"\\])*")\s*=\s*("(?:\\.|[^"\\])*")/,
-        );
-        if (!hrefMatch) continue;
-        const key = `${delimiter}${JSON.parse(hrefMatch[1])}`.toLowerCase();
-        entries.push(createWootenLinkEntry(key, JSON.parse(hrefMatch[2])));
-      } catch {
-        // Ignore malformed entries from the public law-link index.
-      }
-    }
-    return entries.sort((first, second) => first.key.localeCompare(second.key));
+    const redirectComments = JSON.parse(comments || "{}");
+    return Object.entries(JSON.parse(redirects))
+      .map(([key, href]) => createWootenLinkEntry(
+        key,
+        href,
+        Object.hasOwn(redirectComments, key) ? redirectComments[key] : "",
+      ))
+      .sort((first, second) => first.key.localeCompare(second.key));
   }
 
   async function loadWootenLinkEntries() {
-    wootenLinkEntriesRequest ||= fetch("https://wooten.link/404.html", {
+    wootenLinkEntriesRequest ||= fetch("https://wooten.link/search", {
       cache: "no-store",
     }).then((response) => {
       if (!response.ok) throw new Error("wooten.link index could not be loaded");
@@ -979,15 +930,15 @@
       }
 
       const entries = await loadWootenLinkEntries();
-      if (input.value !== query || !entries) return;
-      visibleEntries = matchingWootenLinkEntries(entries, query).slice(0, 8);
+      if (input.value !== query) return;
+      visibleEntries = entries ? matchingWootenLinkEntries(entries, query).slice(0, 8) : [];
       results.replaceChildren();
       setActiveEntry(-1);
 
       if (!visibleEntries.length) {
         const empty = document.createElement("p");
         empty.className = "ghrc-wooten-link-empty";
-        empty.textContent = "No matching references";
+        empty.textContent = entries ? "No matching references" : "Could not load references";
         results.append(empty);
       } else {
         visibleEntries.forEach((entry, index) => {

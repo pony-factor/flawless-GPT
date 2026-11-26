@@ -106,8 +106,18 @@ test("cached dashboard controls and highlights mount before the host page finish
       highlightedPages: [{ id: "saved", url: "https://example.com/", title: "Saved highlight" }],
     }));
     const page = await context.newPage();
-    await page.route("https://wooten.link/404.html", route => route.fulfill({
-      status: 200, contentType: "text/html", body: "<html></html>",
+    await page.route("https://wooten.link/search", route => route.fulfill({
+      status: 200,
+      contentType: "text/html",
+      headers: { "access-control-allow-origin": "*" },
+      body: `<script id="redirect-registry">
+const redirects = {
+  "sweetie": "https://example.com/pony"
+};
+const redirectComments = {
+  "sweetie": "Sweetie Belle"
+};
+</script>`,
     }));
     const errors = [];
     page.on("pageerror", error => errors.push(error.message));
@@ -178,6 +188,9 @@ test("cached dashboard controls and highlights mount before the host page finish
     }
     await page.setViewportSize(desktop);
     await wootenInput.fill("Sweetie Belle");
+    const suggestion = page.getByRole("option").filter({ hasText: "sweetie" });
+    await suggestion.waitFor({ state: "visible" });
+    assert.equal(await suggestion.locator("span").textContent(), "https://example.com/pony");
     await searchSubmit.click();
     let submittedUrl = null;
     for (let attempt = 0; attempt < 40; attempt++) {
