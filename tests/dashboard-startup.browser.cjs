@@ -171,12 +171,19 @@ test("cached dashboard controls and highlights mount before the host page finish
     const desktop = page.viewportSize();
     for (const viewport of [desktop, { width: 400, height: 800 }]) {
       await page.setViewportSize(viewport);
-      const inputBounds = await wootenInput.boundingBox();
-      const submitBounds = await searchSubmit.boundingBox();
-      assert.ok(submitBounds.x >= inputBounds.x && submitBounds.y >= inputBounds.y);
-      assert.ok(submitBounds.x + submitBounds.width <= inputBounds.x + inputBounds.width);
-      assert.ok(submitBounds.y + submitBounds.height <= inputBounds.y + inputBounds.height);
-      assert.ok(inputBounds.x + inputBounds.width - submitBounds.x - submitBounds.width <= 2);
+      // ResizeObserver can reposition the dashboard between Playwright calls.
+      // Read both rectangles in the same layout snapshot, without relaxing containment.
+      const { inputBounds, submitBounds } = await page.locator(".ghrc-wooten-link-field").evaluate(field => ({
+        inputBounds: field.querySelector("input").getBoundingClientRect().toJSON(),
+        submitBounds: field.querySelector(".ghrc-wooten-link-submit").getBoundingClientRect().toJSON(),
+      }));
+      const geometry = JSON.stringify({ viewport, inputBounds, submitBounds });
+      assert.ok(inputBounds.width > 0 && inputBounds.height > 0, geometry);
+      assert.ok(submitBounds.width > 0 && submitBounds.height > 0, geometry);
+      assert.ok(submitBounds.left >= inputBounds.left && submitBounds.top >= inputBounds.top, geometry);
+      assert.ok(submitBounds.right <= inputBounds.right, geometry);
+      assert.ok(submitBounds.bottom <= inputBounds.bottom, geometry);
+      assert.ok(inputBounds.right - submitBounds.right <= 2, geometry);
     }
     await page.setViewportSize(desktop);
     await wootenInput.fill("Sweetie Belle");
