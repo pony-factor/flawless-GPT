@@ -13,7 +13,23 @@
   const all = (root, selector) => [...root.querySelectorAll(selector)].filter(visible);
   const composer = () => globalThis.__ghrcMessageQueue?.findComposerInput?.() || all(document, '#prompt-textarea, [data-composer-markdown][contenteditable="true"]').at(-1);
   const form = input => input?.closest('form, [data-type="unified-composer"]');
-  const read = input => typeof input?.value === 'string' ? input.value : input?.innerText || '';
+  function read(input) {
+    if (!input) return '';
+    if (typeof input.value === 'string') return input.value;
+    const paragraphs = [...input.children];
+    if (paragraphs.length && paragraphs.every(node => node.tagName === 'P')) {
+      const readNode = node => {
+        if (node.nodeType === Node.TEXT_NODE) return node.nodeValue || '';
+        if (node.nodeName === 'BR') return node.classList.contains('ProseMirror-trailingBreak') ? '' : '\n';
+        return [...node.childNodes].map(readNode).join('');
+      };
+      return paragraphs.map(node => node.childNodes.length === 1 && node.firstChild.nodeName === 'BR'
+        ? '' : readNode(node)).join('\n');
+    }
+    return input.innerText || input.textContent || '';
+  }
+  const composerText = text => text.replace(/\r\n?/g, '\n').replace(/\u00a0/g, ' ').replace(/\n+$/, '');
+  const matchesDraft = (input, text) => composerText(read(input)) === composerText(text);
   const root = () => document.querySelector('[aria-label="Conversation"]') || document;
   const role = name => [...root().querySelectorAll(`[data-message-author-role="${name}"], [data-content-search-unit-key$=":${name}"]`)].at(-1);
   const normalize = text => String(text || '').replace(/\s+/g, ' ').trim();
@@ -75,20 +91,37 @@
       && (s.fresh || s.latestUserAnswered && s.assistantComplete) && Date.now() - s.stableSince >= SETTLE_MS;
   }
 
-  function write(input, text) {
+  function selectComposerText(input) {
     input.focus({ preventScroll: true });
+    const selection = getSelection();
+    if (!selection) return false;
+    const range = document.createRange();
+    range.selectNodeContents(input);
+    selection.removeAllRanges();
+    selection.addRange(range);
+    return true;
+  }
+
+  async function write(input, text, original, canWrite) {
     if (input instanceof HTMLTextAreaElement) {
+      input.focus({ preventScroll: true });
       Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(input, text);
       input.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: text }));
-    } else {
-      const selection = getSelection();
-      const range = document.createRange();
-      range.selectNodeContents(input);
-      selection.removeAllRanges();
-      selection.addRange(range);
-      document.execCommand('insertText', false, text);
+      return matchesDraft(input, text);
     }
-    return normalize(read(input)) === normalize(text);
+    if (!input.isContentEditable || !selectComposerText(input)) return false;
+    document.execCommand('insertText', false, text);
+    await new Promise(resolve => setTimeout(resolve, 50));
+    if (matchesDraft(input, text)) return true;
+
+    // A background tab can reject selection-based editing. Give the host
+    // editor the prompt through its paste handler while the original is intact.
+    if (!canWrite() || read(input) !== original || !selectComposerText(input)) return false;
+    const clipboardData = new DataTransfer();
+    clipboardData.setData('text/plain', text);
+    input.dispatchEvent(new ClipboardEvent('paste', { bubbles: true, cancelable: true, clipboardData }));
+    await new Promise(resolve => setTimeout(resolve, 60));
+    return matchesDraft(input, text);
   }
 
   async function prepare(message) {
@@ -101,14 +134,17 @@
     const input = composer();
     const original = read(input);
     if (Boolean(original.trim()) !== before.draftTextPresent) return { ok: false, reason: 'Composer draft changed before replacement.' };
-    if (!write(input, message.prompt)) return { ok: false, reason: 'Composer did not accept text; draft retained for review.' };
-    reservation = { nonce: message.nonce, input, original, prompt: message.prompt, signature: before.signature, url: before.url, fresh: before.fresh, expires: Date.now() + 15000 };
+    const canWrite = () => {
+      const current = snapshot();
+      return idle(current) && !current.hasContext && current.signature === before.signature
+        && composer() === input && current.url === before.url;
+    };
+    if (!await write(input, message.prompt, original, canWrite)) return { ok: false, reason: 'Composer did not accept text; draft retained for review.' };
     await new Promise(resolve => setTimeout(resolve, 100));
-    const after = snapshot();
-    if (!idle(after) || after.hasContext || after.signature !== before.signature || composer() !== input || after.url !== before.url) {
-      reservation = null;
-      return { ok: false, reason: 'Activity resumed after filling; prompt remains unsent.' };
+    if (!canWrite() || !matchesDraft(input, message.prompt)) {
+      return { ok: false, reason: 'Chat or draft changed after filling; prompt remains unsent.' };
     }
+    reservation = { nonce: message.nonce, input, prompt: message.prompt, signature: before.signature, url: before.url, fresh: before.fresh, expires: Date.now() + 15000 };
     return { ok: true, nonce: message.nonce };
   }
 
@@ -117,7 +153,7 @@
     const now = snapshot();
     if (!held || held.nonce !== message.nonce || Date.now() > held.expires || !idle(now) || now.hasContext
       || now.signature !== held.signature || now.url !== held.url || composer() !== held.input
-      || normalize(read(held.input)) !== normalize(held.prompt)) {
+      || !matchesDraft(held.input, held.prompt)) {
       return { ok: false, reason: 'Final activity/identity check failed; nothing sent.' };
     }
     const send = nativeSend(held.input);
@@ -127,7 +163,7 @@
     // No await between the final lifecycle check and clicking this exact Send node.
     const final = snapshot();
     if (!idle(final) || final.signature !== held.signature || final.url !== held.url
-      || composer() !== held.input || normalize(read(held.input)) !== normalize(held.prompt) || final.hasContext || !send.isConnected
+      || composer() !== held.input || !matchesDraft(held.input, held.prompt) || final.hasContext || !send.isConnected
       || send !== nativeSend(held.input) || send.disabled || /stop|interrupt|steer/i.test(`${send.getAttribute('aria-label')} ${send.getAttribute('data-testid')}`)) {
       return { ok: false, reason: 'Send changed into an unsafe action; nothing sent.' };
     }
