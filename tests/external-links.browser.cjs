@@ -23,6 +23,10 @@ async function fixture(settings = {}, githubResponse = null, nativeSplitSupporte
     body: `<style>body{margin:0}main{width:100%;min-height:1800px;padding-top:500px;box-sizing:border-box}</style><main>${conversationMarkup}</main>`,
   }));
   await page.route('https://example.org/**', route => route.fulfill({ contentType: 'text/html', body: '<h1>Source content</h1>' }));
+  await page.route('https://example.org/favicon.ico', route => route.fulfill({
+    contentType: 'image/svg+xml',
+    body: '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"><rect width="16" height="16" fill="blue"/></svg>',
+  }));
   await page.route('https://preview.test/link-preview.html', route => route.fulfill({
     contentType: 'text/html', body: '<body><script>' + read('js/links/link-preview-host.js') + '</script></body>',
   }));
