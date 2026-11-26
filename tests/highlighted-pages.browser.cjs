@@ -94,7 +94,9 @@ test("adding and refreshing a PDF caches the complete first page, preserves link
   page.on("pageerror", error => errors.push(error.message));
   await page.locator("#highlighted-page-url").fill(`${origin}/redirect#page=2`);
   await page.locator("#add-highlighted-page").click();
-  await page.waitForFunction(() => document.querySelector("#highlighted-pages-status").dataset.state === "success");
+  await page.waitForFunction(() => ["success", "error"].includes(document.querySelector("#highlighted-pages-status").dataset.state));
+  const status = page.locator("#highlighted-pages-status");
+  assert.equal(await status.getAttribute("data-state"), "success", await status.textContent());
   const saved = await page.evaluate(async () => (await chrome.storage.local.get("highlightedPages")).highlightedPages[0]);
   assert.equal(saved.url, `${origin}/report.pdf#page=2`);
   assert.equal(saved.documentType, "pdf");

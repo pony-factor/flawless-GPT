@@ -1,4 +1,4 @@
-name: Flawless quality gates
+name: Tophat
 
 on:
   pull_request:
@@ -35,9 +35,41 @@ jobs:
       - name: Verify packaged resource references
         run: node tests/ci/validate-extension.cjs
 
+  prepare-tests:
+    name: Shared Playwright and Chromium setup
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install test dependencies and Chromium once
+        run: |
+          # PDF.js 6 requires Map.getOrInsertComputed (Chromium 145+).
+          npm install --no-save --package-lock=false playwright@1.58.2 jsdom@26.1.0
+          node node_modules/playwright/cli.js install chromium
+          tar -czf node-dependencies.tar.gz node_modules
+          tar -czf chromium.tar.gz -C "$HOME/.cache/ms-playwright" .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: node-test-dependencies
+          path: node-dependencies.tar.gz
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: chromium-test-browser
+          path: chromium.tar.gz
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 1
+
   node-unit:
     name: Node unit tests
-    runs-on: ubuntu-latest
+    needs: prepare-tests
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     strategy:
       fail-fast: false
@@ -48,8 +80,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node }}
-      - name: Install test dependencies
-        run: npm install --no-save --package-lock=false playwright@1.56.1 jsdom@26.1.0
+      - uses: actions/download-artifact@v4
+        with:
+          name: node-test-dependencies
+      - name: Restore test dependencies
+        run: tar -xzf node-dependencies.tar.gz && rm node-dependencies.tar.gz
       - name: Run complete Node unit suite
         run: node --test tests/*.test.cjs
 
@@ -71,80 +106,88 @@ jobs:
       - name: Test native host and report publisher
         run: python -m unittest discover -s tests -p '*_test.py' -v
 
-  browser-startup:
-    name: Chromium extension startup
+  # The message-queue tests are top-level tests. Assign cases exclusively in
+  # this order: scrolling, rich clipboard/attachments, composer/draft,
+  # response lifecycle, then all remaining queue tests. The complementary
+  # patterns cover newly added cases without running any case twice.
+  browser-required:
+    name: ${{ matrix.name }}
+    needs: prepare-tests
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Chromium extension startup
+            command: |
+              node --test tests/compact-startup.browser.cjs tests/dashboard-startup.browser.cjs tests/refresh-view.browser.cjs
+              node --test --test-name-pattern="reasoning policy" tests/chat-display.browser.cjs
+          - name: Chromium message queue and delivery
+            command: node --test --test-name-pattern='^(?!.*(?:[Ss]croll|[Rr]eflow|[Cc]lipboard|[Aa]ttachment|[Aa]pp (mention|identity|chip|restoration)|[Pp]lugin|file (bytes|cards)|queues an image|saved image-only|selected text|[Cc]omposer|[Dd]raft|[Rr]esponse|[Aa]ssistant|[Gg]enerat|[Tt]hinking|[Hh]istory|[Ww]ork completion|image-only reply|[Cc]ompletion|[Ss]treaming)).*$' tests/message-queue.browser.cjs
+          - name: Chromium response lifecycle
+            command: node --test --test-name-pattern='^(?!.*(?:[Ss]croll|[Rr]eflow|[Cc]lipboard|[Aa]ttachment|[Aa]pp (mention|identity|chip|restoration)|[Pp]lugin|file (bytes|cards)|queues an image|saved image-only|selected text|[Cc]omposer|[Dd]raft)).*(?:[Rr]esponse|[Aa]ssistant|[Gg]enerat|[Tt]hinking|[Hh]istory|[Ww]ork completion|image-only reply|[Cc]ompletion|[Ss]treaming)' tests/message-queue.browser.cjs
+          - name: Chromium composer and draft preservation
+            command: node --test --test-name-pattern='^(?!.*(?:[Ss]croll|[Rr]eflow|[Cc]lipboard|[Aa]ttachment|[Aa]pp (mention|identity|chip|restoration)|[Pp]lugin|file (bytes|cards)|queues an image|saved image-only|selected text)).*(?:[Cc]lipboard|[Aa]ttachment|[Aa]pp (mention|identity|chip|restoration)|[Pp]lugin|file (bytes|cards)|queues an image|saved image-only|selected text|[Cc]omposer|[Dd]raft)' tests/message-queue.browser.cjs
+          - name: Chromium clipboard, attachments and app mentions
+            command: node --test --test-name-pattern='^(?!.*(?:[Ss]croll|[Rr]eflow)).*(?:[Cc]lipboard|[Aa]ttachment|[Aa]pp (mention|identity|chip|restoration)|[Pp]lugin|file (bytes|cards)|queues an image|saved image-only|selected text)' tests/message-queue.browser.cjs
+          - name: Chromium scrolling and layout
+            command: node --test --test-name-pattern='[Ss]croll|[Rr]eflow' tests/message-queue.browser.cjs
+          - name: Chromium manual web search controls
+            command: node --test tests/disable-manual-web-search.browser.cjs
+          - name: Chromium links and source-image safety
+            command: |
+              node --test --test-name-pattern="source SVG event handlers" tests/unavailable-images.browser.cjs
+              node --test --test-name-pattern="modern conversation roles|own-message links|external-link arrows|hidden arrow wrappers" tests/external-links.browser.cjs
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-      - name: Install Playwright Chromium
-        run: |
-          npm install --no-save --package-lock=false playwright@1.56.1
-          npx playwright install --with-deps chromium
-      - name: Select CI Chromium executable
-        run: |
-          echo "BROWSER_EXECUTABLE=$(node -p 'require("playwright").chromium.executablePath()')" >> "$GITHUB_ENV"
-      - name: Run startup browser regressions
-        run: node --test tests/compact-startup.browser.cjs tests/dashboard-startup.browser.cjs tests/refresh-view.browser.cjs
-      - name: Latest GPT and one-shot Extra High reasoning regressions
-        run: node --test --test-name-pattern="reasoning policy" tests/chat-display.browser.cjs
+      - uses: ./.github/actions/restore-chromium
+      - name: Test ${{ matrix.name }}
+        run: ${{ matrix.command }}
 
-  browser-queue:
-    name: Chromium queue regressions (advisory)
+  # These existing suites have unrelated, known-red baselines. Report their
+  # real failures without putting them in the required regression aggregate.
+  browser-extended:
+    name: ${{ matrix.name }}
+    needs: prepare-tests
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Chromium highlights and YouTube (advisory)
+            command: node --test tests/highlighted-pages.browser.cjs tests/youtube-search.browser.cjs
+          - name: Chromium external links (extended, advisory)
+            command: node --test --test-name-pattern='^(?!.*(?:modern conversation roles|own-message links|external-link arrows|hidden arrow wrappers)).*$' tests/external-links.browser.cjs
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-      - name: Install Playwright Chromium
-        run: |
-          npm install --no-save --package-lock=false playwright@1.56.1
-          npx playwright install --with-deps chromium
-      - name: Select CI Chromium executable
-        run: |
-          echo "BROWSER_EXECUTABLE=$(node -p 'require("playwright").chromium.executablePath()')" >> "$GITHUB_ENV"
-      - name: Run queue and composer browser regressions
-        id: queue_regressions
-        continue-on-error: true
-        run: node --test tests/message-queue.browser.cjs tests/disable-manual-web-search.browser.cjs
-      - name: Report advisory queue regression failures
-        if: steps.queue_regressions.outcome == 'failure'
-        run: |
-          echo '::warning title=Advisory Chromium queue regressions::Browser test failures remain visible in the preceding step log.'
-          echo '### Advisory Chromium queue regressions' >> "$GITHUB_STEP_SUMMARY"
-          echo 'Browser tests failed. Review the preceding test step before promoting this advisory suite to a required gate.' >> "$GITHUB_STEP_SUMMARY"
+      - uses: ./.github/actions/restore-chromium
+      - name: Test ${{ matrix.name }}
+        run: ${{ matrix.command }}
 
-  browser-highlights:
-    name: Chromium highlighted pages (advisory)
-    runs-on: ubuntu-24.04
-    timeout-minutes: 20
+  # Keep the original regression job context and fail it when any required
+  # unit or browser job fails, is cancelled, or is skipped.
+  regression:
+    name: regression
+    needs: [node-unit, browser-required]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-      - name: Install Playwright Chromium
+      - name: Verify required unit and browser regression results
+        env:
+          NODE_RESULT: ${{ needs.node-unit.result }}
+          BROWSER_RESULT: ${{ needs.browser-required.result }}
         run: |
-          npm install --no-save --package-lock=false playwright@1.56.1
-          npx playwright install --with-deps chromium
-      - name: Select CI Chromium executable
-        run: |
-          echo "BROWSER_EXECUTABLE=$(node -p 'require("playwright").chromium.executablePath()')" >> "$GITHUB_ENV"
-      - name: Run highlights and YouTube browser regressions
-        id: highlights_regressions
-        continue-on-error: true
-        run: node --test tests/highlighted-pages.browser.cjs tests/youtube-search.browser.cjs
-      - name: Report advisory highlights regression failures
-        if: steps.highlights_regressions.outcome == 'failure'
-        run: |
-          echo '::warning title=Advisory Chromium highlighted pages::Browser test failures remain visible in the preceding step log.'
-          echo '### Advisory Chromium highlighted pages' >> "$GITHUB_STEP_SUMMARY"
-          echo 'Browser tests failed. Review the preceding test step before promoting this advisory suite to a required gate.' >> "$GITHUB_STEP_SUMMARY"
+          test "$NODE_RESULT" = success
+          test "$BROWSER_RESULT" = success
 
   package:
     name: Extension packaging

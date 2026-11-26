@@ -34,7 +34,8 @@
 
   function originPattern(urlValue) {
     const url = new URL(urlValue);
-    return `${url.protocol}//${url.host}/*`;
+    // Extension host permission patterns cover every port on a hostname.
+    return `${url.protocol}//${url.hostname}/*`;
   }
 
   function normalizedPages(value) {

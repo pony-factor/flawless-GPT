@@ -22,7 +22,18 @@ async function fixture(settings = {}, githubResponse = null, nativeSplitSupporte
     contentType: 'text/html',
     body: `<style>body{margin:0}main{width:100%;min-height:1800px;padding-top:500px;box-sizing:border-box}</style><main>${conversationMarkup}</main>`,
   }));
-  await page.route('https://example.org/**', route => route.fulfill({ contentType: 'text/html', body: '<h1>Source content</h1>' }));
+  // Use an actual raster image for the cross-origin favicon request. Keep
+  // routing in one handler so HTML can never be returned for the icon.
+  await page.route('https://example.org/**', route => {
+    if (new URL(route.request().url()).pathname === '/favicon.ico') {
+      return route.fulfill({
+        contentType: 'image/png',
+        headers: { 'Cross-Origin-Resource-Policy': 'cross-origin' },
+        body: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAAGUlEQVR4nGNkCDjBQApgIkn1qIZRDUNKAwCKxQE4Up/3pAAAAABJRU5ErkJggg==', 'base64'),
+      });
+    }
+    return route.fulfill({ contentType: 'text/html', body: '<h1>Source content</h1>' });
+  });
   await page.route('https://preview.test/link-preview.html', route => route.fulfill({
     contentType: 'text/html', body: '<body><script>' + read('js/links/link-preview-host.js') + '</script></body>',
   }));
@@ -762,8 +773,31 @@ test('preview waits for its navigation watch without mounting a same-origin blan
   await page.close();
 });
 
+// Playwright suppresses requests whose URL ends in /favicon.ico, even when
+// an <img> explicitly loads one. Add a query only in the browser fixture so
+// real image decoding and network failure can be tested without changing the
+// production favicon URL or making any external network requests.
+const previewFaviconUrl = 'https://example.org/favicon.ico';
+const routedFaviconUrl = previewFaviconUrl + '?ghrc-test=1';
+async function enablePreviewFaviconRouting(page) {
+  await page.evaluate(({ original, routed }) => {
+    const descriptor = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, 'src');
+    Object.defineProperty(HTMLImageElement.prototype, 'src', {
+      ...descriptor,
+      set(value) {
+        if (value === original && this.classList.contains('ghrc-preview-favicon')) {
+          this.dataset.testOriginalSrc = value;
+          value = routed;
+        }
+        descriptor.set.call(this, value);
+      },
+    });
+  }, { original: previewFaviconUrl, routed: routedFaviconUrl });
+}
+
 test('left-side preview moves the panel, keeps controls ordered, and resizes from its right edge', async () => {
   const page = await fixture({ openExternalLinksInSplitView: true, openExternalLinksInSplitViewOnLeft: true });
+  await enablePreviewFaviconRouting(page);
   const actions = page.locator('.ghrc-link-actions');
   await actions.waitFor();
   await actions.locator('.ghrc-link-sidebar-button').click();
@@ -776,11 +810,17 @@ test('left-side preview moves the panel, keeps controls ordered, and resizes fro
   const headerChildren = await page.locator('#ghrc-link-preview header').evaluate(
     header => [...header.children].map(child => child.getAttribute('aria-label') || child.className),
   );
-  assert.deepEqual(headerChildren, ['ghrc-preview-destination', 'Copy link', 'Open in new tab', 'Close website preview']);
+  assert.deepEqual(headerChildren, ['Close website preview', 'Copy link', 'Open in new tab', 'ghrc-preview-destination']);
 
   const destination = page.locator('#ghrc-link-preview .ghrc-preview-destination');
   assert.equal(await destination.getAttribute('href'), 'https://example.org/source?keep=1#section');
-  assert.equal(await destination.locator('img').getAttribute('src'), 'https://example.org/favicon.ico');
+  const icon = destination.locator('img');
+  assert.equal(await icon.getAttribute('data-test-original-src', { timeout: 5000 }), previewFaviconUrl);
+  assert.equal(await icon.getAttribute('src'), routedFaviconUrl);
+  assert.deepEqual(await icon.evaluate(async image => {
+    await image.decode();
+    return [image.naturalWidth, image.naturalHeight];
+  }), [16, 16]);
   assert.equal(await destination.locator('span').textContent(), 'example.org/source#section');
 
   const before = (await page.locator('#ghrc-link-preview').boundingBox()).width;
@@ -792,6 +832,28 @@ test('left-side preview moves the panel, keeps controls ordered, and resizes fro
   await page.close();
 });
 
+test('preview retains the destination and controls when the favicon fails to load', async () => {
+  const page = await fixture({ openExternalLinksInSplitView: true });
+  try {
+    await enablePreviewFaviconRouting(page);
+    await page.route(routedFaviconUrl, route => route.abort('failed'));
+    const failedIcon = page.waitForEvent('requestfailed', {
+      predicate: request => request.url() === routedFaviconUrl && request.resourceType() === 'image',
+    });
+    await page.locator('.ghrc-link-sidebar-button').click();
+    await failedIcon;
+    await page.frameLocator('#ghrc-link-preview iframe').frameLocator('iframe').locator('h1').waitFor();
+    const destination = page.locator('#ghrc-link-preview .ghrc-preview-destination');
+    await destination.locator('img').waitFor({ state: 'detached' });
+    assert.equal(await destination.getAttribute('href'), 'https://example.org/source?keep=1#section');
+    assert.equal(await destination.locator('span').textContent(), 'example.org/source#section');
+    assert.equal(await page.getByRole('button', { name: 'Close website preview' }).isVisible(), true);
+    assert.deepEqual(page.errors, []);
+  } finally {
+    await page.close();
+  }
+});
+
 test('current-tab mode keeps only the separate sidebar action', async () => {
   const page = await fixture({ openExternalLinksInSplitView: true, openExternalLinksInNewTabs: false });
   await page.locator('.ghrc-link-actions').waitFor();
@@ -800,7 +862,7 @@ test('current-tab mode keeps only the separate sidebar action', async () => {
   await page.close();
 });
 
-test('GitHub embeds the website first and uses the API only after the active frame is blocked', async () => {
+test('GitHub uses the API immediately instead of attempting a blocked website frame', async () => {
   const page = await fixture({ openExternalLinksInSplitView: true }, {
     ok: true,
     subtitle: 'owner/repo #42',
@@ -809,29 +871,17 @@ test('GitHub embeds the website first and uses the API only after the active fra
     body: '<img src=x onerror="window.injected=true">',
     files: [{ filename: 'example.js', additions: 2, deletions: 1, patch: '+safe change' }],
   });
-  await page.route('https://github.com/**', route => route.fulfill({ contentType: 'text/html', body: '<h1>Full GitHub website</h1>' }));
-  await page.locator('#source').evaluate(link => { link.href = 'https://github.com/owner/repo/pull/42'; });
+  const githubUrl = 'https://github.com/owner/repo/pull/42';
+  await page.locator('#source').evaluate((link, href) => { link.href = href; }, githubUrl);
+  await page.waitForFunction(href => document.querySelector('.ghrc-link-sidebar-button')?.dataset.href === href, githubUrl);
   await page.locator('.ghrc-link-sidebar-button').click();
-  await page.frameLocator('#ghrc-link-preview iframe').frameLocator('iframe').locator('h1').waitFor();
-  assert.equal((await page.evaluate(() => previewRequests)).some(message => message.type === 'load-github-link-preview'), false);
-  const watch = (await page.evaluate(() => previewRequests)).find(message => message.type === 'watch-link-preview');
-  await page.evaluate(watch => runtimeListeners.forEach(fn => fn({
-    type: 'link-preview-navigation-error', previewId: 'stale', url: watch.url, error: 'net::ERR_BLOCKED_BY_RESPONSE',
-  })), watch);
-  await page.evaluate(watch => runtimeListeners.forEach(fn => fn({
-    type: 'link-preview-navigation-error', previewId: watch.previewId, url: watch.url, error: 'net::ERR_INTERNET_DISCONNECTED',
-  })), watch);
-  assert.equal((await page.evaluate(() => previewRequests)).some(message => message.type === 'load-github-link-preview'), false);
-  assert.equal(await page.locator('#ghrc-link-preview iframe').count(), 1);
-  await page.evaluate(watch => runtimeListeners.forEach(fn => fn({
-    type: 'link-preview-navigation-error', previewId: watch.previewId, url: watch.url, error: 'net::ERR_BLOCKED_BY_RESPONSE',
-  })), watch);
+  assert.equal((await page.evaluate(() => previewRequests)).some(message => message.type === 'watch-link-preview'), false);
   await page.locator('#ghrc-link-preview h2').waitFor();
   assert.equal(await page.locator('#ghrc-link-preview h2').textContent(), 'A useful PR');
   assert.equal(await page.locator('#ghrc-link-preview iframe').count(), 0);
   assert.equal(await page.locator('#ghrc-link-preview .ghrc-preview-body img').count(), 0);
   assert.match(await page.locator('#ghrc-link-preview details').textContent(), /safe change/);
-  assert.ok((await page.evaluate(() => previewRequests)).some(message => message.type === 'load-github-link-preview'));
+  assert.equal((await page.evaluate(() => previewRequests)).filter(message => message.type === 'load-github-link-preview').length, 1);
   await page.close();
 });
 

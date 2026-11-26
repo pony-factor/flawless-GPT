@@ -705,10 +705,22 @@
         document.execCommand("delete");
         resumeDraft?.();
         await new Promise(resolve => window.setTimeout(resolve, 40));
+        if (!composer.isConnected || composer !== findComposerInput()) return false;
         const clipboardData = new DataTransfer();
         clipboardData.setData("text/plain", text);
         clipboardData.setData("text/html", mentionClipboardHtml(text, mentions));
-        composer.dispatchEvent(new ClipboardEvent("paste", { bubbles: true, cancelable: true, clipboardData }));
+        // The draft overlay owns focus during asynchronous work. Native paste
+        // handlers can use the active selection, so briefly target the actual
+        // composer before dispatch and return focus to the overlay afterward.
+        composer.focus({ preventScroll: true });
+        range.selectNodeContents(composer);
+        selection.removeAllRanges();
+        selection.addRange(range);
+        try {
+          composer.dispatchEvent(new ClipboardEvent("paste", { bubbles: true, cancelable: true, clipboardData }));
+        } finally {
+          resumeDraft?.();
+        }
         await new Promise(resolve => window.setTimeout(resolve, 60));
         return textMatchesComposer(composer, text) && mentionsMatch(composer, mentions);
       } catch {

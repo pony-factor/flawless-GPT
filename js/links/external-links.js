@@ -1111,6 +1111,18 @@
           queueMutationNode(mutation.target);
           continue;
         }
+        // A native Markdown replacement may leave our sibling action group
+        // in the old parent. Clean up only removed sources, not the whole chat.
+        for (const node of mutation.removedNodes) {
+          if (!(node instanceof Element) || node.isConnected) continue;
+          const removed = [node, ...node.querySelectorAll('a[href], button, [data-d-component="popover-trigger"]')];
+          for (const source of removed) {
+            if (!source.isConnected && linkActions.has(source)) {
+              removeLinkActions(source, linkActions.get(source));
+              linkActions.delete(source);
+            }
+          }
+        }
         for (const node of mutation.addedNodes) {
           if (node.nodeType === Node.TEXT_NODE) {
             // Hydration can add the punctuation *after* a previously enhanced
