@@ -23,9 +23,7 @@
   let routeSyncRunning = false;
   let lastHref = location.href;
   let mountScheduled = false;
-  let pumpScheduled = false;
   let pumpScheduleHandle = null;
-  let pumpScheduleMode = null;
   let completionCandidateSince = null;
   let completionCandidateUser = null;
   let completionCandidateAssistant = null;
@@ -365,10 +363,6 @@
     );
   }
 
-  function pumpSchedulingMode(hidden) {
-    return hidden ? "timeout" : "frame";
-  }
-
   function normalizeQueueMaxHeightPercent(value) {
     const parsed = (typeof value === "number" || (typeof value === "string" && value.trim()))
       ? Number(value) : NaN;
@@ -396,7 +390,6 @@
     conversationIdFromPath,
     normalizeQueueItems,
     normalizeQueueMaxHeightPercent,
-    pumpSchedulingMode,
     queueCanAdvance,
     queueSendCanProceed,
     shouldQueueComposerEnter,
@@ -2013,7 +2006,6 @@
 
   function evaluatePump() {
     if (!context.active()) return;
-    pumpScheduled = false;
     if (!stateLoaded || !queue.length || sendingItemId || queuePaused || routeSyncRunning || enqueueRunning || enterPending || interruptRunning
       || globalThis.__ghrcReasoningPolicy?.isSelecting()) {
       completionCandidateSince = null;
@@ -2047,35 +2039,14 @@
     void context.run(() => sendQueueHead());
   }
 
-  function clearScheduledPump() {
-    if (pumpScheduleHandle === null) return;
-    if (pumpScheduleMode === "frame") cancelAnimationFrame(pumpScheduleHandle);
-    else window.clearTimeout(pumpScheduleHandle);
-    pumpScheduleHandle = null;
-    pumpScheduleMode = null;
-    pumpScheduled = false;
-  }
-
-  function runScheduledPump() {
-    pumpScheduleHandle = null;
-    pumpScheduleMode = null;
-    evaluatePump();
-  }
-
   function schedulePump() {
-    if (!context.active()) return;
-    if (pumpScheduled) return;
-    pumpScheduled = true;
-    pumpScheduleMode = pumpSchedulingMode(document.hidden);
-    pumpScheduleHandle = pumpScheduleMode === "frame"
-      ? requestAnimationFrame(runScheduledPump)
-      : window.setTimeout(runScheduledPump, 0);
-  }
-
-  function reschedulePumpForVisibility() {
-    if (!context.active()) return;
-    clearScheduledPump();
-    schedulePump();
+    if (!context.active() || pumpScheduleHandle !== null) return;
+    // An occluded window can stop rendering frames while its tab is still visible.
+    // Keep queue delivery independent of the UI's animation-frame callbacks.
+    pumpScheduleHandle = window.setTimeout(() => {
+      pumpScheduleHandle = null;
+      evaluatePump();
+    }, 0);
   }
 
   async function queueComposerEnter(composer, text, key, startingChat, appendedTo) {
@@ -2331,7 +2302,7 @@
 
   const pumpInterval = window.setInterval(schedulePump, PUMP_INTERVAL_MS);
   window.addEventListener("resize", scheduleMount);
-  document.addEventListener("visibilitychange", reschedulePumpForVisibility);
+  document.addEventListener("visibilitychange", schedulePump);
   context.onStop(() => {
     // An extension reload stops observers while React keeps updating the page.
     // Do not leave an empty/interrupt hat beside a later native Send button.
@@ -2346,8 +2317,8 @@
     clearInterval(pumpInterval);
     if (capturedFilesSweepTimer !== null) clearTimeout(capturedFilesSweepTimer);
     capturedFiles.clear();
-    clearScheduledPump();
-    document.removeEventListener("visibilitychange", reschedulePumpForVisibility);
+    if (pumpScheduleHandle !== null) window.clearTimeout(pumpScheduleHandle);
+    document.removeEventListener("visibilitychange", schedulePump);
     if (saveTimer !== null) clearTimeout(saveTimer);
   });
   window.addEventListener("popstate", () => void context.run(syncConversationKey));

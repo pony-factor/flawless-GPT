@@ -70,12 +70,6 @@ test("recognizes unmodified Enter as a send or queue gesture", () => {
 
 });
 
-test("uses a timer-backed pump while the ChatGPT tab is hidden", () => {
-  const helpers = api();
-  assert.equal(helpers.pumpSchedulingMode(false), "frame");
-  assert.equal(helpers.pumpSchedulingMode(true), "timeout");
-});
-
 test("never advances while ChatGPT is still generating", () => {
   const helpers = api();
   assert.equal(
