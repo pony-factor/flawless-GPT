@@ -1008,11 +1008,17 @@ test('Enter in a reloaded chat waits for history and sends long follow-ups in or
     }, true);
   });
   await enqueue(p, hardPrompt.trim(), true);
-  await p.evaluate(() => { addTurn('user'); addTurn('assistant'); });
+  await p.evaluate(() => {
+    addTurn('user'); addTurn('assistant', true);
+    document.querySelector('[data-fixture-turn]:last-child').dataset.state = 'streaming';
+  });
   await enqueue(p, 'Compare against a subset recurrence and show an example with two isolated vertices.', true);
   await p.waitForTimeout(1800);
   assert.deepEqual(await p.evaluate(() => [stops, sent]), [0, []]);
-  await p.evaluate(() => finish());
+  await p.evaluate(() => {
+    delete document.querySelector('[data-fixture-turn]:last-child').dataset.state;
+    finish();
+  });
   await sentCount(p, 1);
   await p.evaluate(() => finish());
   await sentCount(p, 2);
@@ -1066,6 +1072,8 @@ test('typing immediately after a long first send queues only the new follow-up',
   await editor.fill(hardPrompt.trim());
   await editor.evaluate(node => getSelection().collapse(node, node.childNodes.length));
   await editor.press('Enter');
+  await editor.press('Enter');
+  assert.equal(await p.locator('.ghrc-message-queue-editor').count(), 0);
   const followup = 'Derive the base cases independently and compare their complexity.';
   await p.keyboard.insertText(followup);
   await editor.press('Enter');

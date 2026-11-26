@@ -2249,6 +2249,8 @@
     event.stopImmediatePropagation();
     const key = conversationKey();
     const startingChat = key.startsWith("new:") && (submissionPending || snapshot.userTurns > 0);
+    if (submissionPending && nativeDraft?.composer === composer && text === nativeDraft.text
+      && !hasComposerContext(composer)) return;
     const appendedTo = nativeDraft?.appended && nativeDraft.composer === composer
       && text.startsWith(nativeDraft.text) && !composerState.mentions.length ? nativeDraft : null;
     if (hasMessage) void context.run(() => queueComposerEnter(composer, text, key, startingChat, appendedTo));
