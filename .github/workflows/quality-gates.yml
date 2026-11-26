@@ -36,7 +36,7 @@ jobs:
         run: node tests/ci/validate-extension.cjs
 
   prepare-tests:
-    name: Prepare Playwright and test dependencies
+    name: Shared Playwright and Chromium setup
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
@@ -122,19 +122,19 @@ jobs:
             command: |
               node --test tests/compact-startup.browser.cjs tests/dashboard-startup.browser.cjs tests/refresh-view.browser.cjs
               node --test --test-name-pattern="reasoning policy" tests/chat-display.browser.cjs
-          - name: Chromium queue regressions
+          - name: Chromium message queue and delivery
             command: node --test --test-name-pattern='^(?!.*(?:[Ss]croll|[Rr]eflow|[Cc]lipboard|[Aa]ttachment|[Aa]pp (mention|identity|chip|restoration)|[Pp]lugin|file (bytes|cards)|queues an image|saved image-only|selected text|[Cc]omposer|[Dd]raft|[Rr]esponse|[Aa]ssistant|[Gg]enerat|[Tt]hinking|[Hh]istory|[Ww]ork completion|image-only reply|[Cc]ompletion|[Ss]treaming)).*$' tests/message-queue.browser.cjs
-          - name: Chromium response lifecycle regressions
+          - name: Chromium response lifecycle
             command: node --test --test-name-pattern='^(?!.*(?:[Ss]croll|[Rr]eflow|[Cc]lipboard|[Aa]ttachment|[Aa]pp (mention|identity|chip|restoration)|[Pp]lugin|file (bytes|cards)|queues an image|saved image-only|selected text|[Cc]omposer|[Dd]raft)).*(?:[Rr]esponse|[Aa]ssistant|[Gg]enerat|[Tt]hinking|[Hh]istory|[Ww]ork completion|image-only reply|[Cc]ompletion|[Ss]treaming)' tests/message-queue.browser.cjs
-          - name: Chromium composer regressions
+          - name: Chromium composer and draft preservation
             command: node --test --test-name-pattern='^(?!.*(?:[Ss]croll|[Rr]eflow|[Cc]lipboard|[Aa]ttachment|[Aa]pp (mention|identity|chip|restoration)|[Pp]lugin|file (bytes|cards)|queues an image|saved image-only|selected text)).*(?:[Cc]lipboard|[Aa]ttachment|[Aa]pp (mention|identity|chip|restoration)|[Pp]lugin|file (bytes|cards)|queues an image|saved image-only|selected text|[Cc]omposer|[Dd]raft)' tests/message-queue.browser.cjs
-          - name: Chromium clipboard and attachment regressions
+          - name: Chromium clipboard, attachments and app mentions
             command: node --test --test-name-pattern='^(?!.*(?:[Ss]croll|[Rr]eflow)).*(?:[Cc]lipboard|[Aa]ttachment|[Aa]pp (mention|identity|chip|restoration)|[Pp]lugin|file (bytes|cards)|queues an image|saved image-only|selected text)' tests/message-queue.browser.cjs
-          - name: Chromium scrolling regressions
+          - name: Chromium scrolling and layout
             command: node --test --test-name-pattern='[Ss]croll|[Rr]eflow' tests/message-queue.browser.cjs
-          - name: Chromium manual Search regressions
+          - name: Chromium manual web search controls
             command: node --test tests/disable-manual-web-search.browser.cjs
-          - name: Chromium link and source-image regressions
+          - name: Chromium links and source-image safety
             command: |
               node --test --test-name-pattern="source SVG event handlers" tests/unavailable-images.browser.cjs
               node --test --test-name-pattern="modern conversation roles|own-message links|external-link arrows|hidden arrow wrappers" tests/external-links.browser.cjs
@@ -144,7 +144,7 @@ jobs:
         with:
           node-version: "22"
       - uses: ./.github/actions/restore-chromium
-      - name: Run browser regressions
+      - name: Test ${{ matrix.name }}
         run: ${{ matrix.command }}
 
   # These existing suites have unrelated, known-red baselines. Report their
@@ -158,9 +158,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - name: Chromium highlighted pages (advisory)
+          - name: Chromium highlights and YouTube (advisory)
             command: node --test tests/highlighted-pages.browser.cjs tests/youtube-search.browser.cjs
-          - name: Chromium extended external links (advisory)
+          - name: Chromium external links (extended, advisory)
             command: node --test --test-name-pattern='^(?!.*(?:modern conversation roles|own-message links|external-link arrows|hidden arrow wrappers)).*$' tests/external-links.browser.cjs
     steps:
       - uses: actions/checkout@v4
@@ -168,7 +168,7 @@ jobs:
         with:
           node-version: "22"
       - uses: ./.github/actions/restore-chromium
-      - name: Run extended browser regressions
+      - name: Test ${{ matrix.name }}
         run: ${{ matrix.command }}
 
   # Keep the original regression job context and fail it when any required
@@ -180,7 +180,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Require all regression suites
+      - name: Verify required unit and browser regression results
         env:
           NODE_RESULT: ${{ needs.node-unit.result }}
           BROWSER_RESULT: ${{ needs.browser-required.result }}
