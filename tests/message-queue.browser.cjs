@@ -1029,15 +1029,53 @@ test('a fast follow-up survives a new conversation URL appearing during queue in
   await editor.fill('Include a proof for the equal-weight edge case.');
   await editor.press('Enter');
   await p.evaluate(() => {
-    history.pushState({}, '', '/c/just-created');
+    history.pushState({}, '', '/c/local-chatgpt%3Ajust-created');
     window.dispatchEvent(new PopStateEvent('popstate'));
     resolveQueueStorage();
   });
   assert.equal(await p.locator('.ghrc-message-queue-editor').inputValue(), 'Include a proof for the equal-weight edge case.');
+  await p.waitForFunction(() => Object.keys(storage.queuedChatMessages || {}).some(key => key.startsWith('new:')));
+  await p.evaluate(() => {
+    history.replaceState({}, '', '/c/just-created');
+    window.dispatchEvent(new PopStateEvent('popstate'));
+  });
+  await p.waitForFunction(() => storage.queuedChatMessages?.['conversation:just-created']?.length === 1);
   assert.deepEqual(await p.evaluate(() => [stops, sent.length]), [0, 1]);
   await p.evaluate(() => finish());
   await sentCount(p, 2);
   assert.deepEqual(await p.evaluate(() => sent), [hardPrompt.trim(), 'Include a proof for the equal-weight edge case.']);
+  assert.deepEqual(p.errors, []);
+  await p.close();
+});
+
+test('typing immediately after a long first send queues only the new follow-up', async () => {
+  const p = await fixture({ route: '/' });
+  await p.evaluate(() => {
+    button.addEventListener('click', event => {
+      if (sent.length) return;
+      event.stopImmediatePropagation();
+      const prompt = read();
+      window.confirmFirstSend = () => {
+        sent.push(prompt);
+        addTurn('user'); addTurn('assistant');
+        window.active = true; update();
+      };
+    }, true);
+  });
+  const editor = p.locator('[data-composer-markdown]');
+  await editor.fill(hardPrompt.trim());
+  await editor.evaluate(node => getSelection().collapse(node, node.childNodes.length));
+  await editor.press('Enter');
+  const followup = 'Derive the base cases independently and compare their complexity.';
+  await p.keyboard.insertText(followup);
+  await editor.press('Enter');
+  await p.evaluate(() => confirmFirstSend());
+  await p.locator('.ghrc-message-queue-editor').waitFor();
+  assert.equal(await p.locator('.ghrc-message-queue-editor').inputValue(), followup);
+  assert.deepEqual(await p.evaluate(() => [stops, sent.length]), [0, 1]);
+  await p.evaluate(() => finish());
+  await sentCount(p, 2);
+  assert.deepEqual(await p.evaluate(() => sent), [hardPrompt.trim(), followup]);
   assert.deepEqual(p.errors, []);
   await p.close();
 });
