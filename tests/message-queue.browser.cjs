@@ -587,8 +587,8 @@ for (const route of ['/', '/?temporary-chat=true']) test(`Enter during delayed n
   const p = await fixture({ route });
   await p.evaluate(() => {
     window.delayedNativeSends = 0;
-    document.addEventListener('keydown', event => {
-      if (event.key === 'Enter' && !event.defaultPrevented) {
+    document.addEventListener('click', event => {
+      if (event.target === button && !event.defaultPrevented) {
         event.preventDefault(); event.stopImmediatePropagation();
         window.delayedNativeSends++;
         clear(); update();

@@ -2063,19 +2063,18 @@
     schedulePump();
   }
 
-  async function queueComposerEnter(composer, text, key) {
+  async function queueComposerEnter(composer, text, key, startingChat) {
     const contextRequest = captureComposerContext(composer);
     enterPending++;
     pendingEnterTexts.add(text);
     const request = enterChain.catch(() => {}).then(async () => {
       await queueStateRequest;
       const deadline = Date.now() + SUBMIT_TIMEOUT_MS;
-      const currentKey = conversationKey();
-      if (currentKey !== key && key.startsWith("new:") && currentKey.startsWith("conversation:")
-        && composer === findComposerInput()) key = currentKey;
       while (context.active() && routeSyncRunning && Date.now() < deadline) {
         await new Promise(resolve => window.setTimeout(resolve, 20));
       }
+      const currentKey = conversationKey();
+      if (startingChat && currentKey.startsWith("conversation:")) key = currentKey;
       if (!context.active() || !stateLoaded || routeSyncRunning
         || conversationKey() !== key || composer !== findComposerInput()) return;
       if (activeKey !== key) await syncConversationKey();
@@ -2118,17 +2117,19 @@
     return true;
   }
 
-  function markNativeSubmission(userTurns) {
-    nativeSubmission = { key: conversationKey(), userTurns, deadline: Date.now() + SUBMIT_TIMEOUT_MS };
-  }
-
   function observeNativeSend(event) {
     if (!context.active() || event.defaultPrevented) return;
+    const button = event.target?.closest?.("button");
+    if (!button || !findComposerForm(button)) return;
     const composer = findComposerInput();
     const send = findSendButton(composer);
-    if (!send || send.disabled || send.getAttribute("aria-disabled") === "true"
-      || event.target?.closest?.("button") !== send) return;
-    markNativeSubmission(roleTurns("user").length);
+    if (button !== send || send.disabled || send.getAttribute("aria-disabled") === "true") return;
+    nativeSubmission = {
+      key: conversationKey(),
+      userTurns: roleTurns("user").length,
+      deadline: Date.now() + SUBMIT_TIMEOUT_MS,
+    };
+    if (!event.isTrusted) window.dispatchEvent(new Event("ghrc:composer-submission"));
   }
 
   function composerAutocompleteIsOpen(composer) {
@@ -2210,7 +2211,6 @@
       event.stopImmediatePropagation();
       // Invoke the verified Send control. ChatGPT's Enter handler can take
       // a different action from the control displayed by the composer.
-      markNativeSubmission(snapshot.userTurns);
       clickNormalSend(send);
       return;
     }
@@ -2218,7 +2218,9 @@
     window.dispatchEvent(new Event("ghrc:before-composer-send"));
     event.preventDefault();
     event.stopImmediatePropagation();
-    if (hasMessage) void context.run(() => queueComposerEnter(composer, text, conversationKey()));
+    const key = conversationKey();
+    const startingChat = key.startsWith("new:") && (submissionPending || snapshot.userTurns > 0);
+    if (hasMessage) void context.run(() => queueComposerEnter(composer, text, key, startingChat));
   }
   // Capture before React's document/composer handlers can turn Enter into Stop
   // or ArrowUp into editing already-sent history.
