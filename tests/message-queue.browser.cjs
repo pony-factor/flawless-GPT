@@ -646,6 +646,31 @@ test('Stop queue preserves messages across reload; Resume sends them', async () 
   await p.close(); await restored.close();
 });
 
+test('queue delivers completed follow-ups when a visible tab stops rendering frames', async () => {
+  const p = await fixture({ active: true });
+  try {
+    const longPrompt = 'A long queued follow-up.\n'.repeat(350).trim();
+    await enqueue(p, longPrompt, true);
+    await enqueue(p, 'Second follow-up', true);
+    await p.locator('[data-composer-markdown]').fill('Unsent draft');
+    await p.evaluate(() => {
+      Object.defineProperty(document, 'hidden', { value: false });
+      window.requestAnimationFrame = () => 1;
+      finish();
+    });
+    await p.waitForFunction(() => sent.length === 1, null, { polling: 100, timeout: 5000 });
+    assert.deepEqual(await p.evaluate(() => sent), [longPrompt]);
+    assert.equal(await p.evaluate(() => stops), 0);
+    await p.evaluate(() => finish());
+    await p.waitForFunction(() => sent.length === 2 && read() === 'Unsent draft'
+      && !document.getElementById('ghrc-message-queue'), null, { polling: 100, timeout: 5000 });
+    assert.deepEqual(await p.evaluate(() => sent), [longPrompt, 'Second follow-up']);
+    assert.deepEqual(p.errors, []);
+  } finally {
+    await p.close();
+  }
+});
+
 test('ArrowUp from an empty composer edits the lowest-priority queued message', async () => {
   const p = await fixture({ active: true });
   await enqueue(p, 'First priority');
