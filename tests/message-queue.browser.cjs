@@ -18,7 +18,7 @@ before(async () => {
 });
 after(async () => { await browser?.close(); });
 
-async function fixture({ active = false, voice = false, editable = true, stored = {}, route = '/c/test', liveMarkup = false, clipboard = false, searches = false, delayQueueStorage = false, queueButton = true, preserveScroll = false } = {}) {
+async function fixture({ active = false, voice = false, editable = true, stored = {}, route = '/c/test', liveMarkup = false, clipboard = false, searches = false, delayQueueStorage = false, queueButton = true, preserveScroll = false, loadingHistory = false } = {}) {
   const page = await browser.newPage();
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
@@ -29,7 +29,7 @@ async function fixture({ active = false, voice = false, editable = true, stored 
     <button id="composer-submit-button" type="button"><svg viewBox="0 0 24 24"><rect width="10" height="10"/></svg></button>
     </form></div>` }));
   await page.goto(`https://queue.test${route}`);
-  await page.evaluate(({ active, voice, stored, liveMarkup, clipboard, delayQueueStorage, queueButton }) => {
+  await page.evaluate(({ active, voice, stored, liveMarkup, clipboard, delayQueueStorage, queueButton, loadingHistory }) => {
     window.liveMarkup = liveMarkup;
     if (liveMarkup) document.documentElement.setAttribute('data-theme', 'dark');
     window.sent = [];
@@ -126,8 +126,11 @@ async function fixture({ active = false, voice = false, editable = true, stored 
       clear(); window.active = true; update();
     });
     if (active) { addTurn('user'); addTurn('assistant'); }
+    else if (location.pathname.startsWith('/c/') && !loadingHistory) {
+      addTurn('user'); addTurn('assistant', true);
+    }
     update();
-  }, { active, voice, stored, liveMarkup, clipboard, delayQueueStorage, queueButton });
+  }, { active, voice, stored, liveMarkup, clipboard, delayQueueStorage, queueButton, loadingHistory });
   await page.addStyleTag({ content: queueCss + hatCss });
   if (searches) await page.evaluate(() => {
     const search = document.createElement('button');
@@ -584,8 +587,8 @@ for (const route of ['/', '/?temporary-chat=true']) test(`Enter during delayed n
   const p = await fixture({ route });
   await p.evaluate(() => {
     window.delayedNativeSends = 0;
-    document.addEventListener('keydown', event => {
-      if (event.key === 'Enter' && !event.defaultPrevented) {
+    document.addEventListener('click', event => {
+      if (event.target === button && !event.defaultPrevented) {
         event.preventDefault(); event.stopImmediatePropagation();
         window.delayedNativeSends++;
         clear(); update();
@@ -990,6 +993,98 @@ test('after the overview creates a chat, Enter queues behind its active response
   assert.deepEqual(await p.evaluate(() => sent), ['First message']);
   assert.equal(await p.locator('.ghrc-message-queue-editor').inputValue(), 'Second message');
   assert.equal(await p.evaluate(() => stops), 0);
+  await p.close();
+});
+
+const hardPrompt = 'Prove the dynamic programming recurrence for counting linear extensions.\n'
+  + 'Give pseudocode and a worked example with incomparable vertices, then compare time and space bounds.\n'
+  + 'Use the same notation throughout and account for each boundary condition.\n'.repeat(70);
+
+test('Enter in a reloaded chat waits for history and sends long follow-ups in order', async () => {
+  const p = await fixture({ loadingHistory: true, liveMarkup: true });
+  await p.evaluate(() => {
+    document.addEventListener('keydown', event => {
+      if (event.key === 'Enter' && !event.defaultPrevented) window.stops++;
+    }, true);
+  });
+  await enqueue(p, hardPrompt.trim(), true);
+  await p.evaluate(() => {
+    addTurn('user'); addTurn('assistant', true);
+    document.querySelector('[data-fixture-turn]:last-child').dataset.state = 'streaming';
+  });
+  await enqueue(p, 'Compare against a subset recurrence and show an example with two isolated vertices.', true);
+  await p.waitForTimeout(1800);
+  assert.deepEqual(await p.evaluate(() => [stops, sent]), [0, []]);
+  await p.evaluate(() => {
+    delete document.querySelector('[data-fixture-turn]:last-child').dataset.state;
+    finish();
+  });
+  await sentCount(p, 1);
+  await p.evaluate(() => finish());
+  await sentCount(p, 2);
+  assert.deepEqual(await p.evaluate(() => sent), [hardPrompt.trim(), 'Compare against a subset recurrence and show an example with two isolated vertices.']);
+  assert.deepEqual(p.errors, []);
+  await p.close();
+});
+
+test('a fast follow-up survives a new conversation URL appearing during queue initialization', async () => {
+  const p = await fixture({ route: '/', delayQueueStorage: true });
+  const editor = p.locator('[data-composer-markdown]');
+  await editor.fill(hardPrompt.trim());
+  await editor.press('Enter');
+  await editor.fill('Include a proof for the equal-weight edge case.');
+  await editor.press('Enter');
+  await p.evaluate(() => {
+    history.pushState({}, '', '/c/local-chatgpt%3Ajust-created');
+    window.dispatchEvent(new PopStateEvent('popstate'));
+    resolveQueueStorage();
+  });
+  assert.equal(await p.locator('.ghrc-message-queue-editor').inputValue(), 'Include a proof for the equal-weight edge case.');
+  await p.waitForFunction(() => Object.keys(storage.queuedChatMessages || {}).some(key => key.startsWith('new:')));
+  await p.evaluate(() => {
+    history.replaceState({}, '', '/c/just-created');
+    window.dispatchEvent(new PopStateEvent('popstate'));
+  });
+  await p.waitForFunction(() => storage.queuedChatMessages?.['conversation:just-created']?.length === 1);
+  assert.deepEqual(await p.evaluate(() => [stops, sent.length]), [0, 1]);
+  await p.evaluate(() => finish());
+  await sentCount(p, 2);
+  assert.deepEqual(await p.evaluate(() => sent), [hardPrompt.trim(), 'Include a proof for the equal-weight edge case.']);
+  assert.deepEqual(p.errors, []);
+  await p.close();
+});
+
+test('typing immediately after a long first send queues only the new follow-up', async () => {
+  const p = await fixture({ route: '/' });
+  await p.evaluate(() => {
+    button.addEventListener('click', event => {
+      if (sent.length) return;
+      event.stopImmediatePropagation();
+      const prompt = read();
+      window.confirmFirstSend = () => {
+        sent.push(prompt);
+        addTurn('user'); addTurn('assistant');
+        window.active = true; update();
+      };
+    }, true);
+  });
+  const editor = p.locator('[data-composer-markdown]');
+  await editor.fill(hardPrompt.trim());
+  await editor.evaluate(node => getSelection().collapse(node, node.childNodes.length));
+  await editor.press('Enter');
+  await editor.press('Enter');
+  assert.equal(await p.locator('.ghrc-message-queue-editor').count(), 0);
+  const followup = 'Derive the base cases independently and compare their complexity.';
+  await p.keyboard.insertText(followup);
+  await editor.press('Enter');
+  await p.evaluate(() => confirmFirstSend());
+  await p.locator('.ghrc-message-queue-editor').waitFor();
+  assert.equal(await p.locator('.ghrc-message-queue-editor').inputValue(), followup);
+  assert.deepEqual(await p.evaluate(() => [stops, sent.length]), [0, 1]);
+  await p.evaluate(() => finish());
+  await sentCount(p, 2);
+  assert.deepEqual(await p.evaluate(() => sent), [hardPrompt.trim(), followup]);
+  assert.deepEqual(p.errors, []);
   await p.close();
 });
 

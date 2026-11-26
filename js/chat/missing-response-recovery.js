@@ -335,6 +335,10 @@
       submitted = Boolean(event.target.querySelector?.(COMPOSER_SELECTOR));
     }
     if (!submitted) return;
+    recordComposerSubmission();
+  }
+
+  function recordComposerSubmission() {
     promptActivity();
     if (location.pathname === "/") submittedFromNewChat = true;
   }
@@ -358,6 +362,7 @@
   document.addEventListener("keydown", onPromptSend, true);
   document.addEventListener("click", onPromptSend, true);
   document.addEventListener("submit", onPromptSend, true);
+  window.addEventListener("ghrc:composer-submission", recordComposerSubmission);
   window.addEventListener("ghrc:route-change", onRouteChange);
   window.addEventListener("pagehide", stopPolling);
   window.addEventListener("ghrc:refresh-view", () => {

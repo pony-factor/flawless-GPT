@@ -43,6 +43,7 @@
   let enterChain = Promise.resolve();
   const pendingEnterTexts = new Set();
   let nativeSubmission = null;
+  let nativeDraft = null;
   const capturedFiles = new Map();
   const CAPTURED_FILE_SWEEP_MS = 30_000;
   let capturedFilesSweepTimer = null;
@@ -303,7 +304,9 @@
 
   function conversationKey(pathname = location.pathname) {
     const conversationId = conversationIdFromPath(pathname);
-    return conversationId ? `conversation:${conversationId}` : `new:${pageSessionId}`;
+    // ChatGPT may paint a local conversation URL before assigning its server ID.
+    return conversationId && !/^local-chatgpt(?::|%3a)/i.test(conversationId)
+      ? `conversation:${conversationId}` : `new:${pageSessionId}`;
   }
 
   function normalizedText(value) {
@@ -579,10 +582,9 @@
       '[aria-label*="thinking" i]',
       '[aria-busy="true"]',
     ];
-    if (selectors.some((selector) =>
-      [...root.querySelectorAll(selector)].some(node => isVisible(node)
-        && !(selector === '[aria-label*="thinking" i]' && isStoppedThinkingControl(node)))
-    )) return true;
+    const activeSelector = selectors.join(", ");
+    if ([...(root.matches(activeSelector) ? [root] : []), ...root.querySelectorAll(activeSelector)]
+      .some(node => isVisible(node) && !isStoppedThinkingControl(node))) return true;
 
     return [...root.querySelectorAll('[role="status"], [aria-live="polite"], [aria-live="assertive"]')]
       .filter(isVisible)
@@ -823,7 +825,9 @@
     const latestUserAnswered = responseStopped || Boolean(latestUser && latestAssistant
       && (latestUser.compareDocumentPosition(latestAssistant) & Node.DOCUMENT_POSITION_FOLLOWING));
     const turnCount = conversationRoot().querySelectorAll('[data-testid^="conversation-turn-"], [data-content-search-unit-key]').length;
-    const roleStateKnown = turnCount === 0 || userTurns.length + assistantTurns.length > 0;
+    // On a conversation URL the composer can mount before any history. An
+    // empty transcript there is not evidence that it is safe to submit.
+    const roleStateKnown = userTurns.length > 0 || (!conversationIdFromPath() && turnCount === 0);
 
     return {
       responseActive: responseIsActive(composer),
@@ -1553,7 +1557,7 @@
     // Work can keep an enabled Send control while its response is unfinished.
     // Use the same completion gate as the FIFO, rather than treating a missing
     // Stop/streaming indicator as permission to submit and interrupt that work.
-    if (queue.length || !queueCanAdvance(lifecycleSnapshot(), COMPLETE_SETTLE_MS) || nativeSubmissionPending(composer)
+    if (queue.length || !queueCanAdvance(lifecycleSnapshot(), COMPLETE_SETTLE_MS) || nativeSubmissionPending()
       || sendingItemId || enqueueRunning || interruptRunning) return enqueueText(text, [], mentions);
     // Preserve attachments and selected context for the existing draft.
     if (hasComposerContext(composer)) return enqueueText(text, [], mentions);
@@ -1617,7 +1621,7 @@
     shouldQueueResearchPrompt: composer => Boolean(composer === findComposerInput()
       && stateLoaded && activeKey === conversationKey() && !routeSyncRunning
       && (queue.length || (conversationIdFromPath() && (
-        nativeSubmissionPending(composer)
+        nativeSubmissionPending()
         || !queueCanAdvance(lifecycleSnapshot(), COMPLETE_SETTLE_MS))))),
     composerAutocompleteIsOpen,
     findComposerInput,
@@ -1629,7 +1633,7 @@
         ...lifecycleSnapshot(),
         stateReady: stateLoaded && !routeSyncRunning && activeKey === conversationKey(),
         queueLength: queue.length,
-        submissionPending: nativeSubmissionPending(composer) || Boolean(sendingItemId)
+        submissionPending: nativeSubmissionPending() || Boolean(sendingItemId)
           || enqueueRunning || interruptRunning || Boolean(enterPending),
         hasContext: Boolean(composer && hasComposerContext(composer)),
       };
@@ -1847,7 +1851,7 @@
     const composer = findComposerInput();
     if (!composer || hasComposerContext(composer)) return;
     const readySnapshot = lifecycleSnapshot();
-    if (!steer && (nativeSubmissionPending(composer)
+    if (!steer && (nativeSubmissionPending()
       || !queueCanAdvance(readySnapshot, COMPLETE_SETTLE_MS))) return;
     // A focused app mention contains structured editor nodes; wait for blur
     // rather than flattening it into a temporary plain-text draft field.
@@ -1930,7 +1934,7 @@
         // Restoring attachments/text yields to React. Work or a newer turn can
         // appear during that gap, even while a Send button remains enabled.
         const currentSnapshot = lifecycleSnapshot();
-        if (nativeSubmissionPending(composer)
+        if (nativeSubmissionPending()
           || !queueCanAdvance(currentSnapshot, COMPLETE_SETTLE_MS)
           || currentSnapshot.latestUser !== readySnapshot.latestUser
           || currentSnapshot.latestAssistant !== readySnapshot.latestAssistant) return;
@@ -2005,7 +2009,7 @@
     }
 
     const composer = findComposerInput();
-    if (!composer || nativeSubmissionPending(composer)) {
+    if (!composer || nativeSubmissionPending()) {
       completionCandidateSince = null;
       return;
     }
@@ -2062,23 +2066,29 @@
     schedulePump();
   }
 
-  async function queueComposerEnter(composer, text, key) {
+  async function queueComposerEnter(composer, text, key, startingChat, appendedTo) {
     const contextRequest = captureComposerContext(composer);
     enterPending++;
     pendingEnterTexts.add(text);
     const request = enterChain.catch(() => {}).then(async () => {
       await queueStateRequest;
+      // Native submission may still leave its text in the editor when the
+      // user starts typing the next message. Keep the full text if it failed.
+      const submitted = appendedTo && (roleTurns("user").length > appendedTo.userTurns
+        || await waitForSubmission(composer, appendedTo.text, appendedTo.userTurns));
       const deadline = Date.now() + SUBMIT_TIMEOUT_MS;
       while (context.active() && routeSyncRunning && Date.now() < deadline) {
         await new Promise(resolve => window.setTimeout(resolve, 20));
       }
+      const currentKey = conversationKey();
+      if (startingChat && currentKey.startsWith("conversation:")) key = currentKey;
       if (!context.active() || !stateLoaded || routeSyncRunning
         || conversationKey() !== key || composer !== findComposerInput()) return;
       if (activeKey !== key) await syncConversationKey();
       if (context.active() && activeKey === key && composer === findComposerInput()) {
         const snapshot = await contextRequest;
         if (!snapshot || !contextMatches(snapshot.state, composer)) return;
-        const payload = queuedComposerPayload(text, snapshot);
+        const payload = queuedComposerPayload(submitted ? text.slice(appendedTo.text.length) : text, snapshot);
         const queued = await enqueueText(payload.text, snapshot.attachments, payload.mentions);
         if (queued && !await clearComposerContext(snapshot, composer)) {
           queuePaused = true;
@@ -2102,14 +2112,53 @@
     }
   }
 
-  function nativeSubmissionPending(composer) {
+  function nativeSubmissionPending() {
     if (!nativeSubmission) return false;
-    if (nativeSubmission.composer !== composer || Date.now() >= nativeSubmission.deadline
-      || roleTurns("user").length > nativeSubmission.userTurns || responseIsActive(composer)) {
+    const key = conversationKey();
+    if ((nativeSubmission.key !== key && !(nativeSubmission.key.startsWith("new:") && key.startsWith("conversation:")))
+      || Date.now() >= nativeSubmission.deadline || roleTurns("user").length > nativeSubmission.userTurns) {
       nativeSubmission = null;
       return false;
     }
+    nativeSubmission.key = key;
     return true;
+  }
+
+  function observeNativeSend(event) {
+    if (!context.active() || event.defaultPrevented) return;
+    const button = event.target?.closest?.("button");
+    if (!button || !findComposerForm(button)) return;
+    const composer = findComposerInput();
+    const send = findSendButton(composer);
+    if (button !== send || send.disabled || send.getAttribute("aria-disabled") === "true") return;
+    nativeSubmission = {
+      key: conversationKey(),
+      userTurns: roleTurns("user").length,
+      deadline: Date.now() + SUBMIT_TIMEOUT_MS,
+    };
+    const text = normalizedText(composerText(composer));
+    nativeDraft = text && !hasComposerContext(composer) && !composerMentions(composer).length
+      ? { ...nativeSubmission, composer, text, appended: false } : null;
+    if (!event.isTrusted) window.dispatchEvent(new Event("ghrc:composer-submission"));
+  }
+
+  function observeDraftAppend(event) {
+    if (!context.active() || !nativeDraft || !nativeDraft.composer.contains(event.target)
+      || nativeDraft.appended) return;
+    const { composer, text, deadline } = nativeDraft;
+    // Keep the full draft when the user replaces or edits the submitted text.
+    // Only a real edit at the end of the still-visible submitted draft starts
+    // a distinct follow-up before ChatGPT has cleared its editor.
+    const selection = window.getSelection();
+    let atEnd = composer.selectionStart === text.length && composer.selectionEnd === text.length;
+    if (composer.isContentEditable && selection?.isCollapsed && composer.contains(selection.anchorNode)) {
+      const tail = selection.getRangeAt(0).cloneRange();
+      tail.setEnd(composer, composer.childNodes.length);
+      atEnd = !tail.toString();
+    }
+    if (event.isTrusted && event.inputType?.startsWith("insert") && atEnd
+      && Date.now() < deadline && textMatchesComposer(composer, text)) nativeDraft.appended = true;
+    else nativeDraft = null;
   }
 
   function composerAutocompleteIsOpen(composer) {
@@ -2174,39 +2223,48 @@
     const composerState = composerContext(composer);
     const hasMessage = Boolean(text.trim() || composerState.files.length || composerState.quote
       || composerState.selections.length || composerState.standaloneMentions.length);
-    const submissionPending = nativeSubmissionPending(composer);
+    const submissionPending = nativeSubmissionPending();
     // An idle overview must send its first prompt natively, even before storage
     // loads or while placeholder turn markup is present. A temporary chat or a
     // newly submitted conversation can already be busy without a conversation ID.
     const firstOverviewPrompt = !conversationIdFromPath() && !snapshot.responseActive
       && !snapshot.userTurns && !submissionPending && !queue.length && !enterPending;
-    if (firstOverviewPrompt) {
-      if (hasMessage) {
-        if (globalThis.__ghrcReasoningPolicy?.deferEnter(event, composer)) return;
-        nativeSubmission = { composer, userTurns: snapshot.userTurns, deadline: Date.now() + SUBMIT_TIMEOUT_MS };
-      }
-      return;
-    }
-    if (hasMessage && !submissionPending && stateLoaded
+    const idleConversation = !submissionPending && stateLoaded
       && activeKey === conversationKey() && !queue.length && !enterPending && !routeSyncRunning
-      && queueCanAdvance(snapshot, COMPLETE_SETTLE_MS)) {
+      && queueCanAdvance(snapshot, COMPLETE_SETTLE_MS);
+    const send = (firstOverviewPrompt || idleConversation) && hasMessage && findSendButton(composer);
+    if (send && !send.disabled && send.getAttribute("aria-disabled") !== "true") {
       if (globalThis.__ghrcReasoningPolicy?.deferEnter(event, composer)) return;
-      // Mark the gap before ChatGPT paints Stop or the next user turn.
-      nativeSubmission = { composer, userTurns: snapshot.userTurns, deadline: Date.now() + SUBMIT_TIMEOUT_MS };
+      window.dispatchEvent(new Event("ghrc:before-composer-send"));
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      // Invoke the verified Send control. ChatGPT's Enter handler can take
+      // a different action from the control displayed by the composer.
+      clickNormalSend(send);
       return;
     }
 
     window.dispatchEvent(new Event("ghrc:before-composer-send"));
     event.preventDefault();
     event.stopImmediatePropagation();
-    if (hasMessage) void context.run(() => queueComposerEnter(composer, text, conversationKey()));
+    const key = conversationKey();
+    const startingChat = key.startsWith("new:") && (submissionPending || snapshot.userTurns > 0);
+    if (submissionPending && nativeDraft?.composer === composer && text === nativeDraft.text
+      && !hasComposerContext(composer)) return;
+    const appendedTo = nativeDraft?.appended && nativeDraft.composer === composer
+      && text.startsWith(nativeDraft.text) && !composerState.mentions.length ? nativeDraft : null;
+    if (hasMessage) void context.run(() => queueComposerEnter(composer, text, key, startingChat, appendedTo));
   }
   // Capture before React's document/composer handlers can turn Enter into Stop
   // or ArrowUp into editing already-sent history.
   window.addEventListener("keydown", handleComposerKeydown, true);
+  window.addEventListener("click", observeNativeSend, true);
+  window.addEventListener("beforeinput", observeDraftAppend, true);
   window.addEventListener("ghrc:reasoning-selection-complete", schedulePump);
 
   document.addEventListener("input", (event) => {
+    if (nativeDraft?.composer.contains(event.target)
+      && !normalizedText(composerText(nativeDraft.composer)).startsWith(nativeDraft.text)) nativeDraft = null;
     if (event.target?.closest?.('#prompt-textarea, [data-composer-markdown][contenteditable="true"]')) scheduleMount();
   }, true);
 
@@ -2268,6 +2326,8 @@
     document.getElementById(INTERRUPT_BUTTON_ID)?.remove();
     document.getElementById(QUEUE_BUTTON_ID)?.remove();
     window.removeEventListener("keydown", handleComposerKeydown, true);
+    window.removeEventListener("click", observeNativeSend, true);
+    window.removeEventListener("beforeinput", observeDraftAppend, true);
     observer.disconnect();
     queueResizeObserver?.disconnect();
     window.removeEventListener("resize", scheduleMount);
