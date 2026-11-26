@@ -104,10 +104,50 @@ test('an edited replacement prompt cannot be sent automatically', async () => {
   w.document.querySelector('[data-testid="send-button"]').addEventListener('click', () => { clicks++; });
   const ready = await adapter.prepare({ nonce: 'n', signature: adapter.snapshot().signature, prompt: 'Dispatch task', replaceDraft: true });
   assert.equal(ready.ok, true);
-  input.value = 'Edited after replacement';
+  input.value = 'Dispatch\n task';
   assert.equal((await adapter.commit({ nonce: 'n' })).ok, false);
-  assert.equal(input.value, 'Edited after replacement');
+  assert.equal(input.value, 'Dispatch\n task');
   assert.equal(clicks, 0);
+  dom.window.close();
+});
+
+test('a fresh background chat can prepare a multiline prompt after native insertion is refused', async () => {
+  const { dom, w, adapter, advance } = fixture();
+  dom.reconfigure({ url: 'https://chatgpt.com/' });
+  w.document.querySelector('main').replaceChildren();
+  const input = w.document.createElement('div');
+  input.id = 'prompt-textarea';
+  input.setAttribute('contenteditable', 'true');
+  Object.defineProperty(input, 'isContentEditable', { value: true });
+  w.document.querySelector('textarea').replaceWith(input);
+  w.document.execCommand = () => false;
+  w.DataTransfer = Map;
+  w.DataTransfer.prototype.setData = Map.prototype.set;
+  w.ClipboardEvent = class extends w.Event {
+    constructor(type, options) {
+      super(type, options);
+      this.clipboardData = options.clipboardData;
+    }
+  };
+  input.addEventListener('paste', event => {
+    event.preventDefault();
+    for (const line of event.clipboardData.get('text/plain').split('\n')) {
+      const paragraph = w.document.createElement('p');
+      if (line) paragraph.textContent = line;
+      else paragraph.innerHTML = '<br class="ProseMirror-trailingBreak">';
+      input.append(paragraph);
+    }
+  });
+  adapter.snapshot();
+  advance(1600);
+  const nonce = 'background-fresh';
+  const prompt = `Task: task-0060\n\n  Indented instructions\n\nDispatch reference: ${nonce}`;
+  assert.equal((await adapter.prepare({ nonce, signature: adapter.snapshot().signature, prompt })).ok, true);
+  const send = w.document.querySelector('[data-testid="send-button"]');
+  let clicks = 0;
+  send.addEventListener('click', event => { event.preventDefault(); clicks++; });
+  assert.equal((await adapter.commit({ nonce })).pendingIdentity, true);
+  assert.equal(clicks, 1);
   dom.window.close();
 });
 
