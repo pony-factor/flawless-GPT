@@ -769,29 +769,18 @@
     };
   }
 
-  function parseWootenLinkEntries(html) {
-    const registry = html.match(/<script id="redirect-registry">([\s\S]*?)<\/script>/)?.[1] || "";
-    const redirects = registry.match(/^const redirects = (\{[\s\S]*?^\});/m)?.[1];
-    const comments = registry.match(/^const redirectComments = (\{[\s\S]*?^\});/m)?.[1];
-    if (!redirects) throw new Error("wooten.link index is missing");
-
-    const redirectComments = JSON.parse(comments || "{}");
-    return Object.entries(JSON.parse(redirects))
-      .map(([key, href]) => createWootenLinkEntry(
-        key,
-        href,
-        Object.hasOwn(redirectComments, key) ? redirectComments[key] : "",
-      ))
-      .sort((first, second) => first.key.localeCompare(second.key));
-  }
-
   async function loadWootenLinkEntries() {
-    wootenLinkEntriesRequest ||= fetch("https://wooten.link/search", {
+    wootenLinkEntriesRequest ||= fetch("https://wooten.link/search-index.json", {
       cache: "no-store",
     }).then((response) => {
       if (!response.ok) throw new Error("wooten.link index could not be loaded");
-      return response.text();
-    }).then(parseWootenLinkEntries);
+      return response.json();
+    }).then((entries) => entries.map(({ key, href, comment }) => {
+      if (typeof key !== "string" || typeof href !== "string") {
+        throw new Error("wooten.link index contains an invalid reference");
+      }
+      return createWootenLinkEntry(key, href, comment);
+    }));
 
     try {
       return await wootenLinkEntriesRequest;
