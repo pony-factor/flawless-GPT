@@ -2,6 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const vm = require('node:vm');
 const root = path.join(__dirname, '..');
 
 test('dispatcher is registered after the existing GitHub and composer infrastructure', () => {
@@ -48,11 +49,26 @@ test('dispatcher dashboard exposes independent session navigation', () => {
   const script = fs.readFileSync(path.join(root, 'js/dispatcher/dashboard.js'), 'utf8');
   const page = fs.readFileSync(path.join(root, 'chat-dispatcher.html'), 'utf8');
   assert.match(script, /sessionId/);
-  assert.match(script, /history\.replaceState/);
   assert.match(script, /type: 'sessions'/);
   assert.match(page, /id="session-name"/);
   assert.match(page, /id="session-list"/);
   assert.match(page, /Open another dispatcher/);
+});
+
+test('a new dispatcher loads its session URL before contacting the background worker', () => {
+  const script = fs.readFileSync(path.join(root, 'js/dispatcher/dashboard.js'), 'utf8');
+  const dashboardUrl = 'chrome-extension://test/chat-dispatcher.html';
+  const sessionId = '33333333-3333-4333-8333-333333333333';
+  for (const href of [dashboardUrl, dashboardUrl + '?session=invalid']) {
+    const navigations = [];
+    vm.runInNewContext(script, {
+      URL,
+      chrome: { runtime: { id: 'test', sendMessage: () => assert.fail('Message sent before navigation') } },
+      crypto: { randomUUID: () => sessionId },
+      location: { href, replace: url => navigations.push(url) },
+    });
+    assert.deepEqual(navigations, [dashboardUrl + '?session=' + sessionId]);
+  }
 });
 
 
