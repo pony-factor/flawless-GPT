@@ -1,4 +1,4 @@
-name: CI
+name: Top Hat
 
 on:
   pull_request:
