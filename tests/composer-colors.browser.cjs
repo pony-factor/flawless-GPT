@@ -77,3 +77,37 @@ test('input outline follows the rounded ChatGPT composer surface and can be rese
     assert.equal(await outline('#thread > div', 'outlineStyle'), 'none');
   } finally { await page.close(); }
 });
+
+test('bar border colors the rounded composer edge when ChatGPT draws it with a shadow', async () => {
+  const page = await browser.newPage();
+  try {
+    await page.setContent(`
+      <style>
+        .ComposerSurface-native {
+          --composer-layout-surface-shadow: 0 2px 4px #111;
+          box-shadow: var(--composer-layout-surface-shadow);
+          border: 0 !important;
+        }
+      </style>
+      <form><div class="ComposerSurface-native"><textarea id="prompt-textarea"></textarea></div></form>
+    `);
+    await page.addStyleTag({ path: path.join(__dirname, '../css/composer/colors.css') });
+    const surface = page.locator('.ComposerSurface-native');
+    const shadow = () => surface.evaluate(el => getComputedStyle(el).boxShadow);
+    const nativeShadow = await shadow();
+    await page.evaluate(() => {
+      const root = document.documentElement;
+      root.setAttribute('data-ghrc-color-surface-border', '');
+      root.style.setProperty('--ghrc-composer-surface-border', '#43af49');
+      root.setAttribute('data-ghrc-color-surface-outline', '');
+      root.style.setProperty('--ghrc-composer-surface-outline', '#aabb22');
+    });
+    const customShadow = `rgb(67, 175, 73) 0px 0px 0px 1px inset, ${nativeShadow}`;
+    assert.equal(await shadow(), customShadow);
+    assert.equal(await surface.evaluate(el => getComputedStyle(el).outlineColor), 'rgb(170, 187, 34)');
+    await page.locator('#prompt-textarea').focus();
+    assert.equal(await shadow(), customShadow);
+    await page.evaluate(() => document.documentElement.removeAttribute('data-ghrc-color-surface-border'));
+    assert.equal(await shadow(), nativeShadow);
+  } finally { await page.close(); }
+});
