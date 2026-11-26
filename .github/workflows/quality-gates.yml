@@ -105,8 +105,10 @@ jobs:
       - name: Test native host and report publisher
         run: python -m unittest discover -s tests -p '*_test.py' -v
 
-  # The message-queue tests are top-level tests. The three complementary
-  # name patterns below partition every case, including newly added cases.
+  # The message-queue tests are top-level tests. Assign cases exclusively in
+  # this order: scrolling, rich clipboard/attachments, composer/draft,
+  # response lifecycle, then all remaining queue tests. The complementary
+  # patterns cover newly added cases without running any case twice.
   browser-required:
     name: ${{ matrix.name }}
     needs: prepare-tests
@@ -121,9 +123,13 @@ jobs:
               node --test tests/compact-startup.browser.cjs tests/dashboard-startup.browser.cjs tests/refresh-view.browser.cjs
               node --test --test-name-pattern="reasoning policy" tests/chat-display.browser.cjs
           - name: Chromium queue regressions
-            command: node --test --test-name-pattern='^(?!.*(?:[Ss]croll|[Rr]eflow|[Cc]lipboard|[Aa]ttachment|[Aa]pp (mention|identity|chip|restoration)|[Pp]lugin|[Cc]omposer|[Dd]raft|file (bytes|cards)|queues an image|saved image-only|selected text)).*$' tests/message-queue.browser.cjs
+            command: node --test --test-name-pattern='^(?!.*(?:[Ss]croll|[Rr]eflow|[Cc]lipboard|[Aa]ttachment|[Aa]pp (mention|identity|chip|restoration)|[Pp]lugin|file (bytes|cards)|queues an image|saved image-only|selected text|[Cc]omposer|[Dd]raft|[Rr]esponse|[Aa]ssistant|[Gg]enerat|[Tt]hinking|[Hh]istory|[Ww]ork completion|image-only reply|[Cc]ompletion|[Ss]treaming)).*$' tests/message-queue.browser.cjs
+          - name: Chromium response lifecycle regressions
+            command: node --test --test-name-pattern='^(?!.*(?:[Ss]croll|[Rr]eflow|[Cc]lipboard|[Aa]ttachment|[Aa]pp (mention|identity|chip|restoration)|[Pp]lugin|file (bytes|cards)|queues an image|saved image-only|selected text|[Cc]omposer|[Dd]raft)).*(?:[Rr]esponse|[Aa]ssistant|[Gg]enerat|[Tt]hinking|[Hh]istory|[Ww]ork completion|image-only reply|[Cc]ompletion|[Ss]treaming)' tests/message-queue.browser.cjs
           - name: Chromium composer regressions
-            command: node --test --test-name-pattern='^(?!.*(?:[Ss]croll|[Rr]eflow)).*(?:[Cc]lipboard|[Aa]ttachment|[Aa]pp (mention|identity|chip|restoration)|[Pp]lugin|[Cc]omposer|[Dd]raft|file (bytes|cards)|queues an image|saved image-only|selected text)' tests/message-queue.browser.cjs
+            command: node --test --test-name-pattern='^(?!.*(?:[Ss]croll|[Rr]eflow|[Cc]lipboard|[Aa]ttachment|[Aa]pp (mention|identity|chip|restoration)|[Pp]lugin|file (bytes|cards)|queues an image|saved image-only|selected text)).*(?:[Cc]lipboard|[Aa]ttachment|[Aa]pp (mention|identity|chip|restoration)|[Pp]lugin|file (bytes|cards)|queues an image|saved image-only|selected text|[Cc]omposer|[Dd]raft)' tests/message-queue.browser.cjs
+          - name: Chromium clipboard and attachment regressions
+            command: node --test --test-name-pattern='^(?!.*(?:[Ss]croll|[Rr]eflow)).*(?:[Cc]lipboard|[Aa]ttachment|[Aa]pp (mention|identity|chip|restoration)|[Pp]lugin|file (bytes|cards)|queues an image|saved image-only|selected text)' tests/message-queue.browser.cjs
           - name: Chromium scrolling regressions
             command: node --test --test-name-pattern='[Ss]croll|[Rr]eflow' tests/message-queue.browser.cjs
           - name: Chromium manual Search regressions
