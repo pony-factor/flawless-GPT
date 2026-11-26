@@ -1364,12 +1364,12 @@ test('idle clipboard joins an existing paused queue in FIFO order', async () => 
   await p.close();
 });
 
-test('clipboard stays immediately left of the hat without repeated button moves', async () => {
+test('clipboard stays immediately left of the hat without repeated button moves in a conversation', async () => {
   const p = await fixture({ active: true, clipboard: true });
   await p.locator('[data-composer-markdown]').fill('Keep draft');
   await p.waitForFunction(() => document.getElementById('ghrc-clipboard-send-button')?.nextElementSibling?.id === 'ghrc-message-interrupt-button');
-  assert.equal(await p.locator('#ghrc-message-queue-button').evaluate(e => e.nextElementSibling.id), 'ghrc-clipboard-open-url-button');
-  assert.equal(await p.locator('#ghrc-clipboard-open-url-button').evaluate(e => e.nextElementSibling.id), 'ghrc-clipboard-send-button');
+  assert.equal(await p.locator('#ghrc-message-queue-button').evaluate(e => e.nextElementSibling.id), 'ghrc-clipboard-send-button');
+  assert.equal(await p.locator('#ghrc-clipboard-open-url-button').count(), 0);
   await p.evaluate(() => {
     window.buttonMoves = 0;
     new MutationObserver(rs => { window.buttonMoves += rs.length; }).observe(document.querySelector('form'), { childList: true, subtree: true });
@@ -1381,8 +1381,8 @@ test('clipboard stays immediately left of the hat without repeated button moves'
   await p.close();
 });
 
-test('URL and queue controls settle when clipboard sending is disabled', async () => {
-  const p = await fixture();
+test('URL and queue controls settle on the homepage when clipboard sending is disabled', async () => {
+  const p = await fixture({ route: '/' });
   await p.addScriptTag({ content: clipboardSource });
   await p.locator('[data-composer-markdown]').fill('Keep draft');
   await p.waitForFunction(() => document.getElementById('ghrc-message-queue-button')?.nextElementSibling?.id === 'ghrc-clipboard-open-url-button');
@@ -1397,6 +1397,34 @@ test('URL and queue controls settle when clipboard sending is disabled', async (
   assert.equal(await p.evaluate(() => buttonMoves), 0);
   assert.deepEqual(p.errors, []);
   await p.close();
+});
+
+test('homepage clipboard and URL buttons keep a stable order and URL disappears in a conversation', async () => {
+  const p = await fixture({ route: '/', clipboard: true });
+  try {
+    await p.locator('[data-composer-markdown]').fill('Keep draft');
+    await p.waitForFunction(() =>
+      document.getElementById('ghrc-message-queue-button')?.nextElementSibling?.id === 'ghrc-clipboard-send-button'
+      && document.getElementById('ghrc-clipboard-send-button')?.nextElementSibling?.id === 'ghrc-clipboard-open-url-button'
+      && document.getElementById('ghrc-clipboard-open-url-button')?.nextElementSibling?.id === 'composer-submit-button');
+    await p.evaluate(() => {
+      window.buttonMoves = 0;
+      new MutationObserver(records => { window.buttonMoves += records.length; })
+        .observe(document.querySelector('form'), { childList: true, subtree: true });
+    });
+    await p.waitForTimeout(400);
+    assert.equal(await p.evaluate(() => buttonMoves), 0);
+    await p.evaluate(() => {
+      history.pushState({}, '', '/c/test');
+      window.dispatchEvent(new Event('ghrc:route-change'));
+    });
+    await p.locator('#ghrc-clipboard-open-url-button').waitFor({ state: 'detached' });
+    await p.waitForFunction(() => document.getElementById('ghrc-clipboard-send-button')?.nextElementSibling?.id === 'composer-submit-button');
+    assert.equal(await p.evaluate(() => read()), 'Keep draft');
+    assert.deepEqual(p.errors, []);
+  } finally {
+    await p.close();
+  }
 });
 
 test('clipboard permission failure falls back to native paste while preserving the draft', async () => {
@@ -2430,6 +2458,7 @@ async function enableAppMentions(page) {
       const html = event.clipboardData.getData('text/html');
       if (!html) return;
       event.preventDefault();
+      if (document.activeElement !== editor) throw new Error('Rich paste must target the native composer, not the draft overlay');
       document.execCommand('insertHTML', false, html);
       editor.dispatchEvent(new Event('input', { bubbles: true }));
     });
@@ -2471,6 +2500,7 @@ for (const active of [false, true]) {
     }
     await sentCount(p, 1);
     assert.deepEqual(await p.evaluate(() => sentApps), [['app://plugin_courtlistener']]);
+    assert.deepEqual(await p.evaluate(() => sent), ['Review with CourtListener, then summarize']);
     await p.waitForFunction(() => read() === 'Keep existing draft');
     assert.deepEqual(p.errors, []);
     await p.close();

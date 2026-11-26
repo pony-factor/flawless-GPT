@@ -1,0 +1,22 @@
+name: Restore prepared Chromium
+description: Reuse the run's pinned Playwright packages and browser installation
+runs:
+  using: composite
+  steps:
+    - uses: actions/download-artifact@v4
+      with:
+        name: node-test-dependencies
+    - uses: actions/download-artifact@v4
+      with:
+        name: chromium-test-browser
+    - name: Restore Playwright and Chromium
+      shell: bash
+      run: |
+        tar -xzf node-dependencies.tar.gz
+        mkdir -p "$HOME/.cache/ms-playwright"
+        tar -xzf chromium.tar.gz -C "$HOME/.cache/ms-playwright"
+        rm node-dependencies.tar.gz chromium.tar.gz
+        # Hosted runners are isolated; OS libraries must exist on each runner,
+        # but neither the npm dependencies nor the browser are installed again.
+        node node_modules/playwright/cli.js install-deps chromium
+        echo "BROWSER_EXECUTABLE=$(node -p 'require("playwright").chromium.executablePath()')" >> "$GITHUB_ENV"

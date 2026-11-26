@@ -21,11 +21,16 @@ async function fixture(disabled) {
   page.on("pageerror", error => errors.push(error.message));
   await page.route("https://chatgpt.com/**", route => route.fulfill({
     contentType: "text/html",
-    body: '<header><button id="sidebar-search">Search</button></header><main><form><button id="tool-search" aria-pressed="true">Search the web</button><button id="send">Send</button></form><div role="menu"><button id="menu-search" role="menuitem">Search</button><button id="other" role="menuitem">Deep research</button></div></main>',
+    body: '<header><button id="sidebar-search">Search</button></header><main><form><button id="tool-search" type="button" aria-pressed="true">Search the web</button><button id="send" type="submit">Send</button></form><div role="menu"><button id="menu-search" role="menuitem">Search</button><button id="other" role="menuitem">Deep research</button></div></main>',
   }));
   await page.goto("https://chatgpt.com/");
   await page.evaluate(value => {
     window.searchClicks = 0;
+    window.submissions = 0;
+    document.querySelector("form").addEventListener("submit", event => {
+      event.preventDefault();
+      window.submissions++;
+    });
     window.listeners = [];
     const tool = document.getElementById("tool-search");
     tool.addEventListener("click", () => {
@@ -54,6 +59,7 @@ test("disables only manual Search controls, releases selected Search, and restor
     await page.waitForFunction(() => document.getElementById("tool-search").getAttribute("aria-pressed") === "false");
     await page.waitForFunction(() => getComputedStyle(document.getElementById("menu-search")).display === "none");
     assert.equal(await page.evaluate(() => window.searchClicks), 1);
+    assert.equal(await page.evaluate(() => window.submissions), 0);
     assert.equal(await page.locator("#sidebar-search").isVisible(), true);
     assert.equal(await page.locator("#other").isVisible(), true);
     await page.evaluate(() => window.listeners.forEach(fn => fn({ disableManualWebSearch: { newValue: false } }, "local")));
