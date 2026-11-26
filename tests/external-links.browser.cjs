@@ -22,11 +22,18 @@ async function fixture(settings = {}, githubResponse = null, nativeSplitSupporte
     contentType: 'text/html',
     body: `<style>body{margin:0}main{width:100%;min-height:1800px;padding-top:500px;box-sizing:border-box}</style><main>${conversationMarkup}</main>`,
   }));
-  await page.route('https://example.org/**', route => route.fulfill({ contentType: 'text/html', body: '<h1>Source content</h1>' }));
-  await page.route('https://example.org/favicon.ico', route => route.fulfill({
-    contentType: 'image/svg+xml',
-    body: '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"><rect width="16" height="16" fill="blue"/></svg>',
-  }));
+  // Use an actual raster image for the cross-origin favicon request. Keep
+  // routing in one handler so HTML can never be returned for the icon.
+  await page.route('https://example.org/**', route => {
+    if (new URL(route.request().url()).pathname === '/favicon.ico') {
+      return route.fulfill({
+        contentType: 'image/png',
+        headers: { 'Cross-Origin-Resource-Policy': 'cross-origin' },
+        body: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAAGUlEQVR4nGNkCDjBQApgIkn1qIZRDUNKAwCKxQE4Up/3pAAAAABJRU5ErkJggg==', 'base64'),
+      });
+    }
+    return route.fulfill({ contentType: 'text/html', body: '<h1>Source content</h1>' });
+  });
   await page.route('https://preview.test/link-preview.html', route => route.fulfill({
     contentType: 'text/html', body: '<body><script>' + read('js/links/link-preview-host.js') + '</script></body>',
   }));
@@ -784,7 +791,12 @@ test('left-side preview moves the panel, keeps controls ordered, and resizes fro
 
   const destination = page.locator('#ghrc-link-preview .ghrc-preview-destination');
   assert.equal(await destination.getAttribute('href'), 'https://example.org/source?keep=1#section');
-  assert.equal(await destination.locator('img').getAttribute('src'), 'https://example.org/favicon.ico');
+  const icon = destination.locator('img');
+  assert.equal(await icon.getAttribute('src', { timeout: 5000 }), 'https://example.org/favicon.ico');
+  assert.deepEqual(await icon.evaluate(async image => {
+    await image.decode();
+    return [image.naturalWidth, image.naturalHeight];
+  }), [16, 16]);
   assert.equal(await destination.locator('span').textContent(), 'example.org/source#section');
 
   const before = (await page.locator('#ghrc-link-preview').boundingBox()).width;
@@ -794,6 +806,27 @@ test('left-side preview moves the panel, keeps controls ordered, and resizes fro
   const after = (await page.locator('#ghrc-link-preview').boundingBox()).width;
   assert.ok(after > before);
   await page.close();
+});
+
+test('preview retains the destination and controls when the favicon fails to load', async () => {
+  const page = await fixture({ openExternalLinksInSplitView: true });
+  try {
+    await page.route('https://example.org/favicon.ico', route => route.abort('failed'));
+    const failedIcon = page.waitForEvent('requestfailed', {
+      predicate: request => request.url() === 'https://example.org/favicon.ico',
+    });
+    await page.locator('.ghrc-link-sidebar-button').click();
+    await failedIcon;
+    await page.frameLocator('#ghrc-link-preview iframe').frameLocator('iframe').locator('h1').waitFor();
+    const destination = page.locator('#ghrc-link-preview .ghrc-preview-destination');
+    await destination.locator('img').waitFor({ state: 'detached' });
+    assert.equal(await destination.getAttribute('href'), 'https://example.org/source?keep=1#section');
+    assert.equal(await destination.locator('span').textContent(), 'example.org/source#section');
+    assert.equal(await page.getByRole('button', { name: 'Close website preview' }).isVisible(), true);
+    assert.deepEqual(page.errors, []);
+  } finally {
+    await page.close();
+  }
 });
 
 test('current-tab mode keeps only the separate sidebar action', async () => {

@@ -1,4 +1,4 @@
-name: Top Hat
+name: Tophat
 
 on:
   pull_request:
