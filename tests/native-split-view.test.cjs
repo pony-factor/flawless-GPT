@@ -165,7 +165,7 @@ test('research shortcut stages Spellcheck before navigation and acknowledges it 
   assert.equal(result.ok, true);
   assert.equal(result.split, true);
   assert.deepEqual(f.calls.find(call => call[0] === 'split'), ['split', [20, 10]]);
-  assert.equal(f.calls.at(-1)[2].url, 'https://chatgpt.com/');
+  assert.equal(f.calls.at(-1)[2].url, 'https://chatgpt.com/?temporary-chat=true');
   assert.equal(f.session['researchSpellcheckSplit:20'].sourceTabId, 10);
   assert.equal((await send('research-spellcheck-pending', 10)).pending, false);
   assert.equal((await send('research-spellcheck-pending', 20)).pending, true);
