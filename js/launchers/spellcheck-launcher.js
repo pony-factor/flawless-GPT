@@ -9,6 +9,7 @@
   const IMAGE_DATA_URL = /^data:image\/(?:png|jpeg|webp|gif);base64,[A-Za-z0-9+/]+={0,2}$/;
   const LEGACY_ICON_KEY = "spellcheckGptCanonicalIcon";
   const PLUGIN_NAME = "Spellcheck Only";
+  const PLUGIN_PATH = "app://plugin_43d792ea86848191ab2ffc62c8fcd3c7";
   const ICON_PATH = "artwork/spellcheck-only.jpg";
   const MENTION_RETRY_MS = 100;
   const MENTION_TIMEOUT_MS = 5_000;
@@ -431,6 +432,27 @@
   });
 
 
+  async function pasteSplitSpellcheckMention(input) {
+    input.focus({ preventScroll: true });
+    const selection = window.getSelection();
+    if (!selection) return false;
+    const range = document.createRange();
+    range.selectNodeContents(input);
+    selection.removeAllRanges();
+    selection.addRange(range);
+    // The destination can restore the source homepage draft. Give the editor
+    // time to synchronize the selection before replacing that copy.
+    await pause(50);
+    if (!input.isConnected || !input.contains(selection.anchorNode)) return false;
+    const transfer = new DataTransfer();
+    transfer.setData("text/plain", `${PLUGIN_NAME} `);
+    transfer.setData("text/html", `<p><span app-mention-name="spellcheck-only" app-mention-display-name="${PLUGIN_NAME}" app-mention-path="${PLUGIN_PATH}" app-mention-icon="${chrome.runtime.getURL(ICON_PATH)}" data-prompt-link-href="${PLUGIN_PATH}" data-prompt-link-label="$spellcheck-only" contenteditable="false">${PLUGIN_NAME}</span> </p>`);
+    input.dispatchEvent(new ClipboardEvent("paste", {
+      bubbles: true, cancelable: true, clipboardData: transfer,
+    }));
+    return Boolean(await waitUntil(() => findPluginMention(findComposerInput()), 1000));
+  }
+
   async function prepareSplitSpellcheck() {
     const result = await chrome.runtime.sendMessage({ type: "research-spellcheck-pending" });
     if (!result?.pending || !isHomePage()) return;
@@ -439,7 +461,8 @@
       return isVisible(editor) ? editor : null;
     }, 20_000);
     if (!input || !context.active()) return;
-    const activated = Boolean(findPluginMention(input) || await activateSpellcheckPlugin(input));
+    const activated = Boolean(findPluginMention(input) || await pasteSplitSpellcheckMention(input)
+      || await activateSpellcheckPlugin(findComposerInput() || input));
     if (activated) {
       await chrome.runtime.sendMessage({ type: "research-spellcheck-ready" });
     } else {

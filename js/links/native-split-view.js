@@ -47,6 +47,8 @@ async function openNativeSplit(value, sourceTabId, onLeft = false) {
 
 
 const spellcheckSplitKey = tabId => 'researchSpellcheckSplit:' + tabId;
+// A normal ChatGPT homepage shares its draft with the source pane.
+const spellcheckSplitURL = 'https://chatgpt.com/?temporary-chat=true';
 
 async function openResearchSpellcheckSplit(sourceTabId, onLeft = false) {
   const source = await chrome.tabs.get(sourceTabId);
@@ -95,11 +97,11 @@ async function openResearchSpellcheckSplit(sourceTabId, onLeft = false) {
   }
 
   try {
-    if (!created && destination.url === 'https://chatgpt.com/') {
+    if (!created && destination.url === spellcheckSplitURL) {
       await chrome.tabs.reload(destination.id);
       await chrome.tabs.update(destination.id, { active: true });
     } else {
-      await chrome.tabs.update(destination.id, { url: 'https://chatgpt.com/', active: true });
+      await chrome.tabs.update(destination.id, { url: spellcheckSplitURL, active: true });
     }
   } catch (error) {
     await chrome.storage.session.remove(spellcheckSplitKey(destination.id));
