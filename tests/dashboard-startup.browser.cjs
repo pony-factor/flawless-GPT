@@ -21,7 +21,7 @@ test("cached dashboard controls and highlights mount before the host page finish
     }
     entry.matches = ["http://127.0.0.1/*"];
   }
-  for (const file of ["artwork/calligraphy-initials.png", "artwork/detective-zip.png", "artwork/spellcheck-only.jpg"]) {
+  for (const file of ["artwork/calligraphy-initials.png", "artwork/detective-zip.png", "artwork/spellcheck-only.jpg", "artwork/chat-dispatcher.svg"]) {
     fs.mkdirSync(path.dirname(path.join(extension, file)), { recursive: true });
     fs.copyFileSync(path.join(root, file), path.join(extension, file));
   }
@@ -141,7 +141,21 @@ test("cached dashboard controls and highlights mount before the host page finish
     assert.equal(await bulkMerge.count(), 1, "bulk merge stays enabled for existing users");
     assert.equal(await bulkMerge.getAttribute("aria-label"), "Bulk merge");
     assert.equal(await bulkMerge.getAttribute("title"), "Open Chat Dispatcher in a new tab");
-    assert.equal(await bulkMerge.locator("svg.ghrc-sort-icon path").count(), 5);
+    const dispatcherArt = bulkMerge.locator("img.ghrc-dispatcher-art");
+    assert.equal(await dispatcherArt.count(), 1);
+    assert.equal(await dispatcherArt.getAttribute("alt"), "");
+    assert.equal(await dispatcherArt.getAttribute("aria-hidden"), "true");
+    assert.match(await dispatcherArt.getAttribute("src"), /\/artwork\/chat-dispatcher\.svg$/);
+    await page.waitForFunction(() => {
+      const image = document.querySelector(".ghrc-dispatcher-art");
+      return image?.complete && image.naturalWidth > 0;
+    });
+    const iconBounds = await dispatcherArt.boundingBox();
+    const buttonBounds = await bulkMerge.boundingBox();
+    assert.ok(iconBounds && buttonBounds && iconBounds.width > 0 && iconBounds.height > 0);
+    assert.ok(iconBounds.x >= buttonBounds.x && iconBounds.y >= buttonBounds.y &&
+      iconBounds.x + iconBounds.width <= buttonBounds.x + buttonBounds.width &&
+      iconBounds.y + iconBounds.height <= buttonBounds.y + buttonBounds.height);
     assert.equal(await bulkMerge.innerText(), "", "button is icon-only");
     await bulkMerge.click();
     // The click dispatches an asynchronous message to the extension worker.

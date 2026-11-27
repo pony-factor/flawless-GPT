@@ -15,6 +15,22 @@ test('dispatcher is registered after the existing GitHub and composer infrastruc
   assert.ok(background.indexOf('../dispatcher/background.js') > background.indexOf('../core/service-worker.js'));
 });
 
+test('dispatcher launcher bundles its attributed transparent artwork', () => {
+  const manifest = JSON.parse(fs.readFileSync(path.join(root, 'manifest.json'), 'utf8'));
+  assert.ok(manifest.web_accessible_resources.some(entry =>
+    entry.matches.includes('https://chatgpt.com/*') && entry.resources.includes('artwork/chat-dispatcher.svg')));
+  const image = fs.readFileSync(path.join(root, 'artwork/chat-dispatcher.svg'), 'utf8');
+  const original = fs.readFileSync(path.join(root, 'artwork/chat-dispatcher.jpg'));
+  assert.match(image, /<clipPath id="pony">/);
+  assert.match(image, /clip-path="url\(#pony\)"/);
+  const embedded = image.match(/href="data:image\/jpeg;base64,([^"]+)"/);
+  assert.ok(embedded);
+  assert.deepEqual(Buffer.from(embedded[1], 'base64'), original);
+  assert.equal(fs.existsSync(path.join(root, 'artwork/bulk-search.jpg')), false);
+  const credits = fs.readFileSync(path.join(root, 'artwork/README.md'), 'utf8');
+  assert.match(credits, /chat-dispatcher.*Tamers12345/);
+});
+
 test('settings entry points preserve a single dispatcher link in each existing page', () => {
   for (const page of ['popup.html', 'options.html']) {
     const source = fs.readFileSync(path.join(root, page), 'utf8');

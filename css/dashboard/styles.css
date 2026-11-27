@@ -132,18 +132,16 @@ html.dark #github-repositories-for-chatgpt {
   display: inline-flex;
   height: 32px;
   justify-content: center;
-  padding: 5px;
+  padding: 2px;
   width: 32px;
 }
 
-#github-repositories-for-chatgpt .ghrc-sort-icon {
-  fill: none;
-  height: 18px;
-  stroke: currentColor;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-width: 2;
-  width: 18px;
+#github-repositories-for-chatgpt .ghrc-dispatcher-art {
+  display: block;
+  height: 26px;
+  object-fit: contain;
+  pointer-events: none;
+  width: 26px;
 }
 
 #github-repositories-for-chatgpt .ghrc-chat-dispatcher:hover,

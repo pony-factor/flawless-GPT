@@ -1,6 +1,6 @@
 # Chat dispatcher
 
-Open **ChatGPT → Open chat dispatcher** from the Flawless popup or full settings. The dispatcher is part of Flawless and uses its existing GitHub connection. It does not need a separate extension, native app, terminal process, API key, or running Codex session.
+Open the pony artwork button at the upper right of the Flawless repository dashboard (**Bulk merge**), or use **ChatGPT → Open chat dispatcher** from the Flawless popup or full settings. The dispatcher is part of Flawless and uses its existing GitHub connection. It does not need a separate extension, native app, terminal process, API key, or running Codex session.
 
 ## Start or resume
 

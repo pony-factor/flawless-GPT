@@ -568,15 +568,11 @@
       dispatcher.setAttribute("aria-label", "Bulk merge");
       dispatcher.title = "Open Chat Dispatcher in a new tab";
 
-      const icon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-      icon.setAttribute("class", "ghrc-sort-icon");
-      icon.setAttribute("viewBox", "0 0 24 24");
+      const icon = document.createElement("img");
+      icon.className = "ghrc-dispatcher-art";
+      icon.src = chrome.runtime.getURL("artwork/chat-dispatcher.svg");
+      icon.alt = "";
       icon.setAttribute("aria-hidden", "true");
-      for (const data of ["M4 6h10", "M4 12h7", "M4 18h4", "M18 5v14", "m14 15 4 4 4-4"]) {
-        const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-        path.setAttribute("d", data);
-        icon.append(path);
-      }
       dispatcher.append(icon);
       dispatcher.addEventListener("click", () => {
         if (!context.active()) return;
