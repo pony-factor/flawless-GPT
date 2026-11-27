@@ -537,9 +537,9 @@
   }
 
   function conversationRoot() {
-    // Entity details render assistant messages and completion controls too.
-    // Only the main conversation can release a queued prompt.
-    return document.querySelector('[aria-label="Conversation"]') || document;
+    // ChatGPT keeps a hidden conversation mounted alongside the visible one.
+    // Entity details can also render messages outside the conversation.
+    return [...document.querySelectorAll('[aria-label="Conversation"]')].find(isVisible) || document;
   }
 
   function isStoppedThinkingControl(node) {
@@ -1666,8 +1666,9 @@
       // Keep the draft until storage accepts it, and preserve edits made while saving.
       if (queued && composer === findComposerInput() && textMatchesComposer(composer, text)
         && mentionsMatch(composer, snapshot.mentions)) {
+        // replaceComposerText already focuses the composer before clearing it.
+        // Do not reclaim focus after its asynchronous settle delay.
         await replaceComposerText(composer, "");
-        composer.focus({ preventScroll: true });
       }
       return queued;
     } finally {
@@ -2079,8 +2080,8 @@
         }
         if (queued && composer === findComposerInput() && textMatchesComposer(composer, text)
           && mentionsMatch(composer, snapshot.mentions)) {
+          // Preserve any focus change during the asynchronous clear.
           await replaceComposerText(composer, "");
-          composer.focus({ preventScroll: true });
         }
       }
     });

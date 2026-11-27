@@ -159,14 +159,14 @@ test('the app navigation rail uses its native Home button for the mascot', async
   const page = await fixture({
     html: `<style>
       .home-icon { display: inline-flex; position: relative; }
-      .home-indicator { position: absolute; right: 4px; top: 4px; z-index: 1;
+      .absolute.end-0.top-0 { position: absolute; right: 4px; top: 4px; z-index: 1;
         width: 8px; height: 8px; background: green; border-radius: 50%; }
     </style><nav aria-label="App navigation" data-app-navigation-rail="true">
       <button data-sidebar-destination="builtin:home" onclick="window.homeClicks=(window.homeClicks||0)+1">
-        <span class="home-icon"><svg aria-hidden="true" width="20" height="20"></svg><span class="home-indicator" aria-hidden="true"></span></span>
+        <span class="home-icon"><svg aria-hidden="true" width="20" height="20"></svg><span class="home-indicator absolute end-0 top-0" aria-hidden="true"></span></span>
         <span>Home</span>
       </button>
-      <button data-sidebar-destination="builtin:space">Space</button>
+      <button data-sidebar-destination="builtin:space" style="position: relative">Space<span class="absolute end-0 top-0" aria-hidden="true"></span></button>
     </nav><header><button aria-label="New chat"><svg width="20" height="20"></svg></button></header>`,
     route: '/c/example',
   });
@@ -176,6 +176,8 @@ test('the app navigation rail uses its native Home button for the mascot', async
   assert.equal(await page.locator('.ghrc-flawless-mascot-image').count(), 1);
   assert.equal(await home.locator('svg').isVisible(), false);
   assert.equal(await newChat.locator('svg').isVisible(), true);
+  assert.equal(await home.locator('.home-indicator').isVisible(), true);
+  assert.equal(await page.getByRole('button', { name: 'Space', exact: true }).locator('.absolute.end-0.top-0').isVisible(), true);
   assert.equal(await mascot.evaluate(image => {
     const indicator = image.parentElement.querySelector('.home-indicator');
     const { x, y, width, height } = indicator.getBoundingClientRect();
@@ -198,6 +200,7 @@ test('the app navigation rail uses its native Home button for the mascot', async
   });
   assert.equal(await mascot.count(), 0);
   assert.equal(await home.locator('svg').isVisible(), true);
+  assert.equal(await home.locator('.home-indicator').isVisible(), true);
   assert.deepEqual(page.errors, []);
   await page.close();
 });

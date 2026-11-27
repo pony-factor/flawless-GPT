@@ -390,6 +390,24 @@ for (const liveMarkup of [false, true]) test(`queue follows the latest reply aft
   await p.close();
 });
 
+test('queue follows the visible conversation when a hidden conversation precedes it', async () => {
+  const p = await fixture({ active: true, liveMarkup: true });
+  try {
+    await p.evaluate(() => {
+      const turns = document.getElementById('turns');
+      turns.setAttribute('aria-label', 'Conversation');
+      turns.insertAdjacentHTML('beforebegin', '<div hidden aria-label="Conversation"></div>');
+    });
+    await enqueue(p, 'Follow the visible reply');
+    await p.evaluate(() => finish());
+    await sentCount(p, 1);
+    assert.deepEqual(await p.evaluate(() => sent), ['Follow the visible reply']);
+    assert.deepEqual(p.errors, []);
+  } finally {
+    await p.close();
+  }
+});
+
 test('standalone queue button is opt-in and follows setting changes', async () => {
   const p = await fixture({ queueButton: false });
   assert.equal(await p.locator('#ghrc-message-queue-button').count(), 0);
@@ -695,6 +713,35 @@ test('ArrowUp from an empty composer edits the lowest-priority queued message', 
   assert.equal(await queued.nth(1).inputValue(), 'Lowest priority updated');
   assert.deepEqual(p.errors, []);
   await p.close();
+});
+
+test('clearing a queued composer does not steal focus from a queued message editor', async () => {
+  const p = await fixture({ active: true });
+  try {
+    await enqueue(p, 'First priority');
+    await p.evaluate(() => {
+      const composer = document.querySelector('[data-composer-markdown]');
+      const onClear = () => {
+        if (read().trim() || document.querySelectorAll('.ghrc-message-queue-editor').length !== 2) return;
+        composer.removeEventListener('input', onClear);
+        composer.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true, cancelable: true }));
+        window.focusedDuringClear = document.activeElement === document.querySelectorAll('.ghrc-message-queue-editor')[1];
+      };
+      composer.addEventListener('input', onClear);
+    });
+    await enqueue(p, 'Lowest priority');
+    await p.waitForFunction(() => window.focusedDuringClear === true);
+    // The contenteditable clear awaits a 40 ms native-editor settle delay.
+    await p.waitForTimeout(100);
+    const queued = p.locator('.ghrc-message-queue-editor').nth(1);
+    assert.equal(await queued.evaluate(el => document.activeElement === el), true);
+    await p.keyboard.type(' updated');
+    assert.equal(await queued.inputValue(), 'Lowest priority updated');
+    assert.equal(await p.locator('[data-composer-markdown]').innerText(), '');
+    assert.deepEqual(p.errors, []);
+  } finally {
+    await p.close();
+  }
 });
 
 test('edit, reorder, and remove preserve FIFO while Send bypasses the queue', async () => {
