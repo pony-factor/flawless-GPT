@@ -108,6 +108,38 @@ test('unconnected dashboard preview cannot dispatch tasks', () => {
   }
 });
 
+test('the full dispatcher still appears only after the final verified merge', () => {
+  const { JSDOM } = require('jsdom');
+  const html = fs.readFileSync(path.join(root, 'chat-dispatcher.html'), 'utf8');
+  const script = fs.readFileSync(path.join(root, 'js/dispatcher/dashboard.js'), 'utf8');
+  const dom = new JSDOM(html, { url: 'https://example.test/chat-dispatcher.html?session=legacy', runScripts: 'outside-only' });
+  const { window } = dom;
+  let onChange;
+  try {
+    window.chrome = {
+      runtime: { id: 'test', sendMessage: () => new Promise(() => {}) },
+      storage: { onChanged: { addListener: listener => { onChange = listener; } } },
+    };
+    window.eval(script);
+    const success = window.document.getElementById('dispatch-success');
+    const updateTasks = (...statuses) => onChange({ chatDispatcherState: { newValue: {
+      paused: false, tasks: statuses.map(status => ({ status })), workers: [], events: [],
+    } } }, 'local');
+    assert.equal(success.hidden, true);
+    updateTasks('merged', 'running');
+    assert.equal(success.hidden, true, 'an assigned but unverified task keeps the image hidden');
+    updateTasks('merged', 'previously-sent');
+    assert.equal(success.hidden, true, 'a previously sent task is not itself a verified merge');
+    updateTasks('merged', 'merged');
+    assert.equal(success.hidden, false);
+    assert.equal(success.querySelector('img').getAttribute('src'), 'artwork/chat-dispatcher.jpg');
+    updateTasks('pending');
+    assert.equal(success.hidden, true, 'a new dispatch clears the previous success image');
+  } finally {
+    window.close();
+  }
+});
+
 test('all 27 Studio scenarios remain covered after removing the obsolete prototype', () => {
   const inventory = JSON.parse(fs.readFileSync(
     path.join(root, 'tests/fixtures/chat-dispatcher-studio-coverage.json'), 'utf8'));

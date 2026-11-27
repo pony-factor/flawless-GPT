@@ -7,6 +7,8 @@ Open the pony artwork button at the upper right of the Flawless repository dashb
 1. Enter the target GitHub repository as `owner/repository`. While paused, either **paste checklist items** into the dashboard and select **Import incomplete items**, or import a JSON task manifest. The Studio manifest format remains supported; previously submitted tasks stay excluded from new assignments. A pasted Markdown checklist accepts `- [ ]` and `- [x]` entries, numbered checkboxes, ordinary bullet lists, and one task per line. Completed `[x]` items are skipped; Markdown headings are copied into each task as section context.
 2. Press **Start**. On the first start, the dispatcher opens ten fresh ChatGPT tabs automatically. It reuses those same ten chats for later tasks after verified merges. Resuming an existing pool keeps its current chats. Every slot works independently: a busy chat stays untouched, while a completed chat can move to its next task after merge verification.
 
+The dashboard displays the full artwork once GitHub has verified every task’s merge.
+
 **Pause** immediately prevents further submissions. Browser startup and extension updates leave the dispatcher paused. Closing the dashboard does not stop a running dispatcher; its extension worker and periodic alarm continue in the background.
 
 
