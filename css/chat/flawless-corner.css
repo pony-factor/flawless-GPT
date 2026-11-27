@@ -41,6 +41,16 @@
   display: none;
 }
 
+/* Keep native Home indicators behind the artwork in the Home button's own stack. */
+[data-app-navigation-rail] [data-sidebar-destination="builtin:home"]:has(.ghrc-flawless-mascot-image) {
+  isolation: isolate;
+}
+
+[data-app-navigation-rail] [data-sidebar-destination="builtin:home"] .ghrc-flawless-mascot-image {
+  position: relative;
+  z-index: 10;
+}
+
 #ghrc-flawless-corner:focus-visible {
   outline: 2px solid #a68df3;
   outline-offset: -2px;
