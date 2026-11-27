@@ -25,7 +25,11 @@ async function fixture({ delayed = false } = {}) {
         return { ...defaults, pinnedRepositories: ['owner/repo'], showClipboardSendButton: true, showSpellcheckGptLauncher: true };
       }, set: async () => {}, remove: async () => {},
     }, onChanged: { addListener(fn) { listeners.push(fn); } } } };
-    window.__ghrcMessageQueue = { findActionButton: () => document.getElementById('send'), enqueueText: async t => { window.queued = t; return true; } };
+    window.__ghrcMessageQueue = {
+      findComposerInput: () => document.getElementById('prompt-textarea'),
+      findActionButton: () => document.getElementById('send'),
+      sendClipboardText: async t => { window.queued = t; return true; },
+    };
   }, { delayed });
   await p.addScriptTag({ content: read('js/core/extension-context.js') });
   return p;
@@ -63,7 +67,12 @@ test('normal warm pins render and unpin', async () => {
 test('pending settings reject safely in display, clipboard, dashboard and spellcheck scripts', async () => {
   const p = await fixture({ delayed: true });
   await p.evaluate(() => document.body.insertAdjacentHTML('beforeend', '<section id="github-repositories-for-chatgpt"><footer class="ghrc-dashboard-footer"></footer></section>'));
-  for (const script of ['chat/compact-header', 'sidebar/collapse-sidebar', 'chat/chat-display', 'composer/clipboard-send', 'dashboard/content', 'launchers/spellcheck-launcher', 'chat/force-high-thinking', 'dashboard/owner-grid', 'chat/hide-cookie-preferences', 'chat/chatgpt-disclaimer', 'chat/block-voice-prompts', 'launchers/youtube-search', 'dashboard/highlighted-pages']) {
+  for (const script of [
+    'chat/compact-header', 'sidebar/collapse-sidebar', 'chat/display', 'composer/clipboard-send',
+    'dashboard/owner-grid', 'dashboard/repository-search-shortcut', 'dashboard/content',
+    'launchers/spellcheck-launcher', 'chat/force-high-thinking', 'chat/hide-cookie-preferences',
+    'chat/disclaimer', 'chat/block-voice-prompts', 'launchers/youtube-search', 'dashboard/highlighted-pages',
+  ]) {
     await p.addScriptTag({ content: read(`js/${script}.js`) });
   }
   await p.evaluate(() => {
@@ -81,17 +90,18 @@ test('clipboard denial preserves the draft, resets the button, and permits a ret
   const p = await fixture();
   await p.evaluate(() => {
     document.getElementById('prompt-textarea').value = 'Partial draft';
+    navigator.clipboard.read = async () => [];
     navigator.clipboard.readText = async () => { throw new DOMException('Denied', 'NotAllowedError'); };
+    document.execCommand = () => false;
   });
   await p.addScriptTag({ content: read('js/composer/clipboard-send.js') });
   const button = p.locator('#ghrc-clipboard-send-button');
   await button.click();
-  assert.equal(await button.isEnabled(), true);
-  assert.match(await button.getAttribute('title'), /paste into the composer/);
+  await p.locator('#ghrc-clipboard-send-button[title*="paste into the composer"]:enabled').waitFor();
   assert.equal(await p.locator('textarea').inputValue(), 'Partial draft');
   await p.evaluate(() => { navigator.clipboard.readText = async () => 'Retry text'; });
   await button.click();
-  assert.equal(await p.evaluate(() => queued), 'Retry text');
+  await p.waitForFunction(() => window.queued === 'Retry text');
   assert.deepEqual(p.errors, []); assert.deepEqual(p.warnings, []);
   await p.close();
 });
