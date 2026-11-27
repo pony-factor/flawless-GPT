@@ -114,10 +114,15 @@ test('the launcher sits before pagination; plugin selection and settings control
         const counter = document.getElementById('ghrc-deep-research-tracker').getBoundingClientRect();
         const game = document.getElementById('ghrc-2048-launcher').getBoundingClientRect();
         const arrows = document.querySelector('.ghrc-pagination').getBoundingClientRect();
-        return { gameBeforeArrows: arrows.left - game.right === 2, arrowsBeforeCounter: arrows.right <= counter.left,
-          sameRow: Math.abs(arrows.top + arrows.height / 2 - game.top - game.height / 2) < 1 };
+        const centerY = rect => rect.top + rect.height / 2;
+        return {
+          gameBeforeArrows: arrows.left - game.right === 2,
+          arrowsBeforeCounter: arrows.right <= counter.left,
+          centered: Math.abs(centerY(arrows) - centerY(game)) < 1
+            && Math.abs(centerY(game) - centerY(counter)) < 1,
+        };
       });
-      assert.deepEqual(positions, { gameBeforeArrows: true, arrowsBeforeCounter: true, sameRow: true });
+      assert.deepEqual(positions, { gameBeforeArrows: true, arrowsBeforeCounter: true, centered: true });
     }
     await page.evaluate(() => {
       const mention = document.createElement('span');

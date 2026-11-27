@@ -545,9 +545,10 @@ html.dark #github-repositories-for-chatgpt {
 
 #github-repositories-for-chatgpt .ghrc-wooten-link-mark {
   filter: var(--ghrc-mark-filter);
-  height: 26px;
+  height: 24px;
   object-fit: contain;
-  width: 26px;
+  transform: rotate(8deg);
+  width: 24px;
 }
 
 #github-repositories-for-chatgpt .ghrc-wooten-link-search input {
@@ -660,13 +661,11 @@ html.dark #github-repositories-for-chatgpt {
 
 #github-repositories-for-chatgpt .ghrc-footer-navigation {
   align-items: center;
-  align-self: end;
   display: flex;
   gap: 2px;
   grid-column: 1;
   grid-row: 1;
   justify-self: start;
-  transform: translateY(-6px);
 }
 
 #github-repositories-for-chatgpt .ghrc-dashboard-footer .ghrc-pagination {
