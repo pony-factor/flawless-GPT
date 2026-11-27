@@ -570,7 +570,7 @@
 
       const icon = document.createElement("img");
       icon.className = "ghrc-dispatcher-art";
-      icon.src = chrome.runtime.getURL("artwork/chat-dispatcher.svg");
+      icon.src = chrome.runtime.getURL("artwork/dispatcher-headshot.png");
       icon.alt = "";
       icon.setAttribute("aria-hidden", "true");
       dispatcher.append(icon);

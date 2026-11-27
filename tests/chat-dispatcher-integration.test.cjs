@@ -18,17 +18,15 @@ test('dispatcher is registered after the existing GitHub and composer infrastruc
 test('dispatcher launcher bundles its attributed transparent artwork', () => {
   const manifest = JSON.parse(fs.readFileSync(path.join(root, 'manifest.json'), 'utf8'));
   assert.ok(manifest.web_accessible_resources.some(entry =>
-    entry.matches.includes('https://chatgpt.com/*') && entry.resources.includes('artwork/chat-dispatcher.svg')));
-  const image = fs.readFileSync(path.join(root, 'artwork/chat-dispatcher.svg'), 'utf8');
-  const original = fs.readFileSync(path.join(root, 'artwork/chat-dispatcher.jpg'));
-  assert.match(image, /<clipPath id="pony">/);
-  assert.match(image, /clip-path="url\(#pony\)"/);
-  const embedded = image.match(/href="data:image\/jpeg;base64,([^"]+)"/);
-  assert.ok(embedded);
-  assert.deepEqual(Buffer.from(embedded[1], 'base64'), original);
+    entry.matches.includes('https://chatgpt.com/*') && entry.resources.includes('artwork/dispatcher-headshot.png')));
+  const image = fs.readFileSync(path.join(root, 'artwork/dispatcher-headshot.png'));
+  assert.equal(image.subarray(0, 8).toString('hex'), '89504e470d0a1a0a');
+  assert.equal(image[25], 6, 'PNG stores RGBA pixels');
+  assert.ok(fs.existsSync(path.join(root, 'artwork/chat-dispatcher.jpg')));
   assert.equal(fs.existsSync(path.join(root, 'artwork/bulk-search.jpg')), false);
   const credits = fs.readFileSync(path.join(root, 'artwork/README.md'), 'utf8');
   assert.match(credits, /chat-dispatcher.*Tamers12345/);
+  assert.match(credits, /dispatcher-headshot\.png/);
 });
 
 test('settings entry points preserve a single dispatcher link in each existing page', () => {

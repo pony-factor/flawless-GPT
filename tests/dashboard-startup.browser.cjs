@@ -21,7 +21,7 @@ test("cached dashboard controls and highlights mount before the host page finish
     }
     entry.matches = ["http://127.0.0.1/*"];
   }
-  for (const file of ["artwork/calligraphy-initials.png", "artwork/detective-zip.png", "artwork/spellcheck-only.jpg", "artwork/chat-dispatcher.svg"]) {
+  for (const file of ["artwork/calligraphy-initials.png", "artwork/detective-zip.png", "artwork/spellcheck-only.jpg", "artwork/dispatcher-headshot.png"]) {
     fs.mkdirSync(path.dirname(path.join(extension, file)), { recursive: true });
     fs.copyFileSync(path.join(root, file), path.join(extension, file));
   }
@@ -145,7 +145,7 @@ test("cached dashboard controls and highlights mount before the host page finish
     assert.equal(await dispatcherArt.count(), 1);
     assert.equal(await dispatcherArt.getAttribute("alt"), "");
     assert.equal(await dispatcherArt.getAttribute("aria-hidden"), "true");
-    assert.match(await dispatcherArt.getAttribute("src"), /\/artwork\/chat-dispatcher\.svg$/);
+    assert.match(await dispatcherArt.getAttribute("src"), /\/artwork\/dispatcher-headshot\.png$/);
     await page.waitForFunction(() => {
       const image = document.querySelector(".ghrc-dispatcher-art");
       return image?.complete && image.naturalWidth > 0;
