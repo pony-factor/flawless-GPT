@@ -19,11 +19,11 @@
     background.setAttribute("width", "28");
     background.setAttribute("height", "20");
     background.setAttribute("rx", "5.5");
-    background.setAttribute("fill", "#ff0000");
+    background.setAttribute("fill", "currentColor");
 
     const play = document.createElementNS("http://www.w3.org/2000/svg", "path");
     play.setAttribute("d", "M11 5.5 19 10l-8 4.5Z");
-    play.setAttribute("fill", "#fff");
+    play.setAttribute("fill", "var(--ghrc-canvas)");
 
     svg.append(background, play);
     return svg;
@@ -45,8 +45,12 @@
     const form = document.createElement("form");
     form.className = YOUTUBE_SEARCH_CLASS;
 
-    const label = document.createElement("label");
-    label.append(youtubeLogo());
+    const homepage = document.createElement("a");
+    homepage.href = "https://www.youtube.com/";
+    homepage.className = "ghrc-youtube-home";
+    homepage.setAttribute("aria-label", "Open YouTube homepage");
+    homepage.title = "Open YouTube homepage";
+    homepage.append(youtubeLogo());
 
     const input = document.createElement("input");
     input.type = "search";
@@ -54,16 +58,14 @@
     input.placeholder = "vids";
     input.setAttribute("aria-label", "Search YouTube");
     input.autocomplete = "off";
-    label.append(input);
 
     const submit = document.createElement("button");
     submit.type = "submit";
     submit.className = "ghrc-youtube-submit";
     submit.setAttribute("aria-label", "Search YouTube");
     submit.title = "Search YouTube";
-    submit.append(youtubeLogo());
 
-    form.append(label, submit);
+    form.append(homepage, input, submit);
     form.addEventListener("submit", (event) => {
       event.preventDefault();
       const query = input.value.trim();

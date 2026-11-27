@@ -157,15 +157,13 @@ test("cached dashboard controls and highlights mount before the host page finish
     assert.equal(await bulkMerge.count(), 0, "hiding the shortcut does not remove the dashboard");
     await worker.evaluate(() => chrome.storage.local.set({ showBulkMergeButton: true }));
     await bulkMerge.waitFor({ state: "visible" });
-    const iconSubmit = page.locator(".ghrc-wooten-link-mark-submit");
+    const markLink = page.getByRole("link", { name: "Open WootenLink homepage" });
     const wootenInput = page.locator(".ghrc-wooten-link-search input");
-    assert.equal(await iconSubmit.getAttribute("type"), "submit");
-    assert.equal(await iconSubmit.getAttribute("aria-label"), "Search WootenLink");
-    assert.equal(await iconSubmit.locator("img.ghrc-wooten-link-mark").count(), 1);
-    // Empty searches should focus the field instead of navigating.
-    await iconSubmit.click();
-    assert.equal(await wootenInput.evaluate(input => document.activeElement === input), true);
+    assert.equal(await markLink.locator("img.ghrc-wooten-link-mark").count(), 1);
     const searchSubmit = page.locator(".ghrc-wooten-link-submit");
+    // Empty searches should focus the field instead of navigating.
+    await searchSubmit.click();
+    assert.equal(await wootenInput.evaluate(input => document.activeElement === input), true);
     await page.waitForFunction(() =>
       document.querySelector(".ghrc-wooten-link-zipp-placeholder")?.naturalWidth > 0);
     const desktop = page.viewportSize();
@@ -232,6 +230,12 @@ test("cached dashboard controls and highlights mount before the host page finish
       !document.documentElement.style.getPropertyValue("--ghrc-dashboard-link-light"));
     assert.deepEqual(await linkColors(), defaultColors);
     assert.deepEqual(errors, []);
+
+    await page.route("https://wooten.link/", route => route.fulfill({ body: "WootenLink" }));
+    await Promise.all([
+      page.waitForURL("https://wooten.link/"),
+      markLink.click(),
+    ]);
   } finally {
     stalledResponse?.end();
     clearTimeout(markupTimer);
