@@ -390,6 +390,24 @@ for (const liveMarkup of [false, true]) test(`queue follows the latest reply aft
   await p.close();
 });
 
+test('queue follows the visible conversation when a hidden conversation precedes it', async () => {
+  const p = await fixture({ active: true, liveMarkup: true });
+  try {
+    await p.evaluate(() => {
+      const turns = document.getElementById('turns');
+      turns.setAttribute('aria-label', 'Conversation');
+      turns.insertAdjacentHTML('beforebegin', '<div hidden aria-label="Conversation"></div>');
+    });
+    await enqueue(p, 'Follow the visible reply');
+    await p.evaluate(() => finish());
+    await sentCount(p, 1);
+    assert.deepEqual(await p.evaluate(() => sent), ['Follow the visible reply']);
+    assert.deepEqual(p.errors, []);
+  } finally {
+    await p.close();
+  }
+});
+
 test('standalone queue button is opt-in and follows setting changes', async () => {
   const p = await fixture({ queueButton: false });
   assert.equal(await p.locator('#ghrc-message-queue-button').count(), 0);
