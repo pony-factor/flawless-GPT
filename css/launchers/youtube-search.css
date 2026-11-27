@@ -18,7 +18,7 @@
 #github-repositories-for-chatgpt .ghrc-youtube-search {
   align-items: center;
   display: flex;
-  gap: 6px;
+  gap: 7px;
   flex: 1 1 0;
   max-width: 280px;
   min-width: 0;
@@ -26,15 +26,19 @@
   width: 100%;
 }
 
-#github-repositories-for-chatgpt .ghrc-youtube-search label {
-  align-items: center;
-  color: var(--ghrc-fg-muted);
-  display: flex;
-  font-size: 12px;
-  gap: 7px;
-  flex: 1;
-  margin-right: 36px;
-  min-width: 0;
+#github-repositories-for-chatgpt .ghrc-youtube-home {
+  color: var(--ghrc-dashboard-accent-light, #1a7f37);
+  flex: none;
+}
+
+html.dark #github-repositories-for-chatgpt .ghrc-youtube-home {
+  color: var(--ghrc-dashboard-accent-dark, #3fb950);
+}
+
+@media (prefers-color-scheme: dark) {
+  html:not(.light) #github-repositories-for-chatgpt .ghrc-youtube-home {
+    color: var(--ghrc-dashboard-accent-dark, #3fb950);
+  }
 }
 
 #github-repositories-for-chatgpt .ghrc-youtube-logo {
@@ -49,7 +53,9 @@
   border: 1px solid var(--ghrc-border);
   border-radius: 6px;
   color: var(--ghrc-fg);
+  flex: 1;
   font: 12px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  margin-right: 36px;
   min-width: 0;
   padding: 5px 34px 5px 8px;
   width: 100%;
@@ -87,14 +93,12 @@
   width: 28px;
 }
 
-#github-repositories-for-chatgpt .ghrc-youtube-submit > .ghrc-youtube-logo {
-  display: none;
-}
-
+#github-repositories-for-chatgpt .ghrc-youtube-home:hover,
 #github-repositories-for-chatgpt .ghrc-youtube-submit:hover {
   opacity: 0.85;
 }
 
+#github-repositories-for-chatgpt .ghrc-youtube-home:focus-visible,
 #github-repositories-for-chatgpt .ghrc-youtube-submit:focus-visible,
 #github-repositories-for-chatgpt .ghrc-youtube-search input:focus-visible {
   outline: 2px solid var(--ghrc-accent);
@@ -118,11 +122,6 @@
 
   #github-repositories-for-chatgpt .ghrc-youtube-search {
     width: 100%;
-  }
-
-  #github-repositories-for-chatgpt .ghrc-youtube-search label,
-  #github-repositories-for-chatgpt .ghrc-youtube-search input {
-    flex: 1;
   }
 }
 
