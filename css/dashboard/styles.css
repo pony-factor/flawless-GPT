@@ -495,7 +495,7 @@ html.dark #github-repositories-for-chatgpt {
   align-items: center;
   border-top: 1px solid var(--ghrc-border);
   display: grid;
-  grid-template-columns: 50px minmax(0, 1fr) auto;
+  grid-template-columns: minmax(50px, max-content) minmax(0, 1fr) auto;
   min-height: 50px;
   padding: 8px 16px;
 }
@@ -545,9 +545,10 @@ html.dark #github-repositories-for-chatgpt {
 
 #github-repositories-for-chatgpt .ghrc-wooten-link-mark {
   filter: var(--ghrc-mark-filter);
-  height: 26px;
+  height: 24px;
   object-fit: contain;
-  width: 26px;
+  transform: rotate(8deg);
+  width: 24px;
 }
 
 #github-repositories-for-chatgpt .ghrc-wooten-link-search input {
@@ -658,16 +659,20 @@ html.dark #github-repositories-for-chatgpt {
   text-align: center;
 }
 
-#github-repositories-for-chatgpt .ghrc-dashboard-footer .ghrc-pagination {
-  border-top: 0;
+#github-repositories-for-chatgpt .ghrc-footer-navigation {
+  align-items: center;
+  display: flex;
   gap: 2px;
   grid-column: 1;
   grid-row: 1;
-  align-self: end;
   justify-self: start;
+}
+
+#github-repositories-for-chatgpt .ghrc-dashboard-footer .ghrc-pagination {
+  border-top: 0;
+  gap: 2px;
   min-height: 0;
   padding: 0;
-  transform: translateY(-6px);
 }
 
 #github-repositories-for-chatgpt .ghrc-dashboard-footer .ghrc-pagination button {
@@ -748,7 +753,7 @@ html.dark #github-repositories-for-chatgpt {
     flex: 1;
   }
 
-  #github-repositories-for-chatgpt .ghrc-dashboard-footer .ghrc-pagination {
+  #github-repositories-for-chatgpt .ghrc-footer-navigation {
     grid-column: 1;
     grid-row: 3;
     justify-self: start;
@@ -773,7 +778,7 @@ html.dark #github-repositories-for-chatgpt {
     row-gap: 8px;
   }
 
-  #github-repositories-for-chatgpt .ghrc-dashboard-footer .ghrc-pagination {
+  #github-repositories-for-chatgpt .ghrc-footer-navigation {
     grid-column: 1;
     grid-row: 3;
     justify-self: start;

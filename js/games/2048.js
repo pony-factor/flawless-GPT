@@ -164,9 +164,9 @@
 
   function removeLauncher() {
     const launcher = document.getElementById(LAUNCHER_ID);
-    const left = launcher?.closest(".ghrc-2048-footer-left");
+    const navigation = launcher?.parentElement;
     launcher?.remove();
-    if (left && !left.childElementCount) left.remove();
+    if (navigation && !navigation.childElementCount) navigation.remove();
   }
 
   function installLauncher() {
@@ -180,13 +180,13 @@
     );
     if (!footer || footer.querySelector(`#${LAUNCHER_ID}`)) return;
 
-    let left = footer.querySelector(".ghrc-2048-footer-left");
-    if (!left) {
-      left = document.createElement("div");
-      left.className = "ghrc-2048-footer-left";
-      footer.prepend(left);
+    let navigation = footer.querySelector(".ghrc-footer-navigation");
+    if (!navigation) {
+      navigation = document.createElement("div");
+      navigation.className = "ghrc-footer-navigation";
+      footer.prepend(navigation);
     }
-    left.append(createLauncher());
+    navigation.prepend(createLauncher());
   }
 
   function setLauncherEnabled(enabled) {

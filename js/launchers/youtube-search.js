@@ -102,7 +102,7 @@
         group = document.createElement("div");
         group.className = SEARCH_GROUP_CLASS;
         const firstTrailingControl = footer.querySelector(
-          ":scope > .ghrc-pagination",
+          ":scope > .ghrc-footer-navigation",
         );
         footer.insertBefore(group, firstTrailingControl);
       }
