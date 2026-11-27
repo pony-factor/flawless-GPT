@@ -43,6 +43,7 @@ function createWorker({ storage = {}, loadTokens, fetchImpl }) {
   const source = fs.readFileSync(require.resolve("../js/core/service-worker.js"), "utf8");
   const local = { ...storage };
   const tokenCalls = [];
+  const { promise: completeCacheWrite, resolve: resolveCompleteCacheWrite } = Promise.withResolvers();
   let messageListener = null;
   const chrome = {
     storage: {
@@ -54,7 +55,12 @@ function createWorker({ storage = {}, loadTokens, fetchImpl }) {
           }
           return values;
         },
-        set: async (values) => Object.assign(local, values),
+        set: async (values) => {
+          Object.assign(local, values);
+          if (values.repositoryPayloadCacheV3?.complete) {
+            resolveCompleteCacheWrite(values.repositoryPayloadCacheV3);
+          }
+        },
       },
       session: {
         get: async (defaults = {}) => ({ ...defaults }),
@@ -106,7 +112,7 @@ function createWorker({ storage = {}, loadTokens, fetchImpl }) {
     });
   }
 
-  return { local, send, tokenCalls };
+  return { local, send, tokenCalls, completeCacheWrite };
 }
 
 test("repository cache hits do not refresh GitHub App credentials or depend on the access token", async () => {
@@ -170,7 +176,7 @@ test("repository cache hits do not refresh GitHub App credentials or depend on t
   assert.equal(networkCalls, 0);
 });
 
-test("cold repository loads return a first-page payload while the complete refresh is still paging", async () => {
+test("cold repository loads return a first-page payload while the complete refresh is still paging", { timeout: 5000 }, async () => {
   const firstPage = Array.from({ length: 100 }, (_, index) => makeRepository(index));
   let releaseSecondPage;
   const secondPageGate = new Promise((resolve) => {
@@ -223,13 +229,12 @@ test("cold repository loads return a first-page payload while the complete refre
   assert.equal(cachedPartial.partial, true);
 
   releaseSecondPage();
-  await new Promise((resolve) => setTimeout(resolve, 20));
-  assert.equal(worker.local.repositoryPayloadCacheV3.complete, true);
-  assert.equal(worker.local.repositoryPayloadCacheV3.payload.repositories[0].owner.displayName, "Octo");
+  const refreshed = await worker.completeCacheWrite;
+  assert.equal(refreshed.payload.repositories[0].owner.displayName, "Octo");
 });
 
 
-test("GitHub App interaction searches use explicit issue types and replace the old cache", async () => {
+test("GitHub App interaction searches use explicit issue types and replace the old cache", { timeout: 5000 }, async () => {
   const interactionQueries = [];
   const localRepository = makeRepository(0);
   const upstreamRepository = {
@@ -313,9 +318,7 @@ test("GitHub App interaction searches use explicit issue types and replace the o
     ["octo/repo-1"],
   );
 
-  await new Promise((resolve) => setTimeout(resolve, 30));
-  const refreshed = worker.local.repositoryPayloadCacheV3;
-  assert.equal(refreshed.complete, true);
+  const refreshed = await worker.completeCacheWrite;
   assert.deepEqual(interactionQueries, ["involves:octo is:issue", "involves:octo is:pull-request"]);
   assert.deepEqual(
     Array.from(refreshed.payload.repositories, ({ fullName }) => fullName),

@@ -51,7 +51,7 @@ When moving a file, update the manifest, extension HTML references, worker impor
 Use Node.js 22 or 24 and Python 3.11 or 3.12 to match CI. From the repository root:
 
 ```sh
-npm install --no-save --package-lock=false playwright@1.56.1 jsdom@26.1.0
+npm install --no-save --package-lock=false playwright@1.58.2 jsdom@26.1.0
 git ls-files -z '*.js' '*.cjs' | xargs -0 -n 1 node --check
 node tests/ci/validate-extension.cjs
 node --test tests/*.test.cjs
