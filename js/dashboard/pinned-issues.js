@@ -7,8 +7,8 @@
   function makeLink(issue) {
     const a=document.createElement("a");a.className="ghrc-pinned-issue";
     a.href=issue.url;a.rel="noopener noreferrer";a.title=issue.url;
-    const title=document.createElement("strong");title.textContent=issue.label||`${issue.repository} #${issue.number}`;
-    const subtitle=document.createElement("small");subtitle.textContent=`${issue.owner}/${issue.repository} · #${issue.number}`;
+    const title=document.createElement("strong");title.textContent=issue.label||`${issue.repository} ${issue.type === "pull" ? "PR " : ""}#${issue.number}`;
+    const subtitle=document.createElement("small");subtitle.textContent=`${issue.owner}/${issue.repository} · ${issue.type === "pull" ? "PR " : "Issue "}#${issue.number}`;
     a.append(title,subtitle);return a;
   }
   function sync(widget,section) {
@@ -27,8 +27,8 @@
     document.getElementById(ID)?.remove();
     if(!issues.length)return;
     const section=document.createElement("section");section.id=ID;
-    section.className="ghrc-pinned-issues";section.setAttribute("aria-label","Pinned issues");
-    const title=document.createElement("h2");title.textContent="Pinned issues";
+    section.className="ghrc-pinned-issues";section.setAttribute("aria-label","Pinned issues & PRs");
+    const title=document.createElement("h2");title.textContent="Pinned issues & PRs";
     const row=document.createElement("div");row.className="ghrc-pinned-issues-row";
     row.append(...issues.map(makeLink));section.append(title,row);
     sync(widget,section);

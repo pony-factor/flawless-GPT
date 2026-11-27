@@ -12,9 +12,9 @@ The dashboard appears on the ChatGPT new-chat page. Configure public GitHub acco
 | --- | --- |
 | Repository search | Press Alt+R by default, or set your own shortcut. Search the loaded repository index; optionally enable custom repository search for explicit owner/repository entries. |
 | Repository pins | Use Pin on a repository, then reorder or remove pins in settings. |
-| Pinned issues | Add a GitHub issue URL under Dashboard → Pinned issues, optionally give it a label, and reorder it. Up to 24 unique issues are supported. Pull request URLs are not issue URLs for this control. These are local shortcuts, not changes to GitHub issues. |
+| Pinned issues & PRs | Add a GitHub issue or pull request URL under Dashboard → Pinned issues & PRs, optionally give it a label, and reorder it. Up to 24 unique links are supported across both types. These are local shortcuts, not changes to GitHub issues or pull requests. |
 | Highlights | Add an HTTP(S) webpage under Dashboard → Highlights. Edit its display title, refresh its preview, reorder it, or remove it. Preview cards use fetched metadata and available artwork, falling back when a site cannot supply a preview. |
-| Dashboard colors | Independently customize light/dark accents and links to repositories, owners, pinned issues and search overrides; restore defaults individually or together. |
+| Dashboard colors | Independently customize light/dark accents and links to repositories, owners, pinned issues and PRs, and search overrides; restore defaults individually or together. |
 | YouTube / Wooten link search | The Dashboard settings expose separate launcher switches. These are distinct from repository search. |
 
 Highlights fetch remote content to construct previews. HTTPS is included in the extension's host permissions; HTTP may need an additional site permission. A missing preview does not imply that a website is unavailable in a normal browser tab. Private repository visibility depends on the configured GitHub credentials.

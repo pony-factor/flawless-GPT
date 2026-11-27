@@ -1,21 +1,22 @@
 (() => {
   "use strict";
   const MAX_ISSUES = 24;
-  const PATH = /^\/([a-z0-9-]+)\/([a-z0-9_.-]+)\/issues\/([1-9][0-9]*)\/?$/i;
+  const PATH = /^\/([a-z0-9-]+)\/([a-z0-9_.-]+)\/(issues|pull)\/([1-9][0-9]*)\/?$/i;
   function parseIssueUrl(value) {
     const raw = String(value || "").trim();
     let url;
     try { url = new URL(/^github\.com\//i.test(raw) ? "https://" + raw : raw); }
-    catch { throw new Error("Enter a GitHub issue URL, such as https://github.com/owner/repo/issues/123."); }
+    catch { throw new Error("Enter a GitHub issue or pull request URL, such as https://github.com/owner/repo/issues/123."); }
     const parts = PATH.exec(url.pathname);
     if (url.protocol !== "https:" || url.hostname.toLowerCase() !== "github.com" ||
         url.port || url.username || url.password || !parts)
-      throw new Error("Only GitHub issue URLs ending in /owner/repo/issues/123 are supported.");
-    const number = Number(parts[3]);
+      throw new Error("Only GitHub issue and pull request URLs ending in /owner/repo/issues/123 or /owner/repo/pull/123 are supported.");
+    const number = Number(parts[4]);
     if (!Number.isSafeInteger(number) || number < 1)
-      throw new Error("The issue number must be a positive integer.");
-    const [, owner, repository] = parts;
-    return { url: `https://github.com/${owner}/${repository}/issues/${number}`, owner, repository, number };
+      throw new Error("The issue or pull request number must be a positive integer.");
+    const [, owner, repository, path] = parts;
+    const type = path.toLowerCase() === "pull" ? "pull" : "issues";
+    return { url: `https://github.com/${owner}/${repository}/${type}/${number}`, owner, repository, number, type };
   }
   function normalizePinnedIssues(value) {
     const seen = new Set(), result = [];

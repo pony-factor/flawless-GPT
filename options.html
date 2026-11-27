@@ -165,7 +165,7 @@
         <hr class="section-divider" />
         <fieldset id="dashboard-color-settings" aria-label="Dashboard color settings">
           <legend>Dashboard colors</legend>
-          <p class="help">Set dashboard accents and link colors separately for light and dark modes. Choose a swatch or enter any six-digit HEX value (with or without #). Repository and search-override links inherit the accent unless customized; owner names and pinned issue titles retain their native colors by default. Default restores the inherited color; changes apply to open dashboards.</p>
+          <p class="help">Set dashboard accents and link colors separately for light and dark modes. Choose a swatch or enter any six-digit HEX value (with or without #). Repository and search-override links inherit the accent unless customized; owner names and pinned issue and PR titles retain their native colors by default. Default restores the inherited color; changes apply to open dashboards.</p>
           <div id="dashboard-color-grid" class="composer-color-grid"></div>
           <button id="dashboard-color-reset" type="button" class="secondary">Restore dashboard colors</button>
         </fieldset>
@@ -181,12 +181,12 @@
 
         <hr class="section-divider" />
         <fieldset id="pinned-issues-settings">
-          <legend>Pinned issues</legend>
-          <p class="help">Pin GitHub issues below repositories and above Highlights. Give them optional labels, reorder, or remove. Links are stored locally; issue metadata is not fetched.</p>
+          <legend>Pinned issues &amp; PRs</legend>
+          <p class="help">Pin GitHub issues and pull requests below repositories and above Highlights. Give them optional labels, reorder, or remove. Links are stored locally; metadata is not fetched.</p>
           <div class="pinned-issue-add">
-            <input id="pinned-issue-url" type="url" inputmode="url" spellcheck="false" placeholder="https://github.com/owner/repo/issues/123" aria-label="GitHub issue URL" />
-            <button id="add-pinned-issue" class="secondary" type="button">Pin issue</button>
-            <input id="pinned-issue-label" type="text" maxlength="120" placeholder="Label (optional)" aria-label="Optional pinned issue label" />
+            <input id="pinned-issue-url" type="url" inputmode="url" spellcheck="false" placeholder="https://github.com/owner/repo/issues/123" aria-label="GitHub issue or pull request URL" />
+            <button id="add-pinned-issue" class="secondary" type="button">Pin link</button>
+            <input id="pinned-issue-label" type="text" maxlength="120" placeholder="Label (optional)" aria-label="Optional pinned link label" />
           </div>
           <p id="pinned-issues-status" class="help pinned-issues-status" role="status" aria-live="polite"></p>
           <div id="pinned-issues-list" class="pinned-issues-settings-list"></div>
@@ -661,8 +661,8 @@
         <span class="drag-handle" aria-hidden="true">⋮⋮</span>
         <span class="pinned-issue-copy"><strong class="pinned-issue-name"></strong><small class="pinned-issue-repository"></small></span>
         <span class="pinned-issue-controls">
-          <button class="secondary move-issue-up" type="button" aria-label="Move issue up">↑</button>
-          <button class="secondary move-issue-down" type="button" aria-label="Move issue down">↓</button>
+          <button class="secondary move-issue-up" type="button" aria-label="Move pin up">↑</button>
+          <button class="secondary move-issue-down" type="button" aria-label="Move pin down">↓</button>
           <button class="secondary rename-issue" type="button">Rename</button>
           <button class="secondary remove-issue" type="button">Remove</button>
         </span>

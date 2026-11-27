@@ -173,7 +173,7 @@ Under **ChatGPT → Chat bar colors**, choose independent opt-in colors for the 
 
 ### Dashboard accent and link colors
 
-Under **Dashboard → Dashboard colors** in both the extension popup and full settings, set independent light- and dark-mode colors for dashboard accents and links to repositories, owners, pinned issues and search overrides. Each swatch has a **custom HEX field** accepting six digits with or without the `#` prefix. Changes are stored locally under `dashboardColors` and update open dashboards immediately. Repository and search-override links follow the accent unless customized; owner names and pinned issue titles retain their default colors until a link override is set; **Default** restores an individual color and **Restore dashboard colors** clears all four overrides. Existing **Chat bar colors** continue to support HEX entry independently.
+Under **Dashboard → Dashboard colors** in both the extension popup and full settings, set independent light- and dark-mode colors for dashboard accents and links to repositories, owners, pinned issues and PRs, and search overrides. Each swatch has a **custom HEX field** accepting six digits with or without the `#` prefix. Changes are stored locally under `dashboardColors` and update open dashboards immediately. Repository and search-override links follow the accent unless customized; owner names and pinned issue and PR titles retain their default colors until a link override is set; **Default** restores an individual color and **Restore dashboard colors** clears all four overrides. Existing **Chat bar colors** continue to support HEX entry independently.
 
 ### Token storage
 

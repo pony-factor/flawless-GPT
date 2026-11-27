@@ -17,7 +17,7 @@
   function save() {
     const snapshot = issues.map(({url,label})=>({url,label}));
     queue = queue.catch(()=>{}).then(()=>chrome.storage.local.set({[KEY]:snapshot}));
-    return queue.catch(error=>message("Saving issues failed: " + error.message, "error"));
+    return queue.catch(error=>message("Saving pins failed: " + error.message, "error"));
   }
   function controls() {
     const rows = [...list.querySelectorAll(".pinned-issue-setting")];
@@ -42,12 +42,12 @@
   function entry(issue) {
     const row = template.content.firstElementChild.cloneNode(true);
     row.dataset.url = issue.url;
-    row.querySelector(".pinned-issue-name").textContent = issue.label || `${issue.repository} #${issue.number}`;
-    row.querySelector(".pinned-issue-repository").textContent = `${issue.owner}/${issue.repository} · #${issue.number}`;
+    row.querySelector(".pinned-issue-name").textContent = issue.label || `${issue.repository} ${issue.type === "pull" ? "PR " : ""}#${issue.number}`;
+    row.querySelector(".pinned-issue-repository").textContent = `${issue.owner}/${issue.repository} · ${issue.type === "pull" ? "PR " : "Issue "}#${issue.number}`;
     row.querySelector(".move-issue-up").addEventListener("click",()=>move(row,-1));
     row.querySelector(".move-issue-down").addEventListener("click",()=>move(row,1));
     row.querySelector(".rename-issue").addEventListener("click",()=>{
-      const label = window.prompt("Issue label (blank for default):",issue.label);
+      const label = window.prompt("Pin label (blank for default):",issue.label);
       if (label === null) return;
       issue.label = label.trim().slice(0,120);
       render(); void save();
@@ -61,7 +61,7 @@
   function render() {
     if (!issues.length) {
       const p=document.createElement("p");
-      p.className="pinned-issues-empty";p.textContent="No issues pinned yet.";
+      p.className="pinned-issues-empty";p.textContent="No issues or pull requests pinned yet.";
       list.replaceChildren(p);return;
     }
     list.replaceChildren(...issues.map(entry));controls();
@@ -71,14 +71,14 @@
     try { issue=model.parseIssueUrl(urlInput.value); }
     catch(error) { message(error.message,"error");return; }
     if (issues.some(pin=>pin.url.toLowerCase()===issue.url.toLowerCase())) {
-      message("That issue is already pinned.","error");return;
+      message("That link is already pinned.","error");return;
     }
     if (issues.length>=model.MAX_ISSUES) {
-      message(`You can pin up to ${model.MAX_ISSUES} issues.`,"error");return;
+      message(`You can pin up to ${model.MAX_ISSUES} issues and pull requests combined.`,"error");return;
     }
     issues.push({...issue,label:labelInput.value.trim().slice(0,120)});
     urlInput.value="";labelInput.value="";
-    render();void save();message("Issue pinned.","success");
+    render();void save();message(issue.type === "pull" ? "Pull request pinned." : "Issue pinned.","success");
   }
   document.getElementById("add-pinned-issue").addEventListener("click",add);
   [urlInput,labelInput].forEach(input=>input.addEventListener("keydown",event=>{
