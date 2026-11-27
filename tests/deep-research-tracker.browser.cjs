@@ -69,13 +69,13 @@ test('mounts, reads native usage, excludes messages, and cleans up on extension 
   }
 });
 
-test('dashboard counter sits left of the game launcher; plugin selection and settings control the composer copy', async () => {
+test('the launcher sits before pagination; plugin selection and settings control the composer copy', async () => {
   const browser = await chromium.launch({ executablePath: '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser', headless: true });
   try {
     const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
-    await page.setContent('<main><section><form><div id="prompt-textarea" contenteditable="true">My draft</div></form><section id="github-repositories-for-chatgpt">Repositories<footer class="ghrc-dashboard-footer"><nav class="ghrc-pagination"><button>←</button><button>→</button></nav></footer></section></section></main>');
+    await page.setContent('<main><section><form><div id="prompt-textarea" contenteditable="true">My draft</div></form><section id="github-repositories-for-chatgpt">Repositories<footer class="ghrc-dashboard-footer"><div class="ghrc-footer-navigation"><nav class="ghrc-pagination"><button>←</button><button>→</button></nav></div></footer></section></section></main>');
     await page.evaluate(() => {
       window.__ghrcExtensionContext = { active: () => true, onStop() {} };
       window.settings = { show2048Launcher: true, showDeepResearchTracker: true, highlightedPages: [{ url: 'https://example.com/', title: 'Example' }] };
@@ -98,28 +98,26 @@ test('dashboard counter sits left of the game launcher; plugin selection and set
     await page.locator('#ghrc-highlighted-pages').waitFor();
     const layout = await page.evaluate(() => {
       const repo = document.getElementById('github-repositories-for-chatgpt');
-      const row = document.getElementById('ghrc-deep-research-dashboard');
       const button = document.getElementById('ghrc-deep-research-tracker');
       const highlights = document.getElementById('ghrc-highlighted-pages');
       const game = document.getElementById('ghrc-2048-launcher');
       return {
-        order: repo.nextElementSibling === highlights && row.nextElementSibling === game,
-        right: button.getBoundingClientRect().right < game.getBoundingClientRect().left,
-        between: repo.contains(button) && Math.abs(button.getBoundingClientRect().top + button.getBoundingClientRect().height / 2 - game.getBoundingClientRect().top - game.getBoundingClientRect().height / 2) < 1,
+        order: repo.nextElementSibling === highlights && game.nextElementSibling?.matches('.ghrc-pagination'),
+        dashboardCopy: repo.contains(button),
         composerCopy: !!document.getElementById('ghrc-deep-research-tracker-composer'),
       };
     });
-    assert.deepEqual(layout, { order: true, right: true, between: true, composerCopy: false });
-    for (const width of [500, 400]) {
+    assert.deepEqual(layout, { order: true, dashboardCopy: true, composerCopy: false });
+    for (const width of [1280, 500, 400]) {
       await page.setViewportSize({ width, height: 800 });
       const positions = await page.evaluate(() => {
         const counter = document.getElementById('ghrc-deep-research-tracker').getBoundingClientRect();
         const game = document.getElementById('ghrc-2048-launcher').getBoundingClientRect();
         const arrows = document.querySelector('.ghrc-pagination').getBoundingClientRect();
-        return { counterBeforeGame: counter.right < game.left, arrowsBeforeCounter: arrows.right <= counter.left,
-          sameRow: Math.abs(counter.top + counter.height / 2 - game.top - game.height / 2) < 1 };
+        return { gameBeforeArrows: arrows.left - game.right === 2, arrowsBeforeCounter: arrows.right <= counter.left,
+          sameRow: Math.abs(arrows.top + arrows.height / 2 - game.top - game.height / 2) < 1 };
       });
-      assert.deepEqual(positions, { counterBeforeGame: true, arrowsBeforeCounter: true, sameRow: true });
+      assert.deepEqual(positions, { gameBeforeArrows: true, arrowsBeforeCounter: true, sameRow: true });
     }
     await page.evaluate(() => {
       const mention = document.createElement('span');

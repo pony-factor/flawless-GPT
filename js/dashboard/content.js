@@ -1015,7 +1015,12 @@
     const footer = document.createElement("footer");
     footer.className = "ghrc-dashboard-footer";
     if (showWootenLinkSearch) footer.append(createWootenLinkSearch());
-    if (pagination) footer.append(pagination);
+    if (pagination) {
+      const navigation = document.createElement("div");
+      navigation.className = "ghrc-footer-navigation";
+      navigation.append(pagination);
+      footer.append(navigation);
+    }
     return footer;
   }
 
