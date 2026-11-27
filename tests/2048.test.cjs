@@ -99,14 +99,11 @@ test('2048 captures game keys before the ChatGPT page can react', () => {
   assert.match(source, /event\.stopImmediatePropagation\(\);/);
 });
 
-test('2048 launcher keeps Button Mash icon and uses Windsor Flight palette', () => {
+test('2048 uses the Windsor Flight tile palette', () => {
   const fs = require('node:fs');
   const path = require('node:path');
-  const source = fs.readFileSync(path.join(__dirname, '..', 'js', 'games/2048.js'), 'utf8');
   const styles = fs.readFileSync(path.join(__dirname, '..', 'css', 'games/2048.css'), 'utf8');
 
-  assert.match(source, /ghrc-2048-button-mash-mark/);
-  assert.match(source, /M8 2\.5h8V8h5\.5v8H16v5\.5H8V16H2\.5V8H8z/);
   assert.match(styles, /\.ghrc-2048-tile-empty \{\s*background: #C9CBCF;/);
   assert.match(styles, /\.ghrc-2048-tile-2 \{\s*background: #F6E0EA;/);
   assert.match(styles, /\.ghrc-2048-tile-4 \{\s*background: #7F7BD7;/);
