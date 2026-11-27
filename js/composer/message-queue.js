@@ -1666,8 +1666,9 @@
       // Keep the draft until storage accepts it, and preserve edits made while saving.
       if (queued && composer === findComposerInput() && textMatchesComposer(composer, text)
         && mentionsMatch(composer, snapshot.mentions)) {
+        // replaceComposerText already focuses the composer before clearing it.
+        // Do not reclaim focus after its asynchronous settle delay.
         await replaceComposerText(composer, "");
-        composer.focus({ preventScroll: true });
       }
       return queued;
     } finally {
@@ -2079,8 +2080,8 @@
         }
         if (queued && composer === findComposerInput() && textMatchesComposer(composer, text)
           && mentionsMatch(composer, snapshot.mentions)) {
+          // Preserve any focus change during the asynchronous clear.
           await replaceComposerText(composer, "");
-          composer.focus({ preventScroll: true });
         }
       }
     });

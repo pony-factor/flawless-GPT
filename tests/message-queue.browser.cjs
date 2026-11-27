@@ -715,6 +715,36 @@ test('ArrowUp from an empty composer edits the lowest-priority queued message', 
   await p.close();
 });
 
+test('clearing a queued composer does not steal focus from a queued message editor', async () => {
+  const p = await fixture({ active: true });
+  try {
+    await enqueue(p, 'First priority');
+    await p.evaluate(() => {
+      const composer = document.querySelector('[data-composer-markdown]');
+      const onClear = () => {
+        if (read().trim() || document.querySelectorAll('.ghrc-message-queue-editor').length !== 2) return;
+        composer.removeEventListener('input', onClear);
+        composer.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true, cancelable: true }));
+        window.focusedDuringClear = document.activeElement === document.querySelectorAll('.ghrc-message-queue-editor')[1];
+      };
+      composer.addEventListener('input', onClear);
+    });
+    await enqueue(p, 'Lowest priority');
+    await p.waitForFunction(() => window.focusedDuringClear === true);
+    // The contenteditable clear awaits a 40 ms native-editor settle delay.
+    await p.waitForTimeout(100);
+    const queued = p.locator('.ghrc-message-queue-editor').nth(1);
+    assert.equal(await queued.evaluate(el => document.activeElement === el), true);
+    await p.keyboard.type(' updated');
+    assert.equal(await queued.inputValue(), 'Lowest priority updated');
+    // The empty ProseMirror paragraph retains a visual trailing line break.
+    assert.equal(await p.evaluate(() => read()), '');
+    assert.deepEqual(p.errors, []);
+  } finally {
+    await p.close();
+  }
+});
+
 test('edit, reorder, and remove preserve FIFO while Send bypasses the queue', async () => {
   const p = await fixture({ active: true });
   await enqueue(p, 'First'); await enqueue(p, 'Second'); await enqueue(p, 'Remove');
