@@ -5,3 +5,4 @@
 - `bulk-search` comes from [Tamers12345](https://x.com/TheTamers12345) ([src](https://pony.tube/w/u7qmQtaS2VFxxfUyVMQdc3?start=34m38s))
 - `spellcheck-only` comes from Kiriya ([src](https://derpibooru.org/images/3394656))
 - `detective-zip.png` comes from Anon ([src](https://derpibooru.org/images/3015689))
+- `buttons-adventure.png` comes from [sarysa](https://www.deviantart.com/sarysa) ([src](https://www.deviantart.com/sarysa/art/Button-Mash-%27%27cutie-mark%27%27-453399240))

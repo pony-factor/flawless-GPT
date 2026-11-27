@@ -10,23 +10,20 @@
 
 #github-repositories-for-chatgpt .ghrc-2048-launcher {
   align-items: center;
-  background: var(--ghrc-canvas-subtle);
-  border: 1px solid var(--ghrc-border);
+  background: transparent;
+  border: 0;
   border-radius: 6px;
-  color: var(--ghrc-fg-muted);
   cursor: pointer;
   display: inline-flex;
   flex: 0 0 auto;
   height: 30px;
   justify-content: center;
-  padding: 5px;
+  padding: 0;
   width: 30px;
 }
 
-#github-repositories-for-chatgpt .ghrc-2048-launcher:hover {
-  background: color-mix(in srgb, var(--ghrc-canvas-subtle) 85%, var(--ghrc-fg) 15%);
-  border-color: var(--ghrc-fg-muted);
-  color: var(--ghrc-fg);
+#github-repositories-for-chatgpt .ghrc-2048-launcher:hover .ghrc-2048-launcher-icon {
+  filter: brightness(1.2);
 }
 
 #github-repositories-for-chatgpt .ghrc-2048-launcher:focus-visible {
@@ -35,21 +32,8 @@
 }
 
 #github-repositories-for-chatgpt .ghrc-2048-launcher-icon {
-  height: 18px;
-  width: 18px;
-}
-
-#github-repositories-for-chatgpt .ghrc-2048-button-mash-mark {
-  fill: #747b86;
-  stroke: #4e5560;
-  stroke-linejoin: round;
-  stroke-width: 1.15px;
-}
-
-#github-repositories-for-chatgpt .ghrc-2048-button-mash-center {
-  fill: #a0a7b2;
-  stroke: #4e5560;
-  stroke-width: 1px;
+  height: 24px;
+  width: 24px;
 }
 
 .ghrc-2048-overlay {

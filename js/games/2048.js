@@ -127,34 +127,19 @@
     return;
   }
 
-  function tileIcon() {
-    const icon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-    icon.setAttribute("viewBox", "0 0 24 24");
-    icon.setAttribute("aria-hidden", "true");
-    icon.classList.add("ghrc-2048-launcher-icon");
-
-    const dpad = document.createElementNS("http://www.w3.org/2000/svg", "path");
-    dpad.setAttribute("d", "M8 2.5h8V8h5.5v8H16v5.5H8V16H2.5V8H8z");
-    dpad.classList.add("ghrc-2048-button-mash-mark");
-
-    const center = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-    center.setAttribute("cx", "12");
-    center.setAttribute("cy", "12");
-    center.setAttribute("r", "2.6");
-    center.classList.add("ghrc-2048-button-mash-center");
-
-    icon.append(dpad, center);
-    return icon;
-  }
-
   function createLauncher() {
+    const icon = document.createElement("img");
+    icon.className = "ghrc-2048-launcher-icon";
+    icon.alt = "";
+    icon.src = globalThis.chrome?.runtime?.getURL?.("artwork/buttons-adventure.png") || "artwork/buttons-adventure.png";
+
     const button = document.createElement("button");
     button.id = LAUNCHER_ID;
     button.type = "button";
     button.className = "ghrc-2048-launcher";
     button.setAttribute("aria-label", "Play 2048");
     button.title = "Play 2048";
-    button.append(tileIcon());
+    button.append(icon);
     button.addEventListener("click", openGame);
     return button;
   }
