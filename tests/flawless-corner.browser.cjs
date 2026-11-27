@@ -159,9 +159,9 @@ test('the app navigation rail uses its native Home button for the mascot', async
   const page = await fixture({
     html: `<nav aria-label="App navigation" data-app-navigation-rail="true">
       <button data-sidebar-destination="builtin:home" onclick="window.homeClicks=(window.homeClicks||0)+1">
-        <span><svg aria-hidden="true" width="20" height="20"></svg><span>Home</span></span>
+        <span><svg aria-hidden="true" width="20" height="20"></svg><span>Home</span><span class="absolute end-0 top-0" aria-hidden="true">●</span></span>
       </button>
-      <button data-sidebar-destination="builtin:space">Space</button>
+      <button data-sidebar-destination="builtin:space"><span>Space<span class="absolute end-0 top-0" aria-hidden="true">●</span></span></button>
     </nav><header><button aria-label="New chat"><svg width="20" height="20"></svg></button></header>`,
     route: '/c/example',
   });
@@ -170,6 +170,8 @@ test('the app navigation rail uses its native Home button for the mascot', async
   const mascot = home.locator('.ghrc-flawless-mascot-image');
   assert.equal(await page.locator('.ghrc-flawless-mascot-image').count(), 1);
   assert.equal(await home.locator('svg').isVisible(), false);
+  assert.equal(await home.locator('.absolute.end-0.top-0').isVisible(), false);
+  assert.equal(await page.getByRole('button', { name: 'Space', exact: true }).locator('.absolute.end-0.top-0').isVisible(), true);
   assert.equal(await newChat.locator('svg').isVisible(), true);
   await home.hover();
   assert.match(await mascot.getAttribute('src'), /SB-full\.gif$/);

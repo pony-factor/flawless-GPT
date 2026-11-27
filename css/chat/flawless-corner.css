@@ -41,6 +41,11 @@
   display: none;
 }
 
+/* ChatGPT renders the Home badge in a separate top-right slot. */
+[data-app-navigation-rail] button[data-sidebar-destination="builtin:home"] span.absolute.end-0.top-0 {
+  display: none !important;
+}
+
 #ghrc-flawless-corner:focus-visible {
   outline: 2px solid #a68df3;
   outline-offset: -2px;

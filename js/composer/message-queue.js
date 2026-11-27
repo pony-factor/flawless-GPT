@@ -537,9 +537,9 @@
   }
 
   function conversationRoot() {
-    // Entity details render assistant messages and completion controls too.
-    // Only the main conversation can release a queued prompt.
-    return document.querySelector('[aria-label="Conversation"]') || document;
+    // ChatGPT keeps a hidden conversation mounted alongside the visible one.
+    // Entity details can also render messages outside the conversation.
+    return [...document.querySelectorAll('[aria-label="Conversation"]')].find(isVisible) || document;
   }
 
   function isStoppedThinkingControl(node) {
