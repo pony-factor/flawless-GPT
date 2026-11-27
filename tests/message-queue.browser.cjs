@@ -737,7 +737,8 @@ test('clearing a queued composer does not steal focus from a queued message edit
     assert.equal(await queued.evaluate(el => document.activeElement === el), true);
     await p.keyboard.type(' updated');
     assert.equal(await queued.inputValue(), 'Lowest priority updated');
-    assert.equal(await p.locator('[data-composer-markdown]').innerText(), '');
+    // The empty ProseMirror paragraph retains a visual trailing line break.
+    assert.equal(await p.evaluate(() => read()), '');
     assert.deepEqual(p.errors, []);
   } finally {
     await p.close();
