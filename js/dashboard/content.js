@@ -833,17 +833,16 @@
     const form = document.createElement("form");
     form.className = "ghrc-wooten-link-search";
 
-    // Submit with the calligraphy mark as well as the existing search button.
-    const markSubmit = document.createElement("button");
-    markSubmit.type = "submit";
-    markSubmit.className = "ghrc-wooten-link-mark-submit";
-    markSubmit.setAttribute("aria-label", "Search WootenLink");
-    markSubmit.title = "Search WootenLink";
+    const markLink = document.createElement("a");
+    markLink.href = "https://wooten.link/";
+    markLink.className = "ghrc-wooten-link-mark-link";
+    markLink.setAttribute("aria-label", "Open WootenLink homepage");
+    markLink.title = "Open WootenLink homepage";
     const mark = document.createElement("img");
     mark.className = "ghrc-wooten-link-mark";
     mark.src = chrome.runtime.getURL("artwork/calligraphy-initials.png");
     mark.alt = "";
-    markSubmit.append(mark);
+    markLink.append(mark);
 
     const field = document.createElement("div");
     field.className = "ghrc-wooten-link-field";
@@ -987,7 +986,7 @@
     });
 
     field.append(input, submit);
-    form.append(markSubmit, field, results);
+    form.append(markLink, field, results);
     void loadWootenLinkEntries();
     form.addEventListener("submit", async (event) => {
       event.preventDefault();

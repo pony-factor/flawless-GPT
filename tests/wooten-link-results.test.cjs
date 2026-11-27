@@ -50,16 +50,16 @@ test("reference suggestions stack above the separate Highlights shelf", () => {
   assert.ok(layer(dashboard) > layer(highlights), "dashboard popovers must paint above Highlights");
 });
 
-test("WootenLink logo is a native submit button separate from the search input label", () => {
+test("WootenLink logo links to the homepage beside the search field", () => {
   const form = source.match(/  function createWootenLinkSearch\(\) \{[\s\S]*?\n  \}\n\n  function createDashboardFooter/)?.[0];
   assert.ok(form, "WootenLink search form is present");
-  assert.match(form, /markSubmit = document\.createElement\("button"\)/);
-  assert.match(form, /markSubmit\.type = "submit"/);
-  assert.match(form, /markSubmit\.setAttribute\("aria-label", "Search WootenLink"\)/);
-  assert.match(form, /markSubmit\.append\(mark\)/);
+  assert.match(form, /markLink = document\.createElement\("a"\)/);
+  assert.match(form, /markLink\.href = "https:\/\/wooten\.link\/"/);
+  assert.match(form, /markLink\.setAttribute\("aria-label", "Open WootenLink homepage"\)/);
+  assert.match(form, /markLink\.append\(mark\)/);
   assert.match(form, /mark\.alt = ""/);
   assert.match(form, /field\.append\(input, submit\)/);
-  assert.match(form, /form\.append\(markSubmit, field, results\)/);
+  assert.match(form, /form\.append\(markLink, field, results\)/);
   assert.match(form, /form\.addEventListener\("submit", async \(event\) =>/);
-  assert.match(stylesheet, /\.ghrc-wooten-link-mark-submit:focus-visible\s*\{/);
+  assert.match(stylesheet, /\.ghrc-wooten-link-mark-link:focus-visible\s*\{/);
 });

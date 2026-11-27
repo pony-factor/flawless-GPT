@@ -520,7 +520,7 @@ html.dark #github-repositories-for-chatgpt {
   width: 180px;
 }
 
-#github-repositories-for-chatgpt .ghrc-wooten-link-mark-submit {
+#github-repositories-for-chatgpt .ghrc-wooten-link-mark-link {
   align-items: center;
   background: transparent;
   border: 0;
@@ -534,11 +534,11 @@ html.dark #github-repositories-for-chatgpt {
   width: 34px;
 }
 
-#github-repositories-for-chatgpt .ghrc-wooten-link-mark-submit:hover {
+#github-repositories-for-chatgpt .ghrc-wooten-link-mark-link:hover {
   opacity: 0.85;
 }
 
-#github-repositories-for-chatgpt .ghrc-wooten-link-mark-submit:focus-visible {
+#github-repositories-for-chatgpt .ghrc-wooten-link-mark-link:focus-visible {
   outline: 2px solid var(--ghrc-accent);
   outline-offset: 2px;
 }

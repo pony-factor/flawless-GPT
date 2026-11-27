@@ -27,7 +27,7 @@ async function fixture(stored = {}) {
 
   await page.route('https://youtube-search.test/**', route => route.fulfill({
     contentType: 'text/html',
-    body: '<main id="github-repositories-for-chatgpt"><footer class="ghrc-dashboard-footer"><form class="ghrc-wooten-link-search"><button class="ghrc-wooten-link-mark-submit" type="submit"><img class="ghrc-wooten-link-mark" alt=""></button><div class="ghrc-wooten-link-field"><input type="search" placeholder="hrefs"><button class="ghrc-wooten-link-submit" type="submit"></button></div></form><nav class="ghrc-pagination"></nav></footer></main>',
+    body: '<main id="github-repositories-for-chatgpt"><footer class="ghrc-dashboard-footer"><form class="ghrc-wooten-link-search"><a class="ghrc-wooten-link-mark-link" href="https://wooten.link/" aria-label="Open WootenLink homepage"><img class="ghrc-wooten-link-mark" alt=""></a><div class="ghrc-wooten-link-field"><input type="search" placeholder="hrefs"><button class="ghrc-wooten-link-submit" type="submit"></button></div></form><nav class="ghrc-pagination"></nav></footer></main>',
   }));
   await page.goto('https://youtube-search.test/');
   await page.evaluate((initial) => {
