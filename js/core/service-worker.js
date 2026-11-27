@@ -641,7 +641,11 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
 chrome.runtime.onInstalled.addListener(({ reason }) => {
   if (reason === "install") {
-    chrome.runtime.openOptionsPage();
+    void (async () => {
+      // The development launcher owns the initial tab for unpacked checkouts.
+      const extension = await chrome.management.getSelf();
+      if (extension.installType !== "development") await chrome.runtime.openOptionsPage();
+    })().catch((error) => console.warn("Could not open first-run settings:", error));
   }
 
   // Updating from a plaintext-storage version migrates saved tokens immediately.

@@ -15,6 +15,20 @@ test('dispatcher is registered after the existing GitHub and composer infrastruc
   assert.ok(background.indexOf('../dispatcher/background.js') > background.indexOf('../core/service-worker.js'));
 });
 
+test('dispatcher launcher bundles its attributed transparent artwork', () => {
+  const manifest = JSON.parse(fs.readFileSync(path.join(root, 'manifest.json'), 'utf8'));
+  assert.ok(manifest.web_accessible_resources.some(entry =>
+    entry.matches.includes('https://chatgpt.com/*') && entry.resources.includes('artwork/dispatcher-headshot.png')));
+  const image = fs.readFileSync(path.join(root, 'artwork/dispatcher-headshot.png'));
+  assert.equal(image.subarray(0, 8).toString('hex'), '89504e470d0a1a0a');
+  assert.equal(image[25], 6, 'PNG stores RGBA pixels');
+  assert.ok(fs.existsSync(path.join(root, 'artwork/chat-dispatcher.jpg')));
+  assert.equal(fs.existsSync(path.join(root, 'artwork/bulk-search.jpg')), false);
+  const credits = fs.readFileSync(path.join(root, 'artwork/README.md'), 'utf8');
+  assert.match(credits, /chat-dispatcher.*Tamers12345/);
+  assert.match(credits, /dispatcher-headshot\.png/);
+});
+
 test('settings entry points preserve a single dispatcher link in each existing page', () => {
   for (const page of ['popup.html', 'options.html']) {
     const source = fs.readFileSync(path.join(root, page), 'utf8');
@@ -91,6 +105,38 @@ test('unconnected dashboard preview cannot dispatch tasks', () => {
     assert.doesNotMatch(script, /127\.0\.0\.1|localhost|companion\/server/);
   } finally {
     dom.window.close();
+  }
+});
+
+test('the full dispatcher still appears only after the final verified merge', () => {
+  const { JSDOM } = require('jsdom');
+  const html = fs.readFileSync(path.join(root, 'chat-dispatcher.html'), 'utf8');
+  const script = fs.readFileSync(path.join(root, 'js/dispatcher/dashboard.js'), 'utf8');
+  const dom = new JSDOM(html, { url: 'https://example.test/chat-dispatcher.html?session=legacy', runScripts: 'outside-only' });
+  const { window } = dom;
+  let onChange;
+  try {
+    window.chrome = {
+      runtime: { id: 'test', sendMessage: () => new Promise(() => {}) },
+      storage: { onChanged: { addListener: listener => { onChange = listener; } } },
+    };
+    window.eval(script);
+    const success = window.document.getElementById('dispatch-success');
+    const updateTasks = (...statuses) => onChange({ chatDispatcherState: { newValue: {
+      paused: false, tasks: statuses.map(status => ({ status })), workers: [], events: [],
+    } } }, 'local');
+    assert.equal(success.hidden, true);
+    updateTasks('merged', 'running');
+    assert.equal(success.hidden, true, 'an assigned but unverified task keeps the image hidden');
+    updateTasks('merged', 'previously-sent');
+    assert.equal(success.hidden, true, 'a previously sent task is not itself a verified merge');
+    updateTasks('merged', 'merged');
+    assert.equal(success.hidden, false);
+    assert.equal(success.querySelector('img').getAttribute('src'), 'artwork/chat-dispatcher.jpg');
+    updateTasks('pending');
+    assert.equal(success.hidden, true, 'a new dispatch clears the previous success image');
+  } finally {
+    window.close();
   }
 });
 

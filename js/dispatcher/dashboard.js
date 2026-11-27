@@ -62,7 +62,9 @@ function render() {
   $('start').disabled = !connected || !state.paused || !state.tasks.length || Boolean(state.workers.length && state.workers.length !== 10);
   $('pause').disabled = !connected || state.paused;
   $('reset').disabled = !connected || !state.paused || !state.workers.length;
-  $('merged-count').textContent = state.tasks.filter(t => t.status === 'merged').length;
+  const mergedCount = state.tasks.filter(t => t.status === 'merged').length;
+  $('merged-count').textContent = mergedCount;
+  $('dispatch-success').hidden = mergedCount === 0 || mergedCount !== state.tasks.length;
   $('active-count').textContent = `${state.workers.length} / 10`;
   $('pending-count').textContent = state.tasks.filter(t => t.status === 'pending').length;
   $('review-count').textContent = state.workers.filter(w => ['review', 'dispatching'].includes(w.phase) || w.error).length;

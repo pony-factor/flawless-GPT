@@ -10,6 +10,10 @@
       <details><summary>Other dispatcher sessions</summary><div id="session-list" class="session-list"></div></details>
     </section>
     <div id="notice" role="status" hidden></div>
+    <section id="dispatch-success" aria-labelledby="dispatch-success-heading" hidden>
+      <h2 id="dispatch-success-heading" role="status">Dispatch complete. All task merges verified.</h2>
+      <img src="artwork/chat-dispatcher.jpg" alt="" width="1366" height="768">
+    </section>
     <section class="toolbar" aria-label="Dispatcher controls"><label>Repository<input id="repository" placeholder="owner/repository" autocomplete="off" spellcheck="false"></label><label class="file-button">Import task manifest<input id="manifest" type="file" accept=".json,application/json"></label><button id="start" class="primary">Start</button><button id="pause">Pause</button><button id="export">Export session</button></section>
     <section class="checklist-import" aria-labelledby="checklist-heading">
       <h2 id="checklist-heading">Paste checklist items</h2>
