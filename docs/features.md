@@ -62,3 +62,7 @@ The optional Spellcheck Only launcher accepts custom artwork through settings. T
 | Report publishing fails | Check the linked repository, native host registration, Git access and destination branch; retry only after reviewing the displayed error. |
 
 Flawless uses the native browser profile and existing ChatGPT UI. Browser differences, ChatGPT layout changes, site permissions, and network failures can affect features independently. Report reproducible failures with the browser/version, extension version, route, feature preference, and sanitized error details; never include tokens or private chat contents.
+
+### GitHub profile shortcut
+
+In the **GitHub** settings tab, enable **Show profile avatar beside GitHub logo** (off by default). On github.com, the signed-in account’s avatar appears immediately to the left of the original logo and links to that account’s public profile in the current tab. The shortcut follows GitHub’s active web session, not configured dashboard tokens or account columns. The native logo remains unchanged; the shortcut is omitted when signed out or when the header cannot be recognized. Changing the preference updates open GitHub tabs.
