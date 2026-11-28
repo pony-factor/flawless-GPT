@@ -128,37 +128,54 @@
     return mentions;
   }
 
+  async function clipboardImageAttachment(blob, type, index) {
+    const extension = type === "image/jpeg" ? "jpg" : type === "image/svg+xml" ? "svg"
+      : type.slice("image/".length).replace(/[^a-z0-9]/gi, "") || "img";
+    const dataUrl = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(blob);
+    });
+    return { name: `clipboard-image-${index + 1}.${extension}`, type, lastModified: Date.now(), dataUrl };
+  }
+
   async function readClipboardPrompt() {
     let text = "";
     let html = "";
-    // readText() discards the app metadata that native rich pastes preserve.
-    // Read both clipboard flavors when supported, then let the queue carry
-    // the app nodes through its existing ProseMirror restoration path.
+    const attachments = [];
+    // A clipboard item can contain multiple representations of one image.
+    // Prefer PNG and keep one attachment per item, not per MIME flavor.
+    let items = [];
     if (typeof navigator.clipboard?.read === "function") {
-      try {
-        for (const item of await navigator.clipboard.read()) {
-          if (!item.types.includes("text/plain")) continue;
-          text = await (await item.getType("text/plain")).text();
-          if (item.types.includes("text/html")) {
-            try { html = await (await item.getType("text/html")).text(); } catch { /* plain text still works */ }
-          }
-          break;
+      try { items = await navigator.clipboard.read(); } catch { /* readText may still work */ }
+    }
+    for (const item of items) {
+      const imageType = item.types.includes("image/png") ? "image/png"
+        : item.types.find(type => type.startsWith("image/"));
+      if (imageType) {
+        // Do not silently send just the text if reading a known image fails.
+        const blob = await item.getType(imageType);
+        attachments.push(await clipboardImageAttachment(blob, imageType, attachments.length));
+      }
+      if (!text && item.types.includes("text/plain")) {
+        text = await (await item.getType("text/plain")).text();
+        if (item.types.includes("text/html")) {
+          try { html = await (await item.getType("text/html")).text(); } catch { /* plain text still works */ }
         }
-      } catch {
-        // Some browsers allow readText even if rich clipboard reads fail.
       }
     }
-    if (!text) text = await readClipboardText();
+    if (!text && !attachments.length) text = await readClipboardText();
     text = text.replace(/\r\n/g, "\n");
     const markdown = appMentionsFromMarkdown(text);
-    if (markdown.mentions.length) return markdown;
+    if (markdown.mentions.length) return { ...markdown, attachments };
     const mentions = appMentionsFromHtml(text, html);
     if (mentions === null) {
       const error = new Error("Clipboard plugin could not be preserved; paste manually");
       error.name = "ClipboardPluginError";
       throw error;
     }
-    return { text, mentions };
+    return { text, mentions, attachments };
   }
 
   function setButtonMessage(button, message) {
@@ -238,13 +255,14 @@
     setButtonBusy(button, true);
 
     try {
-      const { text, mentions } = await readClipboardPrompt();
-      if (!context.active()) return;
-      if (!text.trim()) {
-        setButtonMessage(button, "Clipboard has no text to queue");
+      const route = window.location.pathname;
+      const { text, mentions, attachments } = await readClipboardPrompt();
+      if (!context.active() || window.location.pathname !== route) return;
+      if (!text.trim() && !attachments.length) {
+        setButtonMessage(button, "Clipboard has no text or images to queue");
         return;
       }
-      const submitted = await globalThis.__ghrcMessageQueue?.sendClipboardText(text, mentions);
+      const submitted = await globalThis.__ghrcMessageQueue?.sendClipboardText(text, mentions, attachments);
       setButtonMessage(button, submitted ? "Send clipboard or queue as prompt" : "Clipboard message could not be sent or queued; try again");
     } catch (error) {
       if (error?.name === "ClipboardPluginError") {
