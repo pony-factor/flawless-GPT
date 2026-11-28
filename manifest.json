@@ -194,6 +194,19 @@
     },
     {
       "matches": [
+        "https://github.com/*"
+      ],
+      "css": [
+        "css/github/profile-shortcut.css"
+      ],
+      "js": [
+        "js/core/extension-context.js",
+        "js/github/profile-shortcut.js"
+      ],
+      "run_at": "document_start"
+    },
+    {
+      "matches": [
         "https://github.com/*/*"
       ],
       "js": [

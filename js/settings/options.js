@@ -123,6 +123,7 @@ const openExternalLinksInSplitViewInput = document.getElementById("open-external
 const openExternalLinksInSplitViewOnLeftInput = document.getElementById("open-external-links-in-split-view-on-left");
 const skipExternalSiteWarningInput = document.getElementById("skip-external-site-warning");
 const dismissHistoryRateLimitModalInput = document.getElementById("dismiss-history-rate-limit-modal");
+const showGithubProfileShortcutInput = document.getElementById("show-github-profile-shortcut");
 const hideUsageCardInput = document.getElementById("hide-usage-card");
 const hideUpgradePromotionsInput = document.getElementById("hide-upgrade-promotions");
 const hideScheduledRecommendationsInput = document.getElementById("hide-scheduled-recommendations");
@@ -484,6 +485,7 @@ async function loadSettings() {
     openExternalLinksInSplitView: false,
     openExternalLinksInSplitViewOnLeft: false,
     dismissHistoryRateLimitModal: true,
+    showGithubProfileShortcut: false,
     hideUsageCard: true,
     hideUpgradePromotions: true,
     hideScheduledRecommendations: true,
@@ -564,6 +566,7 @@ async function loadSettings() {
   openExternalLinksInSplitViewOnLeftInput.checked = Boolean(settings.openExternalLinksInSplitViewOnLeft);
   skipExternalSiteWarningInput.checked = Boolean(settings.skipExternalSiteWarning);
   dismissHistoryRateLimitModalInput.checked = Boolean(settings.dismissHistoryRateLimitModal);
+  showGithubProfileShortcutInput.checked = settings.showGithubProfileShortcut === true;
   hideUsageCardInput.checked = settings.hideUsageCard !== false;
   hideUpgradePromotionsInput.checked = Boolean(settings.hideUpgradePromotions);
   hideScheduledRecommendationsInput.checked = settings.hideScheduledRecommendations !== false;
@@ -686,6 +689,7 @@ async function saveSettings() {
       openExternalLinksInSplitView: openExternalLinksInSplitViewInput.checked,
       openExternalLinksInSplitViewOnLeft: openExternalLinksInSplitViewOnLeftInput.checked,
       dismissHistoryRateLimitModal: dismissHistoryRateLimitModalInput.checked,
+      showGithubProfileShortcut: showGithubProfileShortcutInput.checked,
       hideUsageCard: hideUsageCardInput.checked,
       hideUpgradePromotions: hideUpgradePromotionsInput.checked,
       hideScheduledRecommendations: hideScheduledRecommendationsInput.checked,

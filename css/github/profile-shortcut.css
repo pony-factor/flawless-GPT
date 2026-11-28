@@ -1,0 +1,23 @@
+a[data-flawless-profile-shortcut] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 32px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  vertical-align: middle;
+}
+
+a[data-flawless-profile-shortcut] img {
+  display: block;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+a[data-flawless-profile-shortcut]:focus-visible {
+  outline: 2px solid var(--focus-outlineColor, currentColor);
+  outline-offset: 2px;
+}
