@@ -1527,7 +1527,7 @@ test('clipboard without text reports the reason and leaves the queue empty', asy
     Object.defineProperty(navigator, 'clipboard', { value: { readText: async () => '' } });
   });
   await p.locator('#ghrc-clipboard-send-button').click();
-  await p.getByRole('button', { name: 'Clipboard has no text to queue', exact: true }).waitFor();
+  await p.getByRole('button', { name: 'Clipboard has no text or images to queue', exact: true }).waitFor();
   assert.equal(await p.locator('.ghrc-message-queue-editor').count(), 0);
   await p.close();
 });
@@ -1879,6 +1879,43 @@ for (const gesture of ['Enter', 'button', 'paste']) for (const prompt of ['', 'D
   assert.deepEqual(await p.evaluate(() => sentContexts), [['picture.png']]);
   assert.deepEqual(p.errors, []);
   await p.close();
+});
+
+for (const prompt of ['', 'Describe this image']) test(`clipboard button queues image bytes ${prompt ? 'with text' : 'without text'}`, async () => {
+  const p = await fixture({ active: true, clipboard: true });
+  try {
+    await attachmentFixture(p, { images: true });
+    const bytes = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j1ioAAAAASUVORK5CYII=', 'base64');
+    await p.evaluate(({ data, prompt }) => {
+      const blob = new Blob([Uint8Array.from(atob(data), char => char.charCodeAt(0))], { type: 'image/png' });
+      Object.defineProperty(navigator, 'clipboard', { value: {
+        read: async () => [{
+          types: ['image/png', 'image/jpeg', ...(prompt ? ['text/plain'] : [])],
+          getType: async type => {
+            if (type === 'image/png') return blob;
+            if (type === 'text/plain') return new Blob([prompt], { type });
+            throw new Error('Unexpected alternate image flavor');
+          },
+        }],
+        readText: async () => { throw new Error('Rich clipboard should not fall back to text'); },
+      } });
+    }, { data: bytes.toString('base64'), prompt });
+    await p.locator('#ghrc-clipboard-send-button').click();
+    await p.waitForFunction(() => storage.queuedChatMessages?.['conversation:test']?.length === 1);
+    const item = await p.evaluate(() => storage.queuedChatMessages['conversation:test'][0]);
+    assert.equal(item.text, prompt);
+    assert.equal(item.attachments.length, 1);
+    assert.equal(item.attachments[0].type, 'image/png');
+    assert.deepEqual(Buffer.from(item.attachments[0].dataUrl.split(',')[1], 'base64'), bytes);
+    assert.equal(await p.evaluate(() => stops), 0);
+    await p.evaluate(() => finish());
+    await sentCount(p, 1);
+    assert.deepEqual(await p.evaluate(() => sent), [prompt]);
+    assert.deepEqual(await p.evaluate(() => sentContexts), [['clipboard-image-1.png']]);
+    assert.deepEqual(p.errors, []);
+  } finally {
+    await p.close();
+  }
 });
 
 test('saved image-only messages reattach and send after reload', async () => {

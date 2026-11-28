@@ -1550,15 +1550,18 @@
     return true;
   }
 
-  async function sendClipboardText(text, mentions = []) {
+  async function sendClipboardText(text, mentions = [], attachments = []) {
     if (!context.active() || !stateLoaded || routeSyncRunning || conversationKey() !== activeKey) return false;
     text = normalizedText(text);
     const validMentions = normalizeMentions(mentions, text);
     if (validMentions.length !== mentions.length) return false;
     mentions = validMentions;
-    if (!text.trim()) return false;
+    if (!text.trim() && !attachments.length) return false;
     const composer = findComposerInput();
     if (!composer) return false;
+    // Use the existing attachment-aware FIFO even when idle. Its pump waits
+    // for upload confirmation and restores the user's draft after submission.
+    if (attachments.length) return enqueueText(text, attachments, mentions);
     // Work can keep an enabled Send control while its response is unfinished.
     // Use the same completion gate as the FIFO, rather than treating a missing
     // Stop/streaming indicator as permission to submit and interrupt that work.
@@ -1620,7 +1623,7 @@
   // when idle, and otherwise join the FIFO without clicking Stop.
   globalThis.__ghrcMessageQueue = {
     enqueueText: text => context.run(() => enqueueText(text)),
-    sendClipboardText: (text, mentions) => context.run(() => sendClipboardText(text, mentions)),
+    sendClipboardText: (text, mentions, attachments) => context.run(() => sendClipboardText(text, mentions, attachments)),
     enqueueComposerMessage: () => context.run(enqueueComposerMessage),
     // Research spellcheck yields to the FIFO while ChatGPT is still busy.
     shouldQueueResearchPrompt: composer => Boolean(composer === findComposerInput()
